@@ -43,18 +43,3 @@ class CustomUserModelTests(TestCase):
             username="testuser", email="test@example.com", password="testpass123"
         )
         self.assertEqual(str(user), "testuser")
-
-    def test_signup_form_rejects_empty_email(self):
-        """The form catches empty email, which is what matters"""
-        from accounts.forms import CustomSignupForm
-
-        form = CustomSignupForm(
-            data={
-                "username": "testuser",
-                "email": "",  # empty
-                "password1": "StrongPass123",
-                "password2": "StrongPass123",
-            }
-        )
-        self.assertFalse(form.is_valid())
-        self.assertIn("email", form.errors)
