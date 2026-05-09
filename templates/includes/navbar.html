@@ -16,7 +16,7 @@
                     <line x1="15.5" y1="8.5" x2="12" y2="13" stroke="white" stroke-width="1.5" />
                 </svg>
             </div>
-            <span class="logo-text">SketchMod</span>
+            <span class="logo-text">SketchNet</span>
         </a>
         <!-- Navigation Links -->
         <ul class="nav-links" id="navLinks">
@@ -83,19 +83,31 @@
             </li>
             <!-- 5. Account -->
             <li class="nav-item">
-                <a href="{% if user.is_authenticated %} {% url "account_login" %}{% else %}{% url "profile" %}{% endif %}"
-                   class="nav-link"
-                   data-page="account">
-                    <svg class="nav-icon"
-                         viewBox="0 0 24 24"
-                         fill="none"
-                         stroke="currentColor"
-                         stroke-width="2">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                    </svg>
-                    <span>Account</span>
-                </a>
+                {% if user.is_authenticated %}
+                    <a href="{% url "profile" %}" class="nav-link" data-page="account">
+                        <svg class="nav-icon"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        <span>Account</span>
+                    </a>
+                {% else %}
+                    <a href="{% url "account_login" %}" class="nav-link" data-page="account">
+                        <svg class="nav-icon"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        <span>Account</span>
+                    </a>
+                {% endif %}
             </li>
             <!-- 6. Settings -->
             <li class="nav-item">
