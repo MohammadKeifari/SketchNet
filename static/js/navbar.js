@@ -5,10 +5,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // ===== ACTIVE LINK =====
     function setActiveLink() {
-        const currentPage = document.body.getAttribute("data-current-page");
+        const currentPage = document.body
+            .getAttribute("data-current-page")
+            .replace(/\s/g, "");
         if (!currentPage) return;
-
+        console.log(currentPage);
         navLinks.forEach((link) => {
+            console.log(link.getAttribute("data-page"));
+
             if (link.getAttribute("data-page") === currentPage) {
                 link.classList.add("active");
             } else {

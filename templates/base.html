@@ -13,7 +13,7 @@
         {% block extra_css %}
         {% endblock extra_css %}
     </head>
-    <body data-current-page="{% block current_page %}home{% endblock current_page %}">
+    <body data-current-page="{% block current_page %}{% endblock current_page %}">
         {% include "includes/navbar.html" %}
         <main class="main-content">
             {% block content %}

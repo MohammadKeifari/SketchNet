@@ -158,16 +158,6 @@ body {
     opacity: 1;
 }
 
-/* SketchMod special */
-.nav-link.sketchmod {
-    color: var(--accent);
-    font-weight: 600;
-}
-
-.nav-link.sketchmod:hover {
-    box-shadow: 0 0 20px var(--accent-glow);
-}
-
 /* Right section */
 .navbar-right {
     display: flex;
