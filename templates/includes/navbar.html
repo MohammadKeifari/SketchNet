@@ -83,7 +83,9 @@
             </li>
             <!-- 5. Account -->
             <li class="nav-item">
-                <a href="" class="nav-link" data-page="account">
+                <a href="{% if user.is_authenticated %} {% url "account_login" %}{% else %}{% url "profile" %}{% endif %}"
+                   class="nav-link"
+                   data-page="account">
                     <svg class="nav-icon"
                          viewBox="0 0 24 24"
                          fill="none"
@@ -114,9 +116,11 @@
     <!-- Right: User Avatar -->
     <div class="navbar-right">
         {% if user.is_authenticated %}
-            <a href="" class="user-avatar" title="{{ user.username }}">{{ user.username|slice:":1"|upper }}</a>
+            <a href="{% url "profile" %}"
+               class="user-avatar"
+               title="{{ user.username }}">{{ user.username|slice:":1"|upper }}</a>
         {% else %}
-            <a href="" class="user-avatar" title="Login">?</a>
+            <a href="{% url "account_login" %}" class="user-avatar" title="Login">?</a>
         {% endif %}
         <!-- Mobile menu toggle -->
         <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
