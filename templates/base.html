@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>
+            {% block title %}
+                SketchMod
+            {% endblock title %}
+        </title>
+        {% load static %}
+        <link rel="stylesheet" href="{% static 'css/navbar.css' %}">
+        {% block extra_css %}
+        {% endblock extra_css %}
+    </head>
+    <body data-current-page="{% block current_page %}home{% endblock current_page %}">
+        {% include "includes/navbar.html" %}
+        <main class="main-content">
+            {% block content %}
+            {% endblock content %}
+        </main>
+        <script src="{% static 'js/navbar.js' %}"></script>
+        {% block extra_js %}
+        {% endblock extra_js %}
+    </body>
+</html>
