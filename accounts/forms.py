@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import MinimumLengthValidator
 
 User = get_user_model()
 
@@ -10,6 +11,7 @@ class CustomSignupForm(forms.ModelForm):
         widget=forms.PasswordInput(
             attrs={"class": "form-input", "placeholder": "Password"}
         ),
+        validators=[MinimumLengthValidator(8).validate],  # Add this
     )
     password2 = forms.CharField(
         label="Confirm Password",
