@@ -62,19 +62,4 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
     }
-
-    // ===== THEME SWITCHER =====
-    const savedTheme = localStorage.getItem("sketchmod-theme");
-    if (savedTheme) {
-        document.documentElement.setAttribute("data-theme", savedTheme);
-    }
-
-    window.setTheme = function (theme) {
-        document.documentElement.setAttribute("data-theme", theme);
-        localStorage.setItem("sketchmod-theme", theme);
-    };
-
-    window.getTheme = function () {
-        return document.documentElement.getAttribute("data-theme") || "light";
-    };
 });

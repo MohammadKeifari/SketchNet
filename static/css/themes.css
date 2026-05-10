@@ -1,0 +1,108 @@
+/* ===== THEME VARIABLES ===== */
+:root,
+[data-theme="light"] {
+    --bg-primary: #f8f9fc;
+    --bg-secondary: #ffffff;
+    --bg-hover: #eef0f6;
+    --text-primary: #1a1d2e;
+    --text-secondary: #6b7084;
+    --accent: #6c5ce7;
+    --accent-light: #5a4bd1;
+    --accent-glow: rgba(108, 92, 231, 0.15);
+    --border: #e2e4eb;
+    --radius: 10px;
+    --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    --font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --nav-height: 60px;
+}
+
+/* ===== DARK ===== */
+[data-theme="dark"] {
+    --bg-primary: #0f1117;
+    --bg-secondary: #1a1d27;
+    --bg-hover: #242836;
+    --text-primary: #e4e6ed;
+    --text-secondary: #8b8fa3;
+    --accent: #7c6ff0;
+    --accent-light: #a29bfe;
+    --accent-glow: rgba(124, 111, 240, 0.25);
+    --border: #2a2d3a;
+}
+
+/* ===== ROSE ===== */
+[data-theme="rose"] {
+    --bg-primary: #faf5f6;
+    --bg-secondary: #fffafb;
+    --bg-hover: #f5e5e9;
+    --text-primary: #3d1f24;
+    --text-secondary: #8b636a;
+    --accent: #e8536c;
+    --accent-light: #d43d56;
+    --accent-glow: rgba(232, 83, 108, 0.18);
+    --border: #efd5da;
+}
+
+/* ===== DARK ROSE ===== */
+[data-theme="dark-rose"] {
+    --bg-primary: #1a1114;
+    --bg-secondary: #24191c;
+    --bg-hover: #2d1f23;
+    --text-primary: #f0dde1;
+    --text-secondary: #b8959c;
+    --accent: #f0627a;
+    --accent-light: #ff8a9e;
+    --accent-glow: rgba(240, 98, 122, 0.25);
+    --border: #3a252b;
+}
+
+/* ===== FOREST (green light) ===== */
+[data-theme="forest"] {
+    --bg-primary: #f4f8f4;
+    --bg-secondary: #ffffff;
+    --bg-hover: #e6f0e6;
+    --text-primary: #1a2e1a;
+    --text-secondary: #5c7a5c;
+    --accent: #3a8a3a;
+    --accent-light: #2d6e2d;
+    --accent-glow: rgba(58, 138, 58, 0.18);
+    --border: #d4e4d4;
+}
+
+/* ===== FOREST DARK (green dark) ===== */
+[data-theme="forest-dark"] {
+    --bg-primary: #0f1611;
+    --bg-secondary: #161f18;
+    --bg-hover: #1e2a21;
+    --text-primary: #dde8df;
+    --text-secondary: #8ba38e;
+    --accent: #4caf50;
+    --accent-light: #66d968;
+    --accent-glow: rgba(76, 175, 80, 0.25);
+    --border: #263528;
+}
+
+/* ===== HONEY (yellow light) ===== */
+[data-theme="honey"] {
+    --bg-primary: #fdfaf3;
+    --bg-secondary: #ffffff;
+    --bg-hover: #faf1dc;
+    --text-primary: #2e2600;
+    --text-secondary: #7a6e3a;
+    --accent: #c8960c;
+    --accent-light: #a67c00;
+    --accent-glow: rgba(200, 150, 12, 0.18);
+    --border: #ede0c0;
+}
+
+/* ===== HONEY DARK (yellow dark) ===== */
+[data-theme="honey-dark"] {
+    --bg-primary: #1a1608;
+    --bg-secondary: #231f10;
+    --bg-hover: #2e2818;
+    --text-primary: #f0e6cc;
+    --text-secondary: #b5a472;
+    --accent: #f0c040;
+    --accent-light: #ffd866;
+    --accent-glow: rgba(240, 192, 64, 0.25);
+    --border: #3d3520;
+}

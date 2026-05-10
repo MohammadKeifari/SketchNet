@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}
+    Settings
+{% endblock title %}
+{% block current_page %}
+    settings
+{% endblock current_page %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'setting/css/settings.css' %}">
+{% endblock extra_css %}
+{% block content %}
+    <div class="settings-container">
+        <div class="settings-header">
+            <h1>Settings</h1>
+            <p>Customize your SketchMod experience</p>
+        </div>
+        {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+            </ul>
+        {% endif %}
+        <form method="post" action="{% url 'setting:settings' %}">
+            {% csrf_token %}
+            <div class="settings-card">
+                <h2>Appearance</h2>
+                <div class="theme-grid">
+                    <!-- System -->
+                    <div class="theme-option">
+                        <input type="radio"
+                               name="theme"
+                               value="system"
+                               id="theme-system"
+                               {% if settings.theme == "system" %}checked{% endif %}>
+                        <label class="theme-label" for="theme-system">
+                            <div class="theme-preview theme-preview-system"></div>
+                            <span class="theme-name">System</span>
+                        </label>
+                        <div class="theme-check">
+                            <svg viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="3">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        </div>
+                    </div>
+                    <!-- Light -->
+                    <div class="theme-option">
+                        <input type="radio"
+                               name="theme"
+                               value="light"
+                               id="theme-light"
+                               {% if settings.theme == "light" %}checked{% endif %}>
+                        <label class="theme-label" for="theme-light">
+                            <div class="theme-preview theme-preview-light"></div>
+                            <span class="theme-name">Light</span>
+                        </label>
+                        <div class="theme-check">
+                            <svg viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="3">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        </div>
+                    </div>
+                    <!-- Dark -->
+                    <div class="theme-option">
+                        <input type="radio"
+                               name="theme"
+                               value="dark"
+                               id="theme-dark"
+                               {% if settings.theme == "dark" %}checked{% endif %}>
+                        <label class="theme-label" for="theme-dark">
+                            <div class="theme-preview theme-preview-dark"></div>
+                            <span class="theme-name">Dark</span>
+                        </label>
+                        <div class="theme-check">
+                            <svg viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="3">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        </div>
+                    </div>
+                    <!-- Rose -->
+                    <div class="theme-option">
+                        <input type="radio"
+                               name="theme"
+                               value="rose"
+                               id="theme-rose"
+                               {% if settings.theme == "rose" %}checked{% endif %}>
+                        <label class="theme-label" for="theme-rose">
+                            <div class="theme-preview theme-preview-rose"></div>
+                            <span class="theme-name">Rose</span>
+                        </label>
+                        <div class="theme-check">
+                            <svg viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="3">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        </div>
+                    </div>
+                    <!-- Dark Rose -->
+                    <div class="theme-option">
+                        <input type="radio"
+                               name="theme"
+                               value="dark-rose"
+                               id="theme-dark-rose"
+                               {% if settings.theme == "dark-rose" %}checked{% endif %}>
+                        <label class="theme-label" for="theme-dark-rose">
+                            <div class="theme-preview theme-preview-dark-rose"></div>
+                            <span class="theme-name">Dark Rose</span>
+                        </label>
+                        <div class="theme-check">
+                            <svg viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="3">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        </div>
+                    </div>
+                    <!-- Forest -->
+                    <div class="theme-option">
+                        <input type="radio"
+                               name="theme"
+                               value="forest"
+                               id="theme-forest"
+                               {% if settings.theme == "forest" %}checked{% endif %}>
+                        <label class="theme-label" for="theme-forest">
+                            <div class="theme-preview theme-preview-forest"></div>
+                            <span class="theme-name">Forest</span>
+                        </label>
+                        <div class="theme-check">
+                            <svg viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="3">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        </div>
+                    </div>
+                    <!-- Forest Dark -->
+                    <div class="theme-option">
+                        <input type="radio"
+                               name="theme"
+                               value="forest-dark"
+                               id="theme-forest-dark"
+                               {% if settings.theme == "forest-dark" %}checked{% endif %}>
+                        <label class="theme-label" for="theme-forest-dark">
+                            <div class="theme-preview theme-preview-forest-dark"></div>
+                            <span class="theme-name">Forest Dark</span>
+                        </label>
+                        <div class="theme-check">
+                            <svg viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="3">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        </div>
+                    </div>
+                    <!-- Honey -->
+                    <div class="theme-option">
+                        <input type="radio"
+                               name="theme"
+                               value="honey"
+                               id="theme-honey"
+                               {% if settings.theme == "honey" %}checked{% endif %}>
+                        <label class="theme-label" for="theme-honey">
+                            <div class="theme-preview theme-preview-honey"></div>
+                            <span class="theme-name">Honey</span>
+                        </label>
+                        <div class="theme-check">
+                            <svg viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="3">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        </div>
+                    </div>
+                    <!-- Honey Dark -->
+                    <div class="theme-option">
+                        <input type="radio"
+                               name="theme"
+                               value="honey-dark"
+                               id="theme-honey-dark"
+                               {% if settings.theme == "honey-dark" %}checked{% endif %}>
+                        <label class="theme-label" for="theme-honey-dark">
+                            <div class="theme-preview theme-preview-honey-dark"></div>
+                            <span class="theme-name">Honey Dark</span>
+                        </label>
+                        <div class="theme-check">
+                            <svg viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="3">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="btn-submit">Save Settings</button>
+        </form>
+    </div>
+{% endblock content %}

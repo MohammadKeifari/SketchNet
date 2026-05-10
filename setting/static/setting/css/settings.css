@@ -1,0 +1,204 @@
+.settings-container {
+    max-width: 640px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+.settings-header {
+    margin-bottom: 32px;
+}
+
+.settings-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.settings-header p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-top: 4px;
+}
+
+.settings-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 20px;
+}
+
+.settings-card h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.theme-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.theme-option {
+    position: relative;
+}
+
+.theme-option input {
+    display: none;
+}
+
+.theme-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 20px 12px 16px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: center;
+}
+
+.theme-option input:checked + .theme-label {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+}
+
+.theme-label:hover {
+    border-color: var(--accent-light);
+}
+
+.theme-preview {
+    width: 60px;
+    height: 40px;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.theme-preview-light {
+    background: linear-gradient(135deg, #f8f9fc 50%, #ffffff 50%);
+}
+
+.theme-preview-dark {
+    background: linear-gradient(135deg, #0f1117 50%, #1a1d27 50%);
+}
+
+.theme-preview-rose {
+    background: linear-gradient(135deg, #efbbc4 50%, #ffffff 50%);
+    border: none;
+}
+.theme-preview-dark-rose {
+    background: linear-gradient(135deg, #1a1114 50%, #24191c 50%);
+}
+
+.theme-preview-forest {
+    background: linear-gradient(135deg, #dceadc 50%, #ffffff 50%);
+    border: none;
+}
+
+.theme-preview-forest-dark {
+    background: linear-gradient(135deg, #0f1611 50%, #161f18 50%);
+}
+
+.theme-preview-honey {
+    background: linear-gradient(135deg, #fff3c4 50%, #ffffff 50%);
+    border: none;
+}
+
+.theme-preview-honey-dark {
+    background: linear-gradient(135deg, #1a1608 50%, #231f10 50%);
+}
+.theme-preview-system {
+    background: linear-gradient(
+        135deg,
+        #ffffff 0%,
+        #ffffff 50%,
+        #1a1d27 50%,
+        #1a1d27 100%
+    );
+    border: none;
+    position: relative;
+}
+
+.theme-preview-system::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: conic-gradient(#ffffff 0deg 180deg, #1a1d27 180deg 360deg);
+    border: 2px solid rgba(0, 0, 0, 0.15);
+}
+
+.theme-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.theme-check {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.theme-option input:checked ~ .theme-check {
+    display: flex;
+}
+
+.theme-check svg {
+    width: 12px;
+    height: 12px;
+    color: #fff;
+}
+
+.btn-submit {
+    padding: 10px 24px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    font-family: inherit;
+    margin-top: 8px;
+}
+
+.btn-submit:hover {
+    background: var(--accent-light);
+    box-shadow: 0 4px 15px var(--accent-glow);
+}
+
+.messages {
+    list-style: none;
+    padding: 10px 14px;
+    background: rgba(46, 204, 113, 0.1);
+    border: 1px solid rgba(46, 204, 113, 0.3);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    color: #27ae60;
+    font-size: 0.85rem;
+}
+
+@media (max-width: 480px) {
+    .theme-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
