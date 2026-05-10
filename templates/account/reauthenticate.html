@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}
+    Confirm Password - SketchMod
+{% endblock title %}
+{% block current_page %}
+    account
+{% endblock current_page %}
+{% block extra_css %}
+    <style>
+    .reauth-container {
+        max-width: 480px;
+        margin: 60px auto;
+        padding: 0 20px;
+    }
+
+    .reauth-card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 40px 32px;
+    }
+
+    .reauth-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+    }
+
+    .reauth-subtitle {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin-bottom: 28px;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+    }
+
+    .form-input {
+        width: 100%;
+        padding: 12px 14px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 0.95rem;
+        font-family: inherit;
+        transition: var(--transition);
+    }
+
+    .form-input:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .btn-submit {
+        width: 100%;
+        padding: 12px;
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+        font-family: inherit;
+    }
+
+    .btn-submit:hover {
+        background: var(--accent-light);
+        box-shadow: 0 4px 15px var(--accent-glow);
+    }
+
+    .errorlist {
+        list-style: none;
+        padding: 10px 14px;
+        background: rgba(231, 76, 60, 0.1);
+        border: 1px solid rgba(231, 76, 60, 0.3);
+        border-radius: 8px;
+        margin-bottom: 20px;
+        color: #e74c3c;
+        font-size: 0.85rem;
+    }
+    </style>
+{% endblock extra_css %}
+{% block content %}
+    <div class="reauth-container">
+        <div class="reauth-card">
+            <h1 class="reauth-title">Confirm Your Password</h1>
+            <p class="reauth-subtitle">For security, please enter your password to continue.</p>
+            {% if form.errors %}
+                <ul class="errorlist">
+                    {% for field, errors in form.errors.items %}
+                        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            <form method="post" action="{% url 'account_reauthenticate' %}">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="id_password">Password</label>
+                    <input type="password"
+                           name="password"
+                           id="id_password"
+                           class="form-input"
+                           placeholder="Enter your password"
+                           required
+                           autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn-submit">Confirm</button>
+            </form>
+        </div>
+    </div>
+{% endblock content %}
