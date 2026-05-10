@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}
+    Sign Out
+{% endblock title %}
+{% block current_page %}
+    account
+{% endblock current_page %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/logout.css' %}">
+{% endblock extra_css %}
+{% block content %}
+    <div class="logout-container">
+        <div class="logout-card">
+            <div class="logout-icon">
+                <svg width="24"
+                     height="24"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+            </div>
+            <h1 class="logout-title">Sign Out</h1>
+            <p class="logout-subtitle">Are you sure you want to sign out?</p>
+            <div class="logout-actions">
+                <a href="/" class="btn btn-outline">Cancel</a>
+                <form method="post"
+                      action="{% url 'account_logout' %}"
+                      style="display: inline">
+                    {% csrf_token %}
+                    {% if redirect_field_value %}
+                        <input type="hidden"
+                               name="{{ redirect_field_name }}"
+                               value="{{ redirect_field_value }}" />
+                    {% endif %}
+                    <button type="submit" class="btn btn-danger">Sign Out</button>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock content %}
