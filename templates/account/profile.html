@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}
+    "Profile"
+{% endblock title %}
+{% block current_page %}
+    "account"
+{% endblock current_page %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/profile.css' %}">
+{% endblock %}
+{% block content %}
+    <div class="profile-container">
+        <div class="profile-header">
+            <h1>My Profile</h1>
+            <p>Manage your account</p>
+        </div>
+        <!-- Account Info -->
+        <div class="profile-card">
+            <h2>Account Information</h2>
+            <div class="info-row">
+                <span class="info-label">Username</span>
+                <span class="info-value">{{ user.username }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Email</span>
+                <span class="info-value">{{ user.email }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Joined</span>
+                <span class="info-value">{{ user.date_joined|date:"F j, Y" }}</span>
+            </div>
+        </div>
+        <!-- Actions -->
+        <div class="profile-card">
+            <h2>Account Actions</h2>
+            <div class="profile-actions">
+                <a href="{% url 'account_change_password' %}" class="btn btn-outline">Change Password</a>
+                <a href="{% url 'account_email' %}" class="btn btn-outline">Manage Email</a>
+                <a href="{% url 'account_logout' %}" class="btn btn-danger">Sign Out</a>
+            </div>
+        </div>
+    </div>
+{% endblock %}
