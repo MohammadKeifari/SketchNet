@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}
+    Verification Required - SketchMod
+{% endblock title %}
+{% block current_page %}
+    account
+{% endblock current_page %}
+{% block extra_css %}
+    <style>
+    .msg-container {
+        max-width: 480px;
+        margin: 80px auto;
+        padding: 0 20px;
+        text-align: center;
+    }
+
+    .msg-card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 40px 32px;
+    }
+
+    .msg-icon {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 20px;
+        background: rgba(243, 156, 18, 0.1);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #f39c12;
+    }
+
+    .msg-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+    }
+
+    .msg-text {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        line-height: 1.6;
+        margin-bottom: 24px;
+    }
+
+    .btn-action {
+        display: inline-block;
+        padding: 10px 24px;
+        background: var(--accent);
+        color: #fff;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: var(--transition);
+    }
+
+    .btn-action:hover {
+        background: var(--accent-light);
+        box-shadow: 0 4px 15px var(--accent-glow);
+    }
+    </style>
+{% endblock extra_css %}
+{% block content %}
+    <div class="msg-container">
+        <div class="msg-card">
+            <div class="msg-icon">
+                <svg width="24"
+                     height="24"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <path d="M22 7l-10 7L2 7" />
+                </svg>
+            </div>
+            <h1 class="msg-title">Email Verification Required</h1>
+            <p class="msg-text">
+                You need to verify your email address before accessing this page.
+                Please check your inbox for the verification link.
+            </p>
+            <a href="{% url 'account_email' %}" class="btn-action">Manage Email</a>
+        </div>
+    </div>
+{% endblock content %}
