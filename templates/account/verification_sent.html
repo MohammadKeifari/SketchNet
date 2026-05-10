@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}
+    Verify Email - SketchMod
+{% endblock title %}
+{% block current_page %}
+    account
+{% endblock current_page %}
+{% block extra_css %}
+    <style>
+    .verify-container {
+        max-width: 480px;
+        margin: 60px auto;
+        padding: 0 20px;
+        text-align: center;
+    }
+
+    .verify-card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 40px 32px;
+    }
+
+    .verify-icon {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 20px;
+        background: rgba(46, 204, 113, 0.1);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #27ae60;
+    }
+
+    .verify-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+    }
+
+    .verify-text {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        line-height: 1.6;
+        margin-bottom: 24px;
+    }
+
+    .verify-email {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .btn-back {
+        display: inline-block;
+        padding: 10px 24px;
+        background: var(--accent);
+        color: #fff;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: var(--transition);
+    }
+
+    .btn-back:hover {
+        background: var(--accent-light);
+        box-shadow: 0 4px 15px var(--accent-glow);
+    }
+
+    .btn-resend {
+        display: inline-block;
+        margin-top: 12px;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        text-decoration: none;
+    }
+
+    .btn-resend:hover {
+        color: var(--accent);
+        text-decoration: underline;
+    }
+    </style>
+{% endblock extra_css %}
+{% block content %}
+    <div class="verify-container">
+        <div class="verify-card">
+            <div class="verify-icon">
+                <svg width="24"
+                     height="24"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <path d="M22 7l-10 7L2 7" />
+                </svg>
+            </div>
+            <h1 class="verify-title">Verify Your Email</h1>
+            <p class="verify-text">
+                We've sent a verification email to
+                <span class="verify-email">{{ request.user.email }}</span>.
+                Please check your inbox and click the confirmation link to continue.
+            </p>
+            <a href="/" class="btn-back">Go to Home</a>
+            <br>
+            <a href="{% url 'account_email' %}" class="btn-resend">Didn't receive the email? Resend or change email.</a>
+        </div>
+    </div>
+{% endblock content %}
