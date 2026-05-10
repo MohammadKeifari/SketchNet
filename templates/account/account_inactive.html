@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}
+    Account Inactive - SketchMod
+{% endblock title %}
+{% block current_page %}
+    account
+{% endblock current_page %}
+{% block extra_css %}
+    <style>
+    .msg-container {
+        max-width: 480px;
+        margin: 80px auto;
+        padding: 0 20px;
+        text-align: center;
+    }
+
+    .msg-card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 40px 32px;
+    }
+
+    .msg-icon {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 20px;
+        background: rgba(243, 156, 18, 0.1);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #f39c12;
+    }
+
+    .msg-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+    }
+
+    .msg-text {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        line-height: 1.6;
+        margin-bottom: 24px;
+    }
+    </style>
+{% endblock extra_css %}
+{% block content %}
+    <div class="msg-container">
+        <div class="msg-card">
+            <div class="msg-icon">
+                <svg width="24"
+                     height="24"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+            </div>
+            <h1 class="msg-title">Account Inactive</h1>
+            <p class="msg-text">Your account has been deactivated. Please contact support if you believe this is a mistake.</p>
+        </div>
+    </div>
+{% endblock content %}
