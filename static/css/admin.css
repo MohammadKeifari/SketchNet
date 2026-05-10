@@ -1,0 +1,111 @@
+/* ===== ADMIN SKIN ===== */
+:root {
+    --admin-accent: #6c5ce7;
+    --admin-accent-hover: #5a4bd1;
+}
+
+/* Header */
+#header {
+    background: #1a1d27 !important;
+    color: #e4e6ed !important;
+    border-bottom: 2px solid var(--admin-accent) !important;
+}
+
+#branding h1,
+#branding h1 a:link,
+#branding h1 a:visited {
+    color: #ffffff !important;
+    font-weight: 600;
+}
+
+#user-tools a {
+    color: #a29bfe !important;
+    border-bottom: none !important;
+}
+
+#user-tools a:hover {
+    color: #ffffff !important;
+}
+
+/* Breadcrumbs */
+div.breadcrumbs {
+    background: #242836 !important;
+    color: #a29bfe !important;
+}
+
+div.breadcrumbs a {
+    color: #a29bfe !important;
+}
+
+div.breadcrumbs a:hover {
+    color: #ffffff !important;
+}
+
+/* Module headings */
+.module h2,
+.module caption,
+.inline-group h2 {
+    background: #242836 !important;
+    color: #e4e6ed !important;
+}
+
+/* Links */
+a:link,
+a:visited {
+    color: var(--admin-accent) !important;
+}
+
+a:hover {
+    color: var(--admin-accent-hover) !important;
+}
+
+/* Buttons */
+.button,
+input[type="submit"],
+input[type="button"],
+.submit-row input {
+    background: var(--admin-accent) !important;
+    border: none !important;
+    border-radius: 6px !important;
+    color: #fff !important;
+}
+
+.button:hover,
+input[type="submit"]:hover,
+input[type="button"]:hover,
+.submit-row input:hover {
+    background: var(--admin-accent-hover) !important;
+}
+
+.button.default,
+input[type="submit"].default {
+    background: #27ae60 !important;
+}
+
+.button.default:hover,
+input[type="submit"].default:hover {
+    background: #219a52 !important;
+}
+
+/* Form focus */
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--admin-accent) !important;
+    box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2) !important;
+}
+
+/* Selected rows */
+.row1 td,
+.row2 td {
+    transition: background 0.15s;
+}
+
+tr:hover td {
+    background: rgba(108, 92, 231, 0.05) !important;
+}
+
+/* Dashboard */
+.dashboard #content {
+    max-width: 1400px;
+}
