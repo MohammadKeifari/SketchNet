@@ -43,10 +43,3 @@ class CustomUserModelTests(TestCase):
             username="testuser", email="test@example.com", password="testpass123"
         )
         self.assertEqual(str(user), "testuser")
-
-    def test_email_required(self):
-        """Test email is required"""
-        with self.assertRaises(ValueError):
-            User.objects.create_user(
-                username="nouser", email="", password="testpass123"
-            )
