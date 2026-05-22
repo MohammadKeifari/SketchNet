@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}
-    Login
+    Login - SketchNet
 {% endblock title %}
 {% block current_page %}
     account
@@ -13,7 +13,7 @@
     <div class="auth-container">
         <div class="auth-card">
             <h1 class="auth-title">Welcome Back</h1>
-            <p class="auth-subtitle">Sign in to your SketchMod account</p>
+            <p class="auth-subtitle">Sign in to your SketchNet account</p>
             {% if messages %}
                 <ul class="messages">
                     {% for message in messages %}<li>{{ message }}</li>{% endfor %}
