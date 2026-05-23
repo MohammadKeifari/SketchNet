@@ -5,33 +5,122 @@
 {% block current_page %}
     data
 {% endblock current_page %}
+{% block extra_css %}
+    <style>
+    .delete-container {
+        max-width: 440px;
+        margin: 80px auto;
+        padding: 0 20px;
+        text-align: center;
+    }
+
+    .delete-card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 40px 32px;
+    }
+
+    .delete-icon {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 20px;
+        background: rgba(231, 76, 60, 0.1);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #e74c3c;
+    }
+
+    .delete-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+    }
+
+    .delete-subtitle {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin-bottom: 8px;
+        line-height: 1.5;
+    }
+
+    .delete-warning {
+        color: #e74c3c;
+        font-size: 0.85rem;
+        font-weight: 500;
+        margin-bottom: 28px;
+    }
+
+    .delete-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+    }
+
+    .btn {
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+        font-family: inherit;
+        text-decoration: none;
+        border: none;
+    }
+
+    .btn-danger {
+        background: #e74c3c;
+        color: #fff;
+    }
+
+    .btn-danger:hover {
+        background: #c0392b;
+    }
+
+    .btn-outline {
+        background: transparent;
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+    }
+
+    .btn-outline:hover {
+        background: var(--bg-hover);
+    }
+    </style>
+{% endblock extra_css %}
 {% block content %}
-    <div class="confirm-container">
-        <div class="confirm-card">
-            <div class="confirm-icon">
-                <svg width="48"
-                     height="48"
+    <div class="delete-container">
+        <div class="delete-card">
+            <div class="delete-icon">
+                <svg width="24"
+                     height="24"
                      viewBox="0 0 24 24"
                      fill="none"
-                     stroke="#e74c3c"
-                     stroke-width="1.5">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                     stroke="currentColor"
+                     stroke-width="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <line x1="10" y1="11" x2="10" y2="17" />
+                    <line x1="14" y1="11" x2="14" y2="17" />
                 </svg>
             </div>
-            <h1>Delete Dataset</h1>
-            <p>
+            <h1 class="delete-title">Delete Dataset</h1>
+            <p class="delete-subtitle">
                 Are you sure you want to delete <strong>{{ dataset.name }}</strong>?
             </p>
-            <p class="confirm-warning">This action cannot be undone.</p>
-            <form method="POST">
-                {% csrf_token %}
-                <div class="confirm-actions">
-                    <a href="{% url 'data:dashboard' %}" class="btn btn-ghost">Cancel</a>
+            <p class="delete-warning">This action cannot be undone.</p>
+            <div class="delete-actions">
+                <a href="{% url 'data:detail' dataset.dataset_id %}"
+                   class="btn btn-outline">Cancel</a>
+                <form method="POST" style="display: inline;">
+                    {% csrf_token %}
                     <button type="submit" class="btn btn-danger">Delete</button>
-                </div>
-            </form>
+                </form>
+            </div>
         </div>
     </div>
 {% endblock content %}
