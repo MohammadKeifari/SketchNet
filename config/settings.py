@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     # my apps
     "accounts",
     "setting",
+    "data_manager",
 ]
 
 MIDDLEWARE = [
