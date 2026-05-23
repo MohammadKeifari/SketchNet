@@ -10,6 +10,7 @@ urlpatterns = [
     path("accounts/", include("accounts.urls")),
     path("settings/", include("setting.urls")),
     path("data/", include("data_manager.urls")),
+    path("sketchmod/", include("sketchmod.urls")),
 ]
 
 if settings.DEBUG:
