@@ -14,18 +14,20 @@
         <!-- Header -->
         <div class="data-header">
             <h1>Data</h1>
-            <button class="btn btn-primary" id="uploadBtn" onclick="openUploadModal()">
-                <svg width="18"
-                     height="18"
-                     viewBox="0 0 24 24"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                Upload Dataset
-            </button>
+            {% if user.is_authenticated %}
+                <button class="btn btn-primary" onclick="openUploadModal()">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Upload Dataset
+                </button>
+            {% endif %}
         </div>
         <!-- My Datasets Section -->
         <section class="data-section">
@@ -83,9 +85,37 @@
                                 <td class="td-cover">
                                     <a href="{% url 'data:detail' dataset.dataset_id %}">
                                         {% if dataset.cover_image %}
-                                            <img src="{{ dataset.cover_image.url }}" alt="Cover" class="cover-thumb">
+                                            <img src="{{ dataset.cover_image.url }}"
+                                                 alt="Cover"
+                                                 class="cover-thumb"
+                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                            <div class="cover-placeholder-small" style="display: none;">
+                                                <svg width="20"
+                                                     height="20"
+                                                     viewBox="0 0 24 24"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="1.5"
+                                                     opacity="0.3">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                                                    <circle cx="8.5" cy="8.5" r="1.5" />
+                                                    <polyline points="21 15 16 10 5 21" />
+                                                </svg>
+                                            </div>
                                         {% else %}
-                                            <div class="cover-placeholder-small"></div>
+                                            <div class="cover-placeholder-small">
+                                                <svg width="20"
+                                                     height="20"
+                                                     viewBox="0 0 24 24"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="1.5"
+                                                     opacity="0.3">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                                                    <circle cx="8.5" cy="8.5" r="1.5" />
+                                                    <polyline points="21 15 16 10 5 21" />
+                                                </svg>
+                                            </div>
                                         {% endif %}
                                     </a>
                                 </td>
@@ -105,15 +135,40 @@
                                 <td class="td-actions">
                                     <a href="{% url 'data:download' dataset.dataset_id %}"
                                        class="icon-btn"
-                                       title="Download">📥</a>
+                                       title="Download">
+                                        <svg width="16"
+                                             height="16"
+                                             viewBox="0 0 24 24"
+                                             fill="none"
+                                             stroke="currentColor"
+                                             stroke-width="2">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                            <polyline points="7 10 12 15 17 10" />
+                                            <line x1="12" y1="15" x2="12" y2="3" />
+                                        </svg>
+                                    </a>
                                     {% if user.is_authenticated %}
                                         <button class="icon-btn like-btn"
                                                 data-id="{{ dataset.dataset_id }}"
                                                 title="Like">
                                             {% if user in dataset.liked_by.all %}
-                                                🩷
+                                                <svg width="16"
+                                                     height="16"
+                                                     viewBox="0 0 24 24"
+                                                     fill="currentColor"
+                                                     stroke="currentColor"
+                                                     stroke-width="2">
+                                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                                </svg>
                                             {% else %}
-                                                🤍
+                                                <svg width="16"
+                                                     height="16"
+                                                     viewBox="0 0 24 24"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="2">
+                                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                                </svg>
                                             {% endif %}
                                         </button>
                                     {% endif %}
@@ -129,7 +184,7 @@
             </div>
         </section>
     </div>
-    <!-- Upload/Edit Modal -->
+    <!-- Upload Modal -->
     {% include "data_manager/includes/upload_modal.html" %}
 {% endblock content %}
 {% block extra_js %}

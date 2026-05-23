@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}
+    All Datasets - SketchNet
+{% endblock title %}
+{% block current_page %}
+    data
+{% endblock current_page %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'data_manager/css/data.css' %}">
+{% endblock extra_css %}
+{% block content %}
+    <div class="expanded-container">
+        <div class="section-header">
+            <h1>All Datasets</h1>
+        </div>
+        <div class="search-sort-bar">
+            <form method="GET" action="{% url 'data:all' %}" class="search-form">
+                <input type="text"
+                       name="search"
+                       class="form-input search-input"
+                       placeholder="Search by name, ID, or username..."
+                       value="{{ search }}">
+                <button type="submit" class="btn btn-primary">Search</button>
+            </form>
+            <select name="sort"
+                    class="form-input sort-select"
+                    onchange="this.form.submit()"
+                    form="sortForm">
+                <option value="newest" {% if sort == "newest" %}selected{% endif %}>Newest</option>
+                <option value="downloads" {% if sort == "downloads" %}selected{% endif %}>Most Downloaded</option>
+                <option value="popular" {% if sort == "popular" %}selected{% endif %}>Most Popular</option>
+            </select>
+            <form id="sortForm"
+                  method="GET"
+                  action="{% url 'data:all' %}"
+                  style="display: none">
+                <input type="hidden" name="search" value="{{ search }}">
+            </form>
+        </div>
+        <div class="dataset-table-wrapper">
+            <table class="dataset-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Name</th>
+                        <th>ID</th>
+                        <th>Uploaded By</th>
+                        <th>Format</th>
+                        <th>Stats</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dataset in datasets %}
+                        <tr>
+                            <td class="td-cover">
+                                <a href="{% url 'data:detail' dataset.dataset_id %}">
+                                    {% if dataset.cover_image %}
+                                        <img src="{{ dataset.cover_image.url }}"
+                                             alt="Cover"
+                                             class="cover-thumb"
+                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                        <div class="cover-placeholder-small" style="display: none;">
+                                            <svg width="20"
+                                                 height="20"
+                                                 viewBox="0 0 24 24"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="1.5"
+                                                 opacity="0.3">
+                                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                                <polyline points="21 15 16 10 5 21" />
+                                            </svg>
+                                        </div>
+                                    {% else %}
+                                        <div class="cover-placeholder-small">
+                                            <svg width="20"
+                                                 height="20"
+                                                 viewBox="0 0 24 24"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="1.5"
+                                                 opacity="0.3">
+                                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                                <polyline points="21 15 16 10 5 21" />
+                                            </svg>
+                                        </div>
+                                    {% endif %}
+                                </a>
+                            </td>
+                            <td>
+                                <a href="{% url 'data:detail' dataset.dataset_id %}"
+                                   class="dataset-name-link">{{ dataset.name }}</a>
+                            </td>
+                            <td>
+                                <span class="dataset-id"
+                                      onclick="copyToClipboard('{{ dataset.dataset_id }}')"
+                                      title="Click to copy">{{ dataset.dataset_id }}</span>
+                            </td>
+                            <td>{{ dataset.owner.username }}</td>
+                            <td>
+                                <span class="format-badge">{{ dataset.get_format_display }}</span>
+                            </td>
+                            <td class="td-stats">
+                                <svg width="13"
+                                     height="13"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                {{ dataset.downloads }}
+                                ·
+                                <svg width="13"
+                                     height="13"
+                                     viewBox="0 0 24 24"
+                                     fill="currentColor"
+                                     stroke="currentColor"
+                                     stroke-width="2">
+                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                </svg>
+                                {{ dataset.likes_count }}
+                            </td>
+                            <td class="td-actions">
+                                <a href="{% url 'data:download' dataset.dataset_id %}"
+                                   class="icon-btn"
+                                   title="Download">
+                                    <svg width="15"
+                                         height="15"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                        <polyline points="7 10 12 15 17 10" />
+                                        <line x1="12" y1="15" x2="12" y2="3" />
+                                    </svg>
+                                </a>
+                                {% if user.is_authenticated %}
+                                    <button class="icon-btn like-btn"
+                                            data-id="{{ dataset.dataset_id }}"
+                                            title="Like">
+                                        {% if user in dataset.liked_by.all %}
+                                            <svg width="15"
+                                                 height="15"
+                                                 viewBox="0 0 24 24"
+                                                 fill="currentColor"
+                                                 stroke="currentColor"
+                                                 stroke-width="2">
+                                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                            </svg>
+                                        {% else %}
+                                            <svg width="15"
+                                                 height="15"
+                                                 viewBox="0 0 24 24"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="2">
+                                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                            </svg>
+                                        {% endif %}
+                                    </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="empty-text">
+                                {% if search %}
+                                    No datasets found for "{{ search }}".
+                                {% else %}
+                                    No datasets available.
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock content %}
+{% block extra_js %}
+    <script src="{% static 'data_manager/js/data.js' %}"></script>
+{% endblock extra_js %}

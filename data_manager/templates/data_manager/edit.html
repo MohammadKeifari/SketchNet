@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}
+    Edit {{ dataset.name }} - SketchMod
+{% endblock title %}
+{% block current_page %}
+    data
+{% endblock current_page %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'data_manager/css/data.css' %}">
+{% endblock extra_css %}
+{% block content %}
+    <div class="upload-page-container">
+        <a href="{% url 'data:detail' dataset.dataset_id %}" class="back-link">← Back to Dataset</a>
+        <div class="upload-page-card">
+            <h1>Edit Dataset</h1>
+            <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <!-- File -->
+                <div class="form-group">
+                    <label>File</label>
+                    <div class="upload-zone" id="dropZone">
+                        <svg width="40"
+                             height="40"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="1.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                        <p>Click to change file</p>
+                        <p class="upload-hint">Current: {{ dataset.file.name }}</p>
+                        <input type="file" name="file" id="fileInput" class="file-hidden-input">
+                    </div>
+                    <p id="fileName" class="file-name"></p>
+                </div>
+                <!-- Name -->
+                <div class="form-group">
+                    <label for="id_name">Name *</label>
+                    <input type="text"
+                           name="name"
+                           id="id_name"
+                           class="form-input"
+                           placeholder="Dataset name"
+                           value="{{ form.name.value|default:dataset.name }}"
+                           required>
+                </div>
+                <!-- Description -->
+                <div class="form-group">
+                    <label for="id_description">Description</label>
+                    <textarea name="description"
+                              id="id_description"
+                              class="form-input"
+                              rows="3"
+                              placeholder="Describe your dataset...">{{ form.description.value|default:dataset.description }}</textarea>
+                </div>
+                <!-- Format -->
+                <div class="form-group">
+                    <label for="id_format">Format *</label>
+                    <select name="format" id="id_format" class="form-input" required>
+                        {% for value, label in form.format.field.choices %}
+                            <option value="{{ value }}"
+                                    {% if dataset.format == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- Cover Image -->
+                <div class="form-group">
+                    <label for="id_cover_image">Cover Image (optional)</label>
+                    {% if dataset.cover_image %}
+                        <p style="font-size: 0.85rem;
+                                  color: var(--text-secondary);
+                                  margin-bottom: 8px">Current: {{ dataset.cover_image.name }}</p>
+                    {% endif %}
+                    <input type="file"
+                           name="cover_image"
+                           id="id_cover_image"
+                           class="form-input-file"
+                           accept="image/*">
+                </div>
+                <!-- Private Toggle -->
+                <div class="form-group">
+                    <div class="toggle-wrapper">
+                        <label class="toggle-label">
+                            <input type="checkbox"
+                                   name="is_private"
+                                   id="id_is_private"
+                                   {% if dataset.is_private %}checked{% endif %}>
+                            <span class="toggle-switch"></span>
+                        </label>
+                        <span class="toggle-text" id="toggleText">
+                            {% if dataset.is_private %}
+                                Private Dataset
+                            {% else %}
+                                Public Dataset
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+                <!-- Private Access Section -->
+                <div class="private-access"
+                     id="privateAccessSection"
+                     style="{% if not dataset.is_private %}display: none;
+                            {% endif %}">
+                    <label>Give access to:</label>
+                    <div class="search-users-wrapper">
+                        <input type="text"
+                               class="form-input"
+                               id="userSearchInput"
+                               placeholder="Search users by name or email...">
+                        <div class="search-results" id="userSearchResults"></div>
+                    </div>
+                    <div class="allowed-users-list" id="allowedUsersList">
+                        {% for allowed_user in dataset.allowed_users.all %}
+                            <span class="allowed-user-tag" id="user-tag-{{ allowed_user.id }}">
+                                {{ allowed_user.username }}
+                                <button onclick="removeUser('{{ dataset.dataset_id }}', {{ allowed_user.id }})">✕</button>
+                            </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <a href="{% url 'data:detail' dataset.dataset_id %}"
+                       class="btn btn-ghost">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock content %}
+{% block extra_js %}
+    <script>
+    // Set dataset ID for search functionality
+    document.getElementById("uploadModal")?.setAttribute("data-dataset-id", "{{ dataset.dataset_id }}");
+    </script>
+    <script src="{% static 'data_manager/js/data.js' %}"></script>
+{% endblock extra_js %}

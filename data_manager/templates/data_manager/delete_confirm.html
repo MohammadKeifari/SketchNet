@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}
+    Delete Dataset - SketchNet
+{% endblock title %}
+{% block current_page %}
+    data
+{% endblock current_page %}
+{% block content %}
+    <div class="confirm-container">
+        <div class="confirm-card">
+            <div class="confirm-icon">
+                <svg width="48"
+                     height="48"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="#e74c3c"
+                     stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+            </div>
+            <h1>Delete Dataset</h1>
+            <p>
+                Are you sure you want to delete <strong>{{ dataset.name }}</strong>?
+            </p>
+            <p class="confirm-warning">This action cannot be undone.</p>
+            <form method="POST">
+                {% csrf_token %}
+                <div class="confirm-actions">
+                    <a href="{% url 'data:dashboard' %}" class="btn btn-ghost">Cancel</a>
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock content %}

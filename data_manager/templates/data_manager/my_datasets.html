@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}
+    My Datasets - SketchNet
+{% endblock title %}
+{% block current_page %}
+    data
+{% endblock current_page %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'data_manager/css/data.css' %}">
+{% endblock extra_css %}
+{% block content %}
+    <div class="expanded-container">
+        <div class="section-header">
+            <div>
+                <h1>My Datasets</h1>
+                <p style="color: var(--text-secondary);
+                          font-size: 0.9rem;
+                          margin-top: 4px">Datasets you own or have access to</p>
+            </div>
+            <button class="btn btn-primary" onclick="openUploadModal()">
+                <svg width="18"
+                     height="18"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Upload New
+            </button>
+        </div>
+        <div class="dataset-table-wrapper">
+            <table class="dataset-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Name</th>
+                        <th>ID</th>
+                        <th>Format</th>
+                        <th>Visibility</th>
+                        <th>Stats</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dataset in datasets %}
+                        <tr>
+                            <td class="td-cover">
+                                <a href="{% url 'data:detail' dataset.dataset_id %}">
+                                    {% if dataset.cover_image %}
+                                        <img src="{{ dataset.cover_image.url }}"
+                                             alt="Cover"
+                                             class="cover-thumb"
+                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                        <div class="cover-placeholder-small" style="display: none;">
+                                            <svg width="20"
+                                                 height="20"
+                                                 viewBox="0 0 24 24"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="1.5"
+                                                 opacity="0.3">
+                                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                                <polyline points="21 15 16 10 5 21" />
+                                            </svg>
+                                        </div>
+                                    {% else %}
+                                        <div class="cover-placeholder-small">
+                                            <svg width="20"
+                                                 height="20"
+                                                 viewBox="0 0 24 24"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="1.5"
+                                                 opacity="0.3">
+                                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                                <polyline points="21 15 16 10 5 21" />
+                                            </svg>
+                                        </div>
+                                    {% endif %}
+                                </a>
+                            </td>
+                            <td>
+                                <a href="{% url 'data:detail' dataset.dataset_id %}"
+                                   class="dataset-name-link">{{ dataset.name }}</a>
+                            </td>
+                            <td>
+                                <span class="dataset-id"
+                                      onclick="copyToClipboard('{{ dataset.dataset_id }}')"
+                                      title="Click to copy">{{ dataset.dataset_id }}</span>
+                            </td>
+                            <td>
+                                <span class="format-badge">{{ dataset.get_format_display }}</span>
+                            </td>
+                            <td>
+                                {% if dataset.is_private %}
+                                    <svg width="14"
+                                         height="14"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                    </svg>
+                                    Private
+                                {% else %}
+                                    <svg width="14"
+                                         height="14"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+                                        <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
+                                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                    </svg>
+                                    Public
+                                {% endif %}
+                            </td>
+                            <td class="td-stats">
+                                <svg width="13"
+                                     height="13"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                    <circle cx="12" cy="12" r="3" />
+                                </svg>
+                                {{ dataset.views }}
+                                ·
+                                <svg width="13"
+                                     height="13"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                {{ dataset.downloads }}
+                            </td>
+                            <td class="td-actions">
+                                {% if dataset.owner == user %}
+                                    <a href="{% url 'data:edit' dataset.dataset_id %}"
+                                       class="icon-btn"
+                                       title="Edit">
+                                        <svg width="15"
+                                             height="15"
+                                             viewBox="0 0 24 24"
+                                             fill="none"
+                                             stroke="currentColor"
+                                             stroke-width="2">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                        </svg>
+                                    </a>
+                                    <a href="{% url 'data:delete' dataset.dataset_id %}"
+                                       class="icon-btn icon-btn-danger"
+                                       title="Delete">
+                                        <svg width="15"
+                                             height="15"
+                                             viewBox="0 0 24 24"
+                                             fill="none"
+                                             stroke="currentColor"
+                                             stroke-width="2">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                        </svg>
+                                    </a>
+                                {% endif %}
+                                <a href="{% url 'data:download' dataset.dataset_id %}"
+                                   class="icon-btn"
+                                   title="Download">
+                                    <svg width="15"
+                                         height="15"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                        <polyline points="7 10 12 15 17 10" />
+                                        <line x1="12" y1="15" x2="12" y2="3" />
+                                    </svg>
+                                </a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="empty-text">No datasets yet.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% include "data_manager/includes/upload_modal.html" %}
+{% endblock content %}
+{% block extra_js %}
+    <script src="{% static 'data_manager/js/data.js' %}"></script>
+{% endblock extra_js %}

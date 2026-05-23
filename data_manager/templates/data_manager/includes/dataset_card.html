@@ -1,0 +1,117 @@
+<div class="dataset-card">
+    <a href="{% url 'data:detail' dataset.dataset_id %}"
+       class="card-cover-link">
+        {% if dataset.cover_image %}
+            <img src="{{ dataset.cover_image.url }}"
+                 alt="Cover"
+                 class="card-cover"
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            <div class="card-cover-placeholder" style="display: none;">
+                <svg width="32"
+                     height="32"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="1.5"
+                     opacity="0.3">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                </svg>
+            </div>
+        {% else %}
+            <div class="card-cover-placeholder">
+                <svg width="32"
+                     height="32"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="1.5"
+                     opacity="0.3">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                </svg>
+            </div>
+        {% endif %}
+    </a>
+    <div class="card-body">
+        <h3 class="card-title">
+            <a href="{% url 'data:detail' dataset.dataset_id %}">{{ dataset.name }}</a>
+        </h3>
+        <p class="card-id"
+           onclick="copyToClipboard('{{ dataset.dataset_id }}')"
+           title="Click to copy">{{ dataset.dataset_id }}</p>
+        <div class="card-actions">
+            {% if show_edit and dataset.owner == user %}
+                <a href="{% url 'data:edit' dataset.dataset_id %}"
+                   class="icon-btn"
+                   title="Edit">
+                    <svg width="15"
+                         height="15"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                </a>
+            {% endif %}
+            <a href="{% url 'data:download' dataset.dataset_id %}"
+               class="icon-btn"
+               title="Download">
+                <svg width="15"
+                     height="15"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+            </a>
+            {% if user.is_authenticated %}
+                <button class="icon-btn like-btn"
+                        data-id="{{ dataset.dataset_id }}"
+                        title="Like">
+                    {% if user in dataset.liked_by.all %}
+                        <svg width="15"
+                             height="15"
+                             viewBox="0 0 24 24"
+                             fill="currentColor"
+                             stroke="currentColor"
+                             stroke-width="2">
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                        </svg>
+                    {% else %}
+                        <svg width="15"
+                             height="15"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2">
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                        </svg>
+                    {% endif %}
+                </button>
+            {% endif %}
+            {% if show_delete and dataset.owner == user %}
+                <a href="{% url 'data:delete' dataset.dataset_id %}"
+                   class="icon-btn icon-btn-danger"
+                   title="Delete">
+                    <svg width="15"
+                         height="15"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>

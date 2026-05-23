@@ -1,0 +1,118 @@
+<div class="modal-overlay" id="uploadModal" style="display: none;">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="modalTitle">Upload Dataset</h2>
+            <button class="modal-close" onclick="closeUploadModal()">
+                <svg width="18"
+                     height="18"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <form id="datasetForm"
+                  method="POST"
+                  enctype="multipart/form-data"
+                  action="{% url 'data:upload' %}">
+                {% csrf_token %}
+                <!-- File Upload Area -->
+                <div class="upload-zone" id="dropZone">
+                    <svg width="40"
+                         height="40"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    <p>Click or drag file to upload</p>
+                    <p class="upload-hint">Max size: 10MB</p>
+                    <input type="file"
+                           name="file"
+                           id="fileInput"
+                           required
+                           class="file-hidden-input">
+                </div>
+                <p id="fileName" class="file-name"></p>
+                <!-- Name -->
+                <div class="form-group">
+                    <label for="id_name">Name</label>
+                    <input type="text"
+                           name="name"
+                           id="id_name"
+                           class="form-input"
+                           placeholder="Dataset name"
+                           required>
+                </div>
+                <!-- Description -->
+                <div class="form-group">
+                    <label for="id_description">Description</label>
+                    <textarea name="description"
+                              id="id_description"
+                              class="form-input"
+                              rows="3"
+                              placeholder="Describe your dataset..."></textarea>
+                </div>
+                <!-- Format -->
+                <div class="form-group">
+                    <label for="id_format">Format</label>
+                    <select name="format" id="id_format" class="form-input" required>
+                        <option value="csv">CSV</option>
+                        <option value="json">JSON</option>
+                        <option value="xlsx">Excel</option>
+                        <option value="parquet">Parquet</option>
+                        <option value="rar">Image Set (RAR)</option>
+                        <option value="zip">Image Set (ZIP)</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <!-- Cover Image -->
+                <div class="form-group">
+                    <label>Cover Image (optional)</label>
+                    <div class="cover-upload-wrapper">
+                        <label class="cover-upload-label" for="id_cover_image">
+                            <svg width="20"
+                                 height="20"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
+                            </svg>
+                            <span class="cover_choose_image_text">Choose cover image</span>
+                        </label>
+                        <input type="file"
+                               name="cover_image"
+                               id="id_cover_image"
+                               class="cover-file-input"
+                               accept="image/*">
+                        <span class="cover-file-name" id="coverFileName">No file chosen</span>
+                    </div>
+                </div>
+                <!-- Private Toggle -->
+                <div class="form-group">
+                    <div class="toggle-wrapper">
+                        <label class="toggle-label">
+                            <input type="checkbox" name="is_private" id="id_is_private">
+                            <span class="toggle-switch"></span>
+                        </label>
+                        <span class="toggle-text" id="toggleText">Public Dataset</span>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-ghost" onclick="closeUploadModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
