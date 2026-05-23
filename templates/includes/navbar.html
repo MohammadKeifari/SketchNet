@@ -1,60 +1,11 @@
+{% load static %}
 <nav class="navbar" role="navigation" aria-label="Main navigation">
     <!-- Left: Logo + Links -->
     <div class="navbar-left">
         <!-- Logo -->
-        <a href="{% url 'home' %}" class="logo" aria-label="SketchMod Home">
+        <a href="{% url 'home' %}" class="logo" aria-label="SketchNet Home">
             <div class="logo-icon">
-                <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="512" height="512" fill="transparent" />
-                    <g fill="none" stroke="white" stroke-width="10" stroke-linecap="round">
-                    <!-- top -->
-                    <path d="M256 70 C230 110 230 150 256 190" />
-                    <path d="M272 55 C240 105 240 155 272 205" />
-                    <path d="M288 40 C250 100 250 160 288 220" />
-                    <path d="M304 25 C260 95 260 165 304 235" />
-                    <path d="M320 10 C270 90 270 170 320 250" />
-                    <!-- top right -->
-                    <g transform="rotate(60 256 256)">
-                    <path d="M256 70 C230 110 230 150 256 190" />
-                    <path d="M272 55 C240 105 240 155 272 205" />
-                    <path d="M288 40 C250 100 250 160 288 220" />
-                    <path d="M304 25 C260 95 260 165 304 235" />
-                    <path d="M320 10 C270 90 270 170 320 250" />
-                    </g>
-                    <!-- bottom right -->
-                    <g transform="rotate(120 256 256)">
-                    <path d="M256 70 C230 110 230 150 256 190" />
-                    <path d="M272 55 C240 105 240 155 272 205" />
-                    <path d="M288 40 C250 100 250 160 288 220" />
-                    <path d="M304 25 C260 95 260 165 304 235" />
-                    <path d="M320 10 C270 90 270 170 320 250" />
-                    </g>
-                    <!-- bottom -->
-                    <g transform="rotate(180 256 256)">
-                    <path d="M256 70 C230 110 230 150 256 190" />
-                    <path d="M272 55 C240 105 240 155 272 205" />
-                    <path d="M288 40 C250 100 250 160 288 220" />
-                    <path d="M304 25 C260 95 260 165 304 235" />
-                    <path d="M320 10 C270 90 270 170 320 250" />
-                    </g>
-                    <!-- bottom left -->
-                    <g transform="rotate(240 256 256)">
-                    <path d="M256 70 C230 110 230 150 256 190" />
-                    <path d="M272 55 C240 105 240 155 272 205" />
-                    <path d="M288 40 C250 100 250 160 288 220" />
-                    <path d="M304 25 C260 95 260 165 304 235" />
-                    <path d="M320 10 C270 90 270 170 320 250" />
-                    </g>
-                    <!-- top left -->
-                    <g transform="rotate(300 256 256)">
-                    <path d="M256 70 C230 110 230 150 256 190" />
-                    <path d="M272 55 C240 105 240 155 272 205" />
-                    <path d="M288 40 C250 100 250 160 288 220" />
-                    <path d="M304 25 C260 95 260 165 304 235" />
-                    <path d="M320 10 C270 90 270 170 320 250" />
-                    </g>
-                    </g>
-                </svg>
+                <img src="{% static 'images/logo.svg' %}" alt="SketchNet" class="logo-svg">
             </div>
             <span class="logo-text">SketchNet</span>
         </a>
@@ -76,7 +27,7 @@
             </li>
             <!-- 2. Data -->
             <li class="nav-item">
-                <a href="" class="nav-link" data-page="data">
+                <a href="{% url "data:dashboard" %}" class="nav-link" data-page="data">
                     <svg class="nav-icon"
                          viewBox="0 0 24 24"
                          fill="none"

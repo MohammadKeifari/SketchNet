@@ -46,6 +46,12 @@ body {
     white-space: nowrap;
 }
 
+.logo-svg {
+    width: 25px;
+    height: 25px;
+    display: block;
+    filter: brightness(0) invert(1);
+}
 
 .logo-icon {
     width: 34px;
