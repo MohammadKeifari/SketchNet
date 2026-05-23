@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "accounts",
     "setting",
     "data_manager",
+    "sketchmod",
 ]
 
 MIDDLEWARE = [
