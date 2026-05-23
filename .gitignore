@@ -7,3 +7,4 @@ db.sqlite3
 !.env.example  # EXCEPT the example file
 .vscode/
 *.code-workspace
+media/
