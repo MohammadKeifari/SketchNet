@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}
+    SketchMod - SketchNet
+{% endblock title %}
+{% block current_page %}
+    sketchmod
+{% endblock current_page %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'sketchmod/css/canvas.css' %}">
+{% endblock extra_css %}
+{% block content %}
+    <div class="sketchmod-container">
+        <!-- Left Toolbar -->
+        <div class="toolbar toolbar-left" id="leftToolbar">
+            <div class="toolbar-section">
+                <div class="toolbar-section-title">General</div>
+                <button class="tool-btn active" data-tool="select" title="Select (S)">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+                    </svg>
+                    <span class="tool-label">Select</span>
+                </button>
+                <button class="tool-btn" data-tool="move" title="Move (M)">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <polyline points="5 9 2 12 5 15" />
+                        <polyline points="9 5 12 2 15 5" />
+                        <polyline points="15 19 12 22 9 19" />
+                        <polyline points="19 9 22 12 19 15" />
+                        <line x1="2" y1="12" x2="22" y2="12" />
+                        <line x1="12" y1="2" x2="12" y2="22" />
+                    </svg>
+                    <span class="tool-label">Move</span>
+                </button>
+                <button class="tool-btn" data-tool="delete" title="Delete (D)">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                    <span class="tool-label">Delete</span>
+                </button>
+                <button class="tool-btn" data-tool="pan" title="Pan (H)">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <polyline points="5 9 2 12 5 15" />
+                        <polyline points="9 5 12 2 15 5" />
+                        <polyline points="15 19 12 22 9 19" />
+                        <polyline points="19 9 22 12 19 15" />
+                    </svg>
+                    <span class="tool-label">Pan</span>
+                </button>
+            </div>
+            <div class="toolbar-section">
+                <div class="toolbar-section-title">Data</div>
+                <button class="tool-btn" data-tool="data-input" title="Data Input">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                    </svg>
+                    <span class="tool-label">Data Input</span>
+                </button>
+            </div>
+            <div class="toolbar-section">
+                <div class="toolbar-section-title">Models</div>
+                <button class="tool-btn" data-tool="neuron" title="Neuron">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <circle cx="12" cy="12" r="8" />
+                        <circle cx="12" cy="12" r="3" />
+                        <line x1="12" y1="4" x2="12" y2="2" />
+                        <line x1="12" y1="22" x2="12" y2="20" />
+                        <line x1="4" y1="12" x2="2" y2="12" />
+                        <line x1="22" y1="12" x2="20" y2="12" />
+                        <line x1="6.34" y1="6.34" x2="4.93" y2="4.93" />
+                        <line x1="19.07" y1="19.07" x2="17.66" y2="17.66" />
+                        <line x1="17.66" y1="6.34" x2="19.07" y2="4.93" />
+                        <line x1="4.93" y1="19.07" x2="6.34" y2="17.66" />
+                    </svg>
+                    <span class="tool-label">Neuron</span>
+                </button>
+                <button class="tool-btn" data-tool="layer" title="Neuron Layer">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <rect x="2" y="4" width="20" height="4" rx="1" />
+                        <rect x="2" y="10" width="20" height="4" rx="1" />
+                        <rect x="2" y="16" width="20" height="4" rx="1" />
+                    </svg>
+                    <span class="tool-label">Layer</span>
+                </button>
+            </div>
+        </div>
+        <!-- Canvas Area -->
+        <div class="canvas-wrapper" id="canvasWrapper">
+            <canvas id="sketchCanvas"></canvas>
+            <div class="minimap" id="minimap">
+                <canvas id="minimapCanvas"></canvas>
+            </div>
+        </div>
+        <!-- Right Sidebar -->
+        <div class="sidebar sidebar-right" id="rightSidebar">
+            <div class="sidebar-section">
+                <button class="sidebar-btn" id="btnSave" title="Save to database">
+                    <svg width="16"
+                         height="16"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                        <polyline points="17 21 17 13 7 13 7 21" />
+                        <polyline points="7 3 7 8 15 8" />
+                    </svg>
+                    <span>Save</span>
+                </button>
+                <button class="sidebar-btn" id="btnTranslate" title="Export to Python">
+                    <svg width="16"
+                         height="16"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <polyline points="16 18 22 12 16 6" />
+                        <polyline points="8 6 2 12 8 18" />
+                    </svg>
+                    <span>Translate</span>
+                </button>
+                <button class="sidebar-btn" id="btnRun" title="Run model" disabled>
+                    <svg width="16"
+                         height="16"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                    <span>Run</span>
+                </button>
+                <button class="sidebar-btn" id="btnPublish" title="Make public">
+                    <svg width="16"
+                         height="16"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="2" y1="12" x2="22" y2="12" />
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                    </svg>
+                    <span>Publish</span>
+                </button>
+            </div>
+            <!-- Node Properties (shows when a node is selected) -->
+            <div class="sidebar-section" id="propertiesPanel" style="display: none;">
+                <div class="sidebar-section-title">Properties</div>
+                <div id="propertiesContent"></div>
+            </div>
+        </div>
+    </div>
+{% endblock content %}
+{% block extra_js %}
+    <script src="{% static 'sketchmod/js/vendor/fabric.min.js' %}"></script>
+    <script src="{% static 'sketchmod/js/canvas.js' %}"></script>
+    <script src="{% static 'sketchmod/js/toolbar.js' %}"></script>
+    <script src="{% static 'sketchmod/js/nodes.js' %}"></script>
+    <script src="{% static 'sketchmod/js/links.js' %}"></script>
+    <script src="{% static 'sketchmod/js/sidebar.js' %}"></script>
+{% endblock extra_js %}
