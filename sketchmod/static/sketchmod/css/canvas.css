@@ -396,3 +396,11 @@
     font-size: 0.8rem;
     color: var(--text-secondary);
 }
+
+.zoom-indicator {
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    padding: 6px 0;
+    font-weight: 500;
+}

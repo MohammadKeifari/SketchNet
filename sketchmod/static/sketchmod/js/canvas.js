@@ -120,7 +120,16 @@ const SketchMod = {
         document
             .getElementById("btnTranslate")
             ?.addEventListener("click", () => this._translate());
-
+        // Zoom buttons
+        document
+            .getElementById("btnZoomIn")
+            ?.addEventListener("click", () => this._zoomStep(1.25));
+        document
+            .getElementById("btnZoomOut")
+            ?.addEventListener("click", () => this._zoomStep(0.8));
+        document
+            .getElementById("btnZoomFit")
+            ?.addEventListener("click", () => this._zoomFit());
         // Toolbar
         document.querySelectorAll(".tool-btn[data-tool]").forEach((btn) => {
             btn.addEventListener("click", () => this.setTool(btn.dataset.tool));
@@ -222,7 +231,18 @@ const SketchMod = {
             y: wy * this.scale + this.offsetY,
         };
     },
-
+    // ========== scroll ==========
+    _onScroll(e) {
+        e.preventDefault();
+        const zoom = e.deltaY < 0 ? 1.08 : 0.93;
+        const newScale = this.scale * zoom;
+        if (newScale < 0.05 || newScale > 15) return;
+        this.offsetX = e.offsetX - (e.offsetX - this.offsetX) * zoom;
+        this.offsetY = e.offsetY - (e.offsetY - this.offsetY) * zoom;
+        this.scale = newScale;
+        this._updateZoomIndicator();
+        this._render();
+    },
     // ========== MOUSE ==========
     _onMouseDown(e) {
         const mx = e.offsetX;
@@ -499,6 +519,18 @@ const SketchMod = {
             this._hideProperties();
             this._render();
         }
+        if (e.key === "+" || e.key === "=") {
+            this._zoomStep(1.25);
+            e.preventDefault();
+        }
+        if (e.key === "-") {
+            this._zoomStep(0.8);
+            e.preventDefault();
+        }
+        if (e.key === "0") {
+            this._zoomFit();
+            e.preventDefault();
+        }
     },
 
     // ========== HIT TEST ==========
@@ -613,7 +645,67 @@ const SketchMod = {
         }
         return all;
     },
+    // ========== ZOOM METHODS ==========
+    _zoomStep(factor) {
+        const cx = this.canvas.width / 2;
+        const cy = this.canvas.height / 2;
+        const newScale = this.scale * factor;
+        if (newScale < 0.05 || newScale > 15) return;
+        this.offsetX = cx - (cx - this.offsetX) * factor;
+        this.offsetY = cy - (cy - this.offsetY) * factor;
+        this.scale = newScale;
+        this._updateZoomIndicator();
+        this._render();
+    },
 
+    _zoomFit() {
+        if (this.nodes.length === 0) {
+            this.scale = 1;
+            this.offsetX = 0;
+            this.offsetY = 0;
+            this._updateZoomIndicator();
+            this._render();
+            return;
+        }
+
+        // Find bounds of all nodes
+        let minX = Infinity,
+            minY = Infinity,
+            maxX = -Infinity,
+            maxY = -Infinity;
+        for (const node of this.nodes) {
+            const b = node.getBounds();
+            if (b.x < minX) minX = b.x;
+            if (b.y < minY) minY = b.y;
+            if (b.x + b.w > maxX) maxX = b.x + b.w;
+            if (b.y + b.h > maxY) maxY = b.y + b.h;
+        }
+
+        const graphW = maxX - minX + 100;
+        const graphH = maxY - minY + 100;
+        const canvasW = this.canvas.width;
+        const canvasH = this.canvas.height;
+
+        const scaleX = canvasW / graphW;
+        const scaleY = canvasH / graphH;
+        this.scale = Math.min(scaleX, scaleY, 2);
+
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+
+        this.offsetX = canvasW / 2 - centerX * this.scale;
+        this.offsetY = canvasH / 2 - centerY * this.scale;
+
+        this._updateZoomIndicator();
+        this._render();
+    },
+
+    _updateZoomIndicator() {
+        const indicator = document.getElementById("zoomIndicator");
+        if (indicator) {
+            indicator.textContent = Math.round(this.scale * 100) + "%";
+        }
+    },
     // ========== CONTEXT MENU ==========
     _showContextMenu(x, y, node) {
         const menu = document.getElementById("contextMenu");
