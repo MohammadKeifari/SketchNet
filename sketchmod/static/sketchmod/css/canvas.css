@@ -270,3 +270,129 @@
     color: var(--text-secondary);
     line-height: 1.5;
 }
+
+/* ===== DATASET PICKER ===== */
+.dataset-selector {
+    position: relative;
+}
+
+.dataset-select-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    transition: var(--transition);
+}
+
+.dataset-select-display:hover {
+    border-color: var(--accent);
+}
+
+.dataset-picker {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 4px;
+    z-index: 50;
+    max-height: 300px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.dataset-picker-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 4px;
+    gap: 2px;
+}
+
+.dataset-tab {
+    flex: 1;
+    padding: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 5px;
+    font-family: inherit;
+}
+
+.dataset-tab.active {
+    background: var(--accent-glow);
+    color: var(--accent);
+}
+
+.dataset-search {
+    margin: 6px;
+    width: calc(100% - 12px);
+    padding: 6px 8px !important;
+    font-size: 0.78rem !important;
+}
+
+.dataset-list {
+    overflow-y: auto;
+    max-height: 200px;
+    padding: 4px;
+}
+
+.dataset-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.dataset-item:hover {
+    background: var(--bg-hover);
+}
+
+.dataset-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dataset-item-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dataset-item-meta {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+
+.dataset-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--accent-glow);
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.dataset-loading,
+.dataset-empty {
+    padding: 20px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}

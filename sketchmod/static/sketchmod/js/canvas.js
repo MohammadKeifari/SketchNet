@@ -77,7 +77,42 @@ const SketchMod = {
                 this.shiftPressed = false;
         });
         document.addEventListener("click", () => this._hideContextMenu());
+        // Dataset picker events (delegated)
+        document.addEventListener("click", (e) => {
+            // Close picker when clicking outside
+            const picker = document.getElementById("datasetPicker");
+            const display = document.getElementById("datasetSelectDisplay");
+            if (
+                picker &&
+                display &&
+                !picker.contains(e.target) &&
+                !display.contains(e.target)
+            ) {
+                picker.style.display = "none";
+            }
 
+            // Tab clicks
+            if (e.target.classList.contains("dataset-tab")) {
+                document
+                    .querySelectorAll(".dataset-tab")
+                    .forEach((t) => t.classList.remove("active"));
+                e.target.classList.add("active");
+                this._loadDatasets(
+                    e.target.dataset.section,
+                    document.getElementById("datasetSearch")?.value || "",
+                );
+            }
+        });
+
+        // Dataset search input
+        document.addEventListener("input", (e) => {
+            if (e.target.id === "datasetSearch") {
+                const section =
+                    document.querySelector(".dataset-tab.active")?.dataset
+                        .section || "all";
+                this._loadDatasets(section, e.target.value);
+            }
+        });
         // Sidebar buttons
         document
             .getElementById("btnSave")
@@ -604,6 +639,66 @@ const SketchMod = {
             });
         }
     },
+    _toggleDatasetPicker() {
+        const picker = document.getElementById("datasetPicker");
+        if (!picker) return;
+        const isOpen = picker.style.display !== "none";
+        picker.style.display = isOpen ? "none" : "block";
+        if (!isOpen) this._loadDatasets("all", "");
+    },
+
+    _loadDatasets(section, search) {
+        const list = document.getElementById("datasetList");
+        if (!list) return;
+        list.innerHTML = '<div class="dataset-loading">Loading...</div>';
+
+        let url = `/data/api/list/?section=${section}&search=${encodeURIComponent(search)}`;
+        fetch(url)
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.datasets.length === 0) {
+                    list.innerHTML =
+                        '<div class="dataset-empty">No datasets found</div>';
+                    return;
+                }
+                list.innerHTML = data.datasets
+                    .map(
+                        (d) => `
+                <div class="dataset-item" onclick="SketchMod._selectDataset('${d.id}', '${d.name.replace(/'/g, "\\'")}')">
+                    <div class="dataset-item-info">
+                        <span class="dataset-item-name">${d.name}</span>
+                        <span class="dataset-item-meta">${d.format} · ${d.owner} · ${d.created_at}</span>
+                    </div>
+                    ${d.is_private ? '<span class="dataset-badge">Private</span>' : ""}
+                </div>
+            `,
+                    )
+                    .join("");
+            })
+            .catch(() => {
+                list.innerHTML =
+                    '<div class="dataset-empty">Failed to load datasets</div>';
+            });
+    },
+
+    _selectDataset(datasetId, datasetName) {
+        this.selectedDatasetId = datasetId;
+        this.selectedDatasetName = datasetName;
+        document.getElementById("selectedDatasetName").textContent =
+            datasetName;
+        document.getElementById("datasetPicker").style.display = "none";
+
+        // Update the selected node
+        if (
+            this.selectedNodes.length === 1 &&
+            this.selectedNodes[0] instanceof InputDataNode
+        ) {
+            this.selectedNodes[0].datasetId = datasetId;
+            this.selectedNodes[0].datasetName = datasetName;
+            this._showProperties(this.selectedNodes[0]);
+            this._saveToSession();
+        }
+    },
 
     // ========== SESSION ==========
     _saveToSession() {
@@ -999,6 +1094,9 @@ class InputDataNode extends BaseNode {
         super(id, x, y, "input-data");
         this.width = 100;
         this.height = 55;
+        this.datasetId = null; // Selected dataset ID
+        this.datasetName = null; // Display name
+        this.dataShape = null; // e.g., "(1000, 28, 28)"
         this.addOutput();
     }
 
@@ -1049,7 +1147,52 @@ class InputDataNode extends BaseNode {
     }
 
     getPropertiesHTML() {
-        return "<p class='prop-hint'>Input node — feeds data into the graph.</p>";
+        return `
+        <div class="prop-group">
+            <label>Dataset</label>
+            <div class="dataset-selector" id="datasetSelector">
+                <div class="dataset-select-display" id="datasetSelectDisplay" onclick="SketchMod._toggleDatasetPicker()">
+                    <span id="selectedDatasetName">${this.datasetName || "Select a dataset..."}</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="dataset-picker" id="datasetPicker" style="display: none;">
+                    <div class="dataset-picker-tabs">
+                        <button class="dataset-tab active" data-section="all">All</button>
+                        <button class="dataset-tab" data-section="mine">My</button>
+                        <button class="dataset-tab" data-section="liked">Liked</button>
+                    </div>
+                    <input type="text" class="prop-input dataset-search" id="datasetSearch" placeholder="Search datasets...">
+                    <div class="dataset-list" id="datasetList">
+                        <div class="dataset-loading">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        ${this.datasetId ? `<div class="prop-group"><label>Dataset ID</label><p class="prop-hint" style="font-family: monospace;">${this.datasetId}</p></div>` : ""}
+        <div class="prop-group">
+            <label>Shape</label>
+            <p class="prop-hint">${this.dataShape || "Unknown — connect a dataset first"}</p>
+        </div>
+    `;
+    }
+
+    toJSON() {
+        const base = super.toJSON();
+        return {
+            ...base,
+            datasetId: this.datasetId,
+            datasetName: this.datasetName,
+            dataShape: this.dataShape,
+        };
+    }
+
+    fromJSON(data) {
+        super.fromJSON(data);
+        if (data.datasetId) this.datasetId = data.datasetId;
+        if (data.datasetName) this.datasetName = data.datasetName;
+        if (data.dataShape) this.dataShape = data.dataShape;
     }
 }
 

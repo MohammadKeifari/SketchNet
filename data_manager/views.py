@@ -323,3 +323,58 @@ def search_users_global(request):
             ]
         }
     )
+
+
+# ===== API for choosing dataset =====
+def api_dataset_list(request):
+    """Return datasets for the SketchMod data input selector"""
+    datasets = Dataset.objects.filter(is_private=False).select_related("owner")
+
+    # If user is authenticated, also show their private datasets
+    if request.user.is_authenticated:
+        datasets = datasets | Dataset.objects.filter(
+            Q(owner=request.user) | Q(allowed_users=request.user)
+        )
+    datasets = datasets.distinct()
+
+    # Search
+    search = request.GET.get("search", "")
+    if search:
+        datasets = datasets.filter(
+            Q(name__icontains=search)
+            | Q(dataset_id__icontains=search)
+            | Q(owner__username__icontains=search)
+        )
+
+    # Filter by section
+    section = request.GET.get("section", "all")
+    if section == "mine" and request.user.is_authenticated:
+        datasets = datasets.filter(
+            Q(owner=request.user) | Q(allowed_users=request.user)
+        )
+    elif section == "liked" and request.user.is_authenticated:
+        datasets = datasets.filter(liked_by=request.user)
+
+    datasets = datasets.annotate(like_count=Count("liked_by")).order_by("-created_at")[
+        :50
+    ]
+
+    data = []
+    for d in datasets:
+        data.append(
+            {
+                "id": d.dataset_id,
+                "name": d.name,
+                "format": d.get_format_display(),
+                "owner": d.owner.username,
+                "created_at": d.created_at.strftime("%b %d, %Y"),
+                "downloads": d.downloads,
+                "likes": d.likes_count,
+                "is_private": d.is_private,
+                "is_owner": (
+                    request.user == d.owner if request.user.is_authenticated else False
+                ),
+            }
+        )
+
+    return JsonResponse({"datasets": data, "count": len(data)})

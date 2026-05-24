@@ -30,4 +30,5 @@ urlpatterns = [
         views.remove_allowed_user,
         name="remove_user",
     ),
+    path("api/list/", views.api_dataset_list, name="api_dataset_list"),
 ]
