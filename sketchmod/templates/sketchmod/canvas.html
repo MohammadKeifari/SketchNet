@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}
+    SketchMod - SketchNet
+{% endblock title %}
+{% block current_page %}
+    sketchmod
+{% endblock current_page %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'sketchmod/css/canvas.css' %}">
+{% endblock extra_css %}
+{% block content %}
+    <div class="sketchmod-container">
+        <!-- Left Toolbar -->
+        <div class="toolbar toolbar-left" id="leftToolbar">
+            <div class="toolbar-section">
+                <div class="toolbar-section-title">General</div>
+                <button class="tool-btn active" data-tool="select" title="Select (S)">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+                    </svg>
+                    <span class="tool-label">Select</span>
+                </button>
+                <button class="tool-btn" data-tool="pan" title="Pan (H)">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <polyline points="5 9 2 12 5 15" />
+                        <polyline points="9 5 12 2 15 5" />
+                        <polyline points="15 19 12 22 9 19" />
+                        <polyline points="19 9 22 12 19 15" />
+                    </svg>
+                    <span class="tool-label">Pan</span>
+                </button>
+                <button class="tool-btn" data-tool="link" title="Link (L)">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                    </svg>
+                    <span class="tool-label">Link</span>
+                </button>
+                <button class="tool-btn" data-tool="delete" title="Delete (D)">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                    <span class="tool-label">Delete</span>
+                </button>
+            </div>
+            <div class="toolbar-section">
+                <div class="toolbar-section-title">Models</div>
+                <button class="tool-btn" data-tool="neuron" title="Neuron">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <line x1="12" y1="9" x2="12" y2="2" />
+                        <line x1="12" y1="22" x2="12" y2="15" />
+                        <line x1="9" y1="12" x2="2" y2="12" />
+                        <line x1="22" y1="12" x2="15" y2="12" />
+                    </svg>
+                    <span class="tool-label">Neuron</span>
+                </button>
+                <button class="tool-btn" data-tool="layer" title="Layer">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <rect x="2" y="4" width="20" height="4" rx="1" />
+                        <rect x="2" y="10" width="20" height="4" rx="1" />
+                        <rect x="2" y="16" width="20" height="4" rx="1" />
+                    </svg>
+                    <span class="tool-label">Layer</span>
+                </button>
+            </div>
+        </div>
+        <!-- Canvas Area -->
+        <div class="canvas-wrapper" id="canvasWrapper">
+            <canvas id="sketchCanvas"></canvas>
+        </div>
+        <!-- Right Sidebar -->
+        <div class="sidebar sidebar-right" id="rightSidebar">
+            <div class="sidebar-section">
+                <button class="sidebar-btn" id="btnSave" title="Save to database">
+                    <svg width="16"
+                         height="16"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                        <polyline points="17 21 17 13 7 13 7 21" />
+                        <polyline points="7 3 7 8 15 8" />
+                    </svg>
+                    <span>Save</span>
+                </button>
+                <button class="sidebar-btn" id="btnTranslate" title="Export to Python">
+                    <svg width="16"
+                         height="16"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <polyline points="16 18 22 12 16 6" />
+                        <polyline points="8 6 2 12 8 18" />
+                    </svg>
+                    <span>Translate</span>
+                </button>
+            </div>
+            <!-- Properties Panel (shows on selection) -->
+            <div class="sidebar-section" id="propertiesPanel" style="display: none;">
+                <div class="sidebar-section-title">Properties</div>
+                <div id="propertiesContent"></div>
+            </div>
+        </div>
+    </div>
+    <!-- Context Menu (hidden by default) -->
+    <div class="context-menu" id="contextMenu" style="display: none;">
+        <div class="context-menu-item" data-action="add-input">
+            <svg width="14"
+                 height="14"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="16" />
+                <line x1="8" y1="12" x2="16" y2="12" />
+            </svg>
+            Add Input Port
+        </div>
+        <div class="context-menu-item" data-action="add-output">
+            <svg width="14"
+                 height="14"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="16" />
+                <line x1="8" y1="12" x2="16" y2="12" />
+            </svg>
+            Add Output Port
+        </div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" data-action="delete-node">
+            <svg width="14"
+                 height="14"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+            Delete Node
+        </div>
+    </div>
+{% endblock content %}
+{% block extra_js %}
+    <script src="{% static 'sketchmod/js/canvas.js' %}"></script>
+{% endblock extra_js %}
