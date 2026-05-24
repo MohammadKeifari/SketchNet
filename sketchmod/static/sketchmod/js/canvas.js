@@ -132,17 +132,25 @@ const SketchMod = {
                 const menu = document.getElementById("contextMenu");
                 const node = menu._targetNode;
                 const action = item.dataset.action;
+
                 if (action === "add-input") {
                     node.addInput();
                     this.ports = this._collectPorts();
-                    node.updatePorts();
                 }
                 if (action === "add-output") {
                     node.addOutput();
                     this.ports = this._collectPorts();
-                    node.updatePorts();
                 }
-                if (action === "delete-node") this._deleteNode(node);
+                if (action === "remove-input") {
+                    this._removePort(node, "input");
+                }
+                if (action === "remove-output") {
+                    this._removePort(node, "output");
+                }
+                if (action === "delete-node") {
+                    this._deleteNode(node);
+                }
+
                 this._hideContextMenu();
                 this._saveToSession();
                 this._render();
@@ -589,19 +597,34 @@ const SketchMod = {
 
         const addInput = menu.querySelector('[data-action="add-input"]');
         const addOutput = menu.querySelector('[data-action="add-output"]');
+        const removeInput = menu.querySelector('[data-action="remove-input"]');
+        const removeOutput = menu.querySelector(
+            '[data-action="remove-output"]',
+        );
         const deleteItem = menu.querySelector('[data-action="delete-node"]');
 
+        // Show/hide based on node type
         if (node instanceof InputDataNode) {
             addInput.style.display = "none";
             addOutput.style.display = "flex";
+            removeInput.style.display = "none";
+            removeOutput.style.display =
+                node.outputs.length > 0 ? "flex" : "none";
             deleteItem.style.display = "none";
         } else if (node instanceof OutputNode) {
             addInput.style.display = "flex";
             addOutput.style.display = "none";
+            removeInput.style.display =
+                node.inputs.length > 0 ? "flex" : "none";
+            removeOutput.style.display = "none";
             deleteItem.style.display = "none";
         } else {
             addInput.style.display = "flex";
             addOutput.style.display = "flex";
+            removeInput.style.display =
+                node.inputs.length > 0 ? "flex" : "none";
+            removeOutput.style.display =
+                node.outputs.length > 0 ? "flex" : "none";
             deleteItem.style.display = "flex";
         }
     },
@@ -870,6 +893,27 @@ const SketchMod = {
             ctx.strokeRect(x, y, bw, bh);
             ctx.setLineDash([]);
         }
+    },
+
+    // ========== removing ports ==========
+    _removePort(node, type) {
+        if (type === "input" && node.inputs.length === 0) return;
+        if (type === "output" && node.outputs.length === 0) return;
+
+        // Remove the last port of that type
+        let port;
+        if (type === "input") {
+            port = node.inputs.pop();
+        } else {
+            port = node.outputs.pop();
+        }
+
+        // Remove any links connected to this port
+        this.links = this.links.filter((l) => l.from !== port && l.to !== port);
+
+        // Rebuild port list
+        this.ports = this._collectPorts();
+        node.updatePorts();
     },
 };
 
