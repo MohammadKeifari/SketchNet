@@ -156,6 +156,30 @@ const SketchMod = {
                 this._render();
             });
         });
+        // Port context menu actions
+        document
+            .querySelectorAll("#portContextMenu .context-menu-item")
+            .forEach((item) => {
+                item.addEventListener("click", () => {
+                    const menu = document.getElementById("portContextMenu");
+                    const port = menu._targetPort;
+                    const action = item.dataset.action;
+
+                    if (action === "delete-port") {
+                        this._deletePort(port);
+                    }
+                    if (action === "disconnect-port") {
+                        this._disconnectPort(port);
+                    }
+
+                    this._hidePortContextMenu();
+                });
+            });
+
+        // Hide port menu on outside click
+        document.addEventListener("click", () => {
+            this._hidePortContextMenu();
+        });
 
         this._loadFromSession();
 
@@ -206,8 +230,11 @@ const SketchMod = {
 
         if (e.button === 2) {
             const hit = this._hitTest(mx, my);
+            if (hit && hit.port) {
+                this._showPortContextMenu(e.clientX, e.clientY, hit.port);
+                return;
+            }
             if (hit && hit.node) {
-                // If not already selected, select only this one
                 if (!this.selectedNodes.includes(hit.node)) {
                     this.selectedNodes = [hit.node];
                     this.selectedLinks = [];
@@ -631,8 +658,58 @@ const SketchMod = {
 
     _hideContextMenu() {
         document.getElementById("contextMenu").style.display = "none";
+        document.getElementById("portContextMenu").style.display = "none";
+    },
+    // ========== Port CONTEXT MENU ==========
+    _showPortContextMenu(x, y, port) {
+        const menu = document.getElementById("portContextMenu");
+        const nodeMenu = document.getElementById("contextMenu");
+        nodeMenu.style.display = "none";
+        menu.style.display = "block";
+        menu.style.left = x + "px";
+        menu.style.top = y + "px";
+        menu._targetPort = port;
     },
 
+    _hidePortContextMenu() {
+        document.getElementById("portContextMenu").style.display = "none";
+    },
+
+    _deletePort(port) {
+        const node = port.node;
+
+        // Remove from node's port list
+        if (port.type === "input") {
+            node.inputs = node.inputs.filter((p) => p !== port);
+            // Re-index remaining ports
+            node.inputs.forEach((p, i) => {
+                p.index = i;
+                p.id = `${node.id}_input_${i}`;
+            });
+        } else {
+            node.outputs = node.outputs.filter((p) => p !== port);
+            node.outputs.forEach((p, i) => {
+                p.index = i;
+                p.id = `${node.id}_output_${i}`;
+            });
+        }
+
+        // Remove connected links
+        this.links = this.links.filter((l) => l.from !== port && l.to !== port);
+
+        // Rebuild global port list
+        this.ports = this._collectPorts();
+        node.updatePorts();
+        this._saveToSession();
+        this._render();
+    },
+
+    _disconnectPort(port) {
+        // Remove all links connected to this port
+        this.links = this.links.filter((l) => l.from !== port && l.to !== port);
+        this._saveToSession();
+        this._render();
+    },
     // ========== PROPERTIES ==========
     _showProperties(node) {
         const panel = document.getElementById("propertiesPanel");
@@ -1308,10 +1385,16 @@ class Port {
         this.x = node.x;
         this.y = node.y;
         this.radius = 5;
+        this.hoverRadius = 8;
         this.id = `${node.id}_${type}_${index}`;
     }
 
     draw(ctx) {
+        // Hover area (invisible)
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
+
+        // Port circle
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = this.type === "input" ? "#4ade80" : "#60a5fa";
@@ -1319,6 +1402,17 @@ class Port {
         ctx.strokeStyle = "var(--bg-secondary)";
         ctx.lineWidth = 1.5;
         ctx.stroke();
+    }
+
+    containsPoint(sx, sy) {
+        const ps = {
+            x: this.x * SketchMod.scale + SketchMod.offsetX,
+            y: this.y * SketchMod.scale + SketchMod.offsetY,
+        };
+        return (
+            Math.hypot(sx - ps.x, sy - ps.y) <
+            this.hoverRadius * SketchMod.scale + 3
+        );
     }
 }
 
