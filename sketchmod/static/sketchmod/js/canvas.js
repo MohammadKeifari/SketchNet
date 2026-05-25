@@ -261,6 +261,8 @@ const SketchMod = {
         this.nodes.push(input, output);
         this.ports = this._collectPorts();
         this._saveToSession();
+        this._render();
+        this._propagateShapes();
     },
 
     // ========== COORDINATES ==========
@@ -326,6 +328,7 @@ const SketchMod = {
                             [...outPort.shape.shape],
                             outPort.shape.dtype,
                             outPort.shape.known,
+                            outPort.shape.symbolic,
                         );
                     }
 
@@ -714,8 +717,8 @@ const SketchMod = {
         this.selectedNodes = [node];
         this._showProperties(node);
         this._saveToSession();
-        this._propagateShapes();
         this._render();
+        this._propagateShapes();
     },
 
     _deleteNode(node) {
@@ -1826,12 +1829,11 @@ class BaseNode {
     }
 
     computeOutputShapes() {
-        // Override in subclasses
-        // Returns array of { shape, dtype, known } for each output port
         return this.outputs.map(() => ({
             shape: null,
             dtype: "float32",
             known: false,
+            symbolic: false,
         }));
     }
     containsPoint(px, py) {
@@ -1971,11 +1973,11 @@ class BaseNode {
     getPropertiesHTML() {
         return "";
     }
-    _getFirstInputShape() {
+    _getFirstInputShapeObj() {
         for (const port of this.inputs) {
             const link = SketchMod.links.find((l) => l.to === port);
             if (link && link.from.shape && link.from.shape.shape) {
-                return link.from.shape.shape;
+                return link.from.shape;
             }
         }
         return null;
@@ -2036,13 +2038,21 @@ class NeuronNode extends BaseNode {
         this.addOutput();
     }
     computeOutputShapes() {
-        // Single neuron: input (B, F) → output (B, 1) per output port
-        const inShape = this._getFirstInputShape();
-        const shape = inShape ? [inShape[0], 1] : null;
+        const inputShape = this._getFirstInputShapeObj();
+        if (!inputShape)
+            return this.outputs.map(() => ({
+                shape: null,
+                dtype: "float32",
+                known: false,
+                symbolic: false,
+            }));
+
+        const shape = [inputShape.shape[0], 1];
         return this.outputs.map(() => ({
             shape,
             dtype: "float32",
-            known: !!inShape,
+            known: true,
+            symbolic: inputShape.symbolic,
         }));
     }
 
@@ -2133,13 +2143,21 @@ class LayerNode extends BaseNode {
         this.addOutput();
     }
     computeOutputShapes() {
-        // Dense layer: input (B, in_features) → output (B, num_neurons)
-        const inShape = this._getFirstInputShape();
-        const shape = inShape ? [inShape[0], this.numNeurons] : null;
+        const inputShape = this._getFirstInputShapeObj();
+        if (!inputShape)
+            return this.outputs.map(() => ({
+                shape: null,
+                dtype: "float32",
+                known: false,
+                symbolic: false,
+            }));
+
+        const shape = [inputShape.shape[0], this.numNeurons];
         return this.outputs.map(() => ({
             shape,
             dtype: "float32",
-            known: !!inShape,
+            known: true,
+            symbolic: inputShape.symbolic,
         }));
     }
     getBounds() {
@@ -2229,24 +2247,34 @@ class InputDataNode extends BaseNode {
         this.addOutput();
     }
     computeOutputShapes() {
-        // Parse shape from dataset
         let shape = null;
         let known = false;
+        let symbolic = false;
 
         if (this.dataShape) {
-            // Parse "(1000, 28, 28)" or "1000, 28, 28"
             const cleaned = this.dataShape.replace(/[()]/g, "");
-            const parts = cleaned
-                .split(",")
-                .map((s) => parseInt(s.trim()))
-                .filter((n) => !isNaN(n));
+            const parts = cleaned.split(",").map((s) => {
+                const trimmed = s.trim();
+                const num = parseInt(trimmed);
+                if (!isNaN(num) && num.toString() === trimmed) {
+                    return num; // Numeric
+                } else {
+                    symbolic = true;
+                    return trimmed; // Symbolic variable
+                }
+            });
             if (parts.length > 0) {
                 shape = parts;
                 known = true;
             }
         }
 
-        return this.outputs.map(() => ({ shape, dtype: "float32", known }));
+        return this.outputs.map(() => ({
+            shape,
+            dtype: "float32",
+            known,
+            symbolic,
+        }));
     }
     getBounds() {
         return {
@@ -2468,26 +2496,27 @@ class ColumnSelectNode extends BaseNode {
         this.addOutput();
     }
     computeOutputShapes() {
-        const inShape = this._getFirstInputShape();
-        if (!inShape) {
+        const inputShape = this._getFirstInputShapeObj();
+        if (!inputShape)
             return this.outputs.map(() => ({
                 shape: null,
                 dtype: "float32",
                 known: false,
+                symbolic: false,
             }));
-        }
-        // Columns selected from feature dimension
+
         const selectedCount =
             this.selectedColumns.length > 0
                 ? this.selectedColumns.length
                 : this.columnInput
                   ? this._countFromInput()
-                  : inShape[1];
-        const shape = [inShape[0], selectedCount];
+                  : inputShape.shape[1];
+        const shape = [inputShape.shape[0], selectedCount];
         return this.outputs.map(() => ({
             shape,
             dtype: "float32",
             known: this.selectedColumns.length > 0,
+            symbolic: inputShape.symbolic,
         }));
     }
 
@@ -2651,20 +2680,23 @@ class RowSelectNode extends BaseNode {
         this.addOutput();
     }
     computeOutputShapes() {
-        const inShape = this._getFirstInputShape();
-        if (!inShape) {
+        const inputShape = this._getFirstInputShapeObj();
+        if (!inputShape)
             return this.outputs.map(() => ({
                 shape: null,
                 dtype: "float32",
                 known: false,
+                symbolic: false,
             }));
-        }
-        const rowCount = this.rowCount > 0 ? this.rowCount : inShape[0];
-        const shape = [rowCount, ...inShape.slice(1)];
+
+        const rowCount =
+            this.rowCount > 0 ? this.rowCount : inputShape.shape[0];
+        const shape = [rowCount, ...inputShape.shape.slice(1)];
         return this.outputs.map(() => ({
             shape,
             dtype: "float32",
             known: this.rowCount > 0,
+            symbolic: inputShape.symbolic,
         }));
     }
     getBounds() {
@@ -2867,22 +2899,25 @@ class DimSelectNode extends BaseNode {
         this.addOutput();
     }
     computeOutputShapes() {
-        const inShape = this._getFirstInputShape();
-        if (!inShape) {
+        const inputShape = this._getFirstInputShapeObj();
+        if (!inputShape)
             return this.outputs.map(() => ({
                 shape: null,
                 dtype: "float32",
                 known: false,
+                symbolic: false,
             }));
-        }
+
         const outShape = [];
         for (let i = 0; i < this.dimSelections.length; i++) {
             const indices = this._parseDimInput(
                 this.dimSelections[i],
-                inShape[i] ? inShape[i] - 1 : null,
+                typeof inputShape.shape[i] === "number"
+                    ? inputShape.shape[i] - 1
+                    : null,
             );
             outShape.push(
-                indices.length > 0 ? indices.length : inShape[i] || 1,
+                indices.length > 0 ? indices.length : inputShape.shape[i] || 1,
             );
         }
         const allEmpty = this.dimSelections.every(
@@ -2891,7 +2926,8 @@ class DimSelectNode extends BaseNode {
         return this.outputs.map(() => ({
             shape: outShape,
             dtype: "float32",
-            known: !allEmpty && inShape.length > 0,
+            known: !allEmpty,
+            symbolic: inputShape.symbolic,
         }));
     }
     getBounds() {
@@ -3159,25 +3195,34 @@ class TrainTestSplitNode extends BaseNode {
         this.addOutput("test");
     }
     computeOutputShapes() {
-        const inShape = this._getFirstInputShape();
-        if (!inShape) {
+        const inputShape = this._getFirstInputShapeObj();
+        if (!inputShape)
             return this.outputs.map(() => ({
                 shape: null,
                 dtype: "float32",
                 known: false,
+                symbolic: false,
             }));
-        }
-        const trainRows = Math.floor(inShape[0] * this.trainRatio);
-        const testRows = inShape[0] - trainRows;
+
+        // Symbolic: keep batch as expression
+        const batchDim = inputShape.shape[0];
+        const trainRows =
+            typeof batchDim === "number"
+                ? Math.floor(batchDim * this.trainRatio)
+                : `0.7*${batchDim}`;
+        const testRows =
+            typeof batchDim === "number"
+                ? batchDim - trainRows
+                : `0.3*${batchDim}`;
 
         const results = [];
-        // Output 0 = train, Output 1 = test
         for (let i = 0; i < this.outputs.length; i++) {
             const rows = i === 0 ? trainRows : testRows;
             results.push({
-                shape: [rows, ...inShape.slice(1)],
+                shape: [rows, ...inputShape.shape.slice(1)],
                 dtype: "float32",
                 known: true,
+                symbolic: inputShape.symbolic,
             });
         }
         return results;
@@ -3299,12 +3344,20 @@ class NormalizeNode extends BaseNode {
         this.addOutput();
     }
     computeOutputShapes() {
-        // Normalize doesn't change shape
-        const inShape = this._getFirstInputShape();
+        const inputShape = this._getFirstInputShapeObj();
+        if (!inputShape)
+            return this.outputs.map(() => ({
+                shape: null,
+                dtype: "float32",
+                known: false,
+                symbolic: false,
+            }));
+
         return this.outputs.map(() => ({
-            shape: inShape ? [...inShape] : null,
+            shape: [...inputShape.shape],
             dtype: "float32",
-            known: !!inShape,
+            known: true,
+            symbolic: inputShape.symbolic,
         }));
     }
     getBounds() {
@@ -3410,11 +3463,12 @@ class Port {
         this.shape = null; // { shape: [1000, 28, 28], dtype: "float32", known: true }
     }
 
-    setShape(shapeArray, dtype, known) {
+    setShape(shapeArray, dtype, known, symbolic) {
         this.shape = {
             shape: shapeArray || null,
             dtype: dtype || "float32",
             known: known || false,
+            symbolic: symbolic || false,
         };
     }
 
@@ -3429,6 +3483,7 @@ class Port {
     shapeDisplay() {
         if (!this.hasShape()) return "Unknown";
         const shapeStr = "(" + this.shape.shape.join(", ") + ")";
+        if (this.shape.symbolic) return shapeStr + " (abstract)";
         return shapeStr + (this.shape.known ? "" : " (estimated)");
     }
 
