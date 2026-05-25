@@ -144,18 +144,32 @@ const SketchMod = {
                 const action = item.dataset.action;
 
                 if (action === "add-input") {
-                    node.addInput();
-                    this.ports = this._collectPorts();
+                    const port = node.addInput();
+                    if (port) this.ports = this._collectPorts();
                 }
                 if (action === "add-output") {
-                    node.addOutput();
-                    this.ports = this._collectPorts();
+                    const port = node.addOutput();
+                    if (port) this.ports = this._collectPorts();
                 }
                 if (action === "remove-input") {
-                    this._removePort(node, "input");
+                    const port = node.removeInput();
+                    if (port) {
+                        this.links = this.links.filter(
+                            (l) => l.from !== port && l.to !== port,
+                        );
+                        this.ports = this._collectPorts();
+                        node.updatePorts();
+                    }
                 }
                 if (action === "remove-output") {
-                    this._removePort(node, "output");
+                    const port = node.removeOutput();
+                    if (port) {
+                        this.links = this.links.filter(
+                            (l) => l.from !== port && l.to !== port,
+                        );
+                        this.ports = this._collectPorts();
+                        node.updatePorts();
+                    }
                 }
                 if (action === "delete-node") {
                     this._deleteNode(node);
@@ -804,28 +818,15 @@ const SketchMod = {
         );
         const deleteItem = menu.querySelector('[data-action="delete-node"]');
 
-        // Show/hide based on node type
-        if (node instanceof InputDataNode) {
-            addInput.style.display = "none";
-            addOutput.style.display = "flex";
-            removeInput.style.display = "none";
-            removeOutput.style.display =
-                node.outputs.length > 0 ? "flex" : "none";
-            deleteItem.style.display = "none";
-        } else if (node instanceof OutputNode) {
-            addInput.style.display = "flex";
-            addOutput.style.display = "none";
-            removeInput.style.display =
-                node.inputs.length > 0 ? "flex" : "none";
-            removeOutput.style.display = "none";
+        addInput.style.display = node.canAddInput() ? "flex" : "none";
+        addOutput.style.display = node.canAddOutput() ? "flex" : "none";
+        removeInput.style.display = node.canRemoveInput() ? "flex" : "none";
+        removeOutput.style.display = node.canRemoveOutput() ? "flex" : "none";
+
+        // Can't delete input/output nodes
+        if (node instanceof InputDataNode || node instanceof OutputNode) {
             deleteItem.style.display = "none";
         } else {
-            addInput.style.display = "flex";
-            addOutput.style.display = "flex";
-            removeInput.style.display =
-                node.inputs.length > 0 ? "flex" : "none";
-            removeOutput.style.display =
-                node.outputs.length > 0 ? "flex" : "none";
             deleteItem.style.display = "flex";
         }
     },
@@ -852,10 +853,11 @@ const SketchMod = {
     _deletePort(port) {
         const node = port.node;
 
-        // Remove from node's port list
+        if (port.type === "input" && !node.canRemoveInput()) return;
+        if (port.type === "output" && !node.canRemoveOutput()) return;
+
         if (port.type === "input") {
             node.inputs = node.inputs.filter((p) => p !== port);
-            // Re-index remaining ports
             node.inputs.forEach((p, i) => {
                 p.index = i;
                 p.id = `${node.id}_input_${i}`;
@@ -868,10 +870,7 @@ const SketchMod = {
             });
         }
 
-        // Remove connected links
         this.links = this.links.filter((l) => l.from !== port && l.to !== port);
-
-        // Rebuild global port list
         this.ports = this._collectPorts();
         node.updatePorts();
         this._saveToSession();
@@ -916,13 +915,25 @@ const SketchMod = {
             (l) => l.from === port || l.to === port,
         );
 
-        const subTypeOptions = [
+        const allSubTypes = [
             { value: "", label: "Default" },
             { value: "train", label: "Train" },
             { value: "test", label: "Test" },
             { value: "features", label: "Features" },
             { value: "labels", label: "Labels" },
         ];
+
+        // Filter by node's allowed output types
+        let subTypeOptions;
+        if (port.type === "output" && port.node.allowedOutputTypes) {
+            subTypeOptions = allSubTypes.filter(
+                (o) =>
+                    o.value === "" ||
+                    port.node.allowedOutputTypes.includes(o.value),
+            );
+        } else {
+            subTypeOptions = allSubTypes;
+        }
 
         content.innerHTML = `
         <div class="prop-group">
@@ -1256,6 +1267,14 @@ class BaseNode {
         this.type = type;
         this.inputs = [];
         this.outputs = [];
+
+        // Constraints — override in subclasses
+        this.maxInputs = Infinity;
+        this.minInputs = 0;
+        this.maxOutputs = Infinity;
+        this.minOutputs = 0;
+        this.allowedInputTypes = null; // null = any, ["features"] = only features
+        this.allowedOutputTypes = null; // null = any, ["train", "test"] = only train or test
     }
 
     containsPoint(px, py) {
@@ -1263,16 +1282,46 @@ class BaseNode {
         return px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h;
     }
 
-    addInput(max) {
-        if (max !== undefined && this.inputs.length >= max) return null;
-        const p = new Port(this, "input", this.inputs.length);
+    canAddInput(portType) {
+        if (this.inputs.length >= this.maxInputs) return false;
+        if (
+            this.allowedInputTypes &&
+            portType &&
+            !this.allowedInputTypes.includes(portType)
+        )
+            return false;
+        return true;
+    }
+
+    canAddOutput(portType) {
+        if (this.outputs.length >= this.maxOutputs) return false;
+        if (
+            this.allowedOutputTypes &&
+            portType &&
+            !this.allowedOutputTypes.includes(portType)
+        )
+            return false;
+        return true;
+    }
+
+    canRemoveInput() {
+        return this.inputs.length > this.minInputs;
+    }
+
+    canRemoveOutput() {
+        return this.outputs.length > this.minOutputs;
+    }
+
+    addInput(subType) {
+        if (!this.canAddInput(subType)) return null;
+        const p = new Port(this, "input", this.inputs.length, subType || null);
         this.inputs.push(p);
         this.updatePorts();
         return p;
     }
 
-    addOutput(max, subType) {
-        if (max !== undefined && this.outputs.length >= max) return null;
+    addOutput(subType) {
+        if (!this.canAddOutput(subType)) return null;
         const p = new Port(
             this,
             "output",
@@ -1282,6 +1331,18 @@ class BaseNode {
         this.outputs.push(p);
         this.updatePorts();
         return p;
+    }
+
+    removeInput() {
+        if (!this.canRemoveInput()) return null;
+        const port = this.inputs.pop();
+        return port;
+    }
+
+    removeOutput() {
+        if (!this.canRemoveOutput()) return null;
+        const port = this.outputs.pop();
+        return port;
     }
     getPorts() {
         return [...this.inputs, ...this.outputs];
@@ -1322,6 +1383,12 @@ class NeuronNode extends BaseNode {
         super(id, x, y, "neuron");
         this.radius = 28;
         this.activation = "relu";
+
+        this.maxInputs = Infinity;
+        this.minInputs = 1;
+        this.maxOutputs = Infinity;
+        this.minOutputs = 1;
+
         this.addInput();
         this.addOutput();
     }
@@ -1400,6 +1467,12 @@ class LayerNode extends BaseNode {
         this.height = 65;
         this.numNeurons = 64;
         this.activation = "relu";
+
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+
         this.addInput();
         this.addOutput();
     }
@@ -1475,10 +1548,18 @@ class InputDataNode extends BaseNode {
         super(id, x, y, "input-data");
         this.width = 100;
         this.height = 55;
-        this.datasetId = null; // Selected dataset ID
-        this.datasetName = null; // Display name
-        this.dataShape = null; // e.g., "(1000, 28, 28)"
-        this.addOutput();
+        this.datasetId = null;
+        this.datasetName = null;
+        this.dataShape = null;
+
+        this.maxInputs = 0;
+        this.minInputs = 0;
+        this.maxOutputs = 2;
+        this.minOutputs = 1;
+        this.allowedOutputTypes = ["features", "labels"];
+
+        this.addOutput("features");
+        this.addOutput("labels");
     }
 
     getBounds() {
@@ -1582,6 +1663,12 @@ class OutputNode extends BaseNode {
         super(id, x, y, "output");
         this.width = 100;
         this.height = 55;
+
+        this.maxInputs = Infinity;
+        this.minInputs = 1;
+        this.maxOutputs = 0;
+        this.minOutputs = 0;
+
         this.addInput();
     }
 
@@ -1641,10 +1728,16 @@ class ColumnSelectNode extends BaseNode {
         super(id, x, y, "column-select");
         this.width = 100;
         this.height = 60;
-        this.selectedColumns = []; // Column names to keep
-        this.availableColumns = []; // From connected dataset
-        this.addInput(1);
-        this.addOutput(1);
+        this.selectedColumns = [];
+        this.availableColumns = [];
+
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+
+        this.addInput();
+        this.addOutput();
     }
 
     getBounds() {
@@ -1753,11 +1846,17 @@ class TrainTestSplitNode extends BaseNode {
         this.width = 110;
         this.height = 70;
         this.trainRatio = 0.7;
-        this.testRatio = 0.3;
         this.randomSeed = 42;
-        this.addInput(1);
-        this.addOutput(2, "train"); // train
-        this.addOutput(2, "test"); // test
+
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 2;
+        this.minOutputs = 2;
+        this.allowedOutputTypes = ["train", "test"];
+
+        this.addInput();
+        this.addOutput("train");
+        this.addOutput("test");
     }
 
     getBounds() {
@@ -1863,9 +1962,15 @@ class NormalizeNode extends BaseNode {
         super(id, x, y, "normalize");
         this.width = 100;
         this.height = 55;
-        this.method = "standard"; // "standard" or "minmax"
-        this.addInput(1);
-        this.addOutput(1);
+        this.method = "standard";
+
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+
+        this.addInput();
+        this.addOutput();
     }
 
     getBounds() {
@@ -1992,7 +2097,7 @@ class Port {
     _getColor() {
         if (this.subType === "train") return "#f59e0b";
         if (this.subType === "test") return "#4ade80";
-        if (this.subType === "features") return "#60a5fa";
+        if (this.subType === "features") return "#ff00b7";
         if (this.subType === "labels") return "#a78bfa";
         if (this.type === "input") return "#ef4444";
         if (this.type === "output") return "#60a5fa";
