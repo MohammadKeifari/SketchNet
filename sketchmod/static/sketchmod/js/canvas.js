@@ -560,11 +560,13 @@ const SketchMod = {
             const dragged = Math.sqrt(dx * dx + dy * dy) > 4;
 
             if (dragged) {
-                // User dragged — try to connect
                 const hit = this._hitTest(e.offsetX, e.offsetY);
                 if (hit && hit.port && hit.port !== this.linking.sourcePort) {
                     this._addLink(this.linking.sourcePort, hit.port);
                 }
+                this.linking.active = false;
+                this.linking.sourcePort = null;
+                this._render();
             } else {
                 // User just clicked without dragging — select the port
                 this.selectedPorts = [this.linking.sourcePort];
