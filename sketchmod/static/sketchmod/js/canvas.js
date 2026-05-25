@@ -431,6 +431,8 @@ const SketchMod = {
             this._addNode("normalize", mx, my);
         else if (this.currentTool === "row-select")
             this._addNode("row-select", mx, my);
+        else if (this.currentTool === "dim-select")
+            this._addNode("dim-select", mx, my);
     },
 
     _onMouseMove(e) {
@@ -643,6 +645,7 @@ const SketchMod = {
             node = new TrainTestSplitNode(id, w.x, w.y);
         else if (type === "normalize") node = new NormalizeNode(id, w.x, w.y);
         else if (type === "row-select") node = new RowSelectNode(id, w.x, w.y);
+        else if (type === "dim-select") node = new DimSelectNode(id, w.x, w.y);
         if (!node) return;
 
         this._saveUndoState();
@@ -1144,6 +1147,8 @@ const SketchMod = {
                     node = new NormalizeNode(n.id, n.x, n.y);
                 else if (n.type === "row-select")
                     node = new RowSelectNode(n.id, n.x, n.y);
+                else if (n.type === "dim-select")
+                    node = new DimSelectNode(n.id, n.x, n.y);
                 if (node) {
                     node.fromJSON(n);
                     this.nodes.push(node);
@@ -1538,6 +1543,46 @@ const SketchMod = {
         this._saveUndoState();
         node.randomSeed = parseInt(input.value) || 42;
         this._saveToSession();
+    },
+    _updateDimSelect(input) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof DimSelectNode)) return;
+
+        this._saveUndoState();
+        const dim = parseInt(input.dataset.dim);
+        let value = input.value.replace(/\s+/g, "");
+        input.value = value;
+        node.dimSelections[dim] = value;
+        this._showProperties(node);
+        this._saveToSession();
+        this._render();
+    },
+
+    _addDimRow() {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof DimSelectNode)) return;
+
+        this._saveUndoState();
+        node.dimSelections.push("");
+        this._showProperties(node);
+        this._saveToSession();
+        this._render();
+    },
+
+    _removeDimRow(button) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof DimSelectNode)) return;
+        if (node.dimSelections.length <= 1) return;
+
+        this._saveUndoState();
+        const dim = parseInt(button.dataset.dim);
+        node.dimSelections.splice(dim, 1);
+        this._showProperties(node);
+        this._saveToSession();
+        this._render();
     },
     // ========== removing ports ==========
     _removePort(node, type) {
@@ -2435,6 +2480,266 @@ class RowSelectNode extends BaseNode {
             default:
                 return "";
         }
+    }
+}
+// ========== DIM SELECT NODE ==========
+class DimSelectNode extends BaseNode {
+    constructor(id, x, y) {
+        super(id, x, y, "dim-select");
+        this.width = 110;
+        this.height = 70;
+        this.inputShape = null; // e.g., [1000, 28, 28] or null
+        this.dimSelections = ["", ""]; // One string per dimension
+        this.computedIndices = []; // Parsed indices per dimension [[0,1,2...], [0,1,...]]
+
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+
+        this.addInput();
+        this.addOutput();
+    }
+
+    getBounds() {
+        return {
+            x: this.x - this.width / 2,
+            y: this.y - this.height / 2,
+            w: this.width,
+            h: this.height,
+        };
+    }
+
+    updatePorts() {
+        const hw = this.width / 2 + 8;
+        this.inputs.forEach((p, i) => {
+            p.x = this.x - hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.inputs.length + 1)) * (i + 1);
+        });
+        this.outputs.forEach((p, i) => {
+            p.x = this.x + hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.outputs.length + 1)) * (i + 1);
+        });
+    }
+
+    draw(ctx, selected) {
+        const color = SketchMod._getNodeColor();
+        const x = this.x - this.width / 2;
+        const y = this.y - this.height / 2;
+
+        if (selected) {
+            ctx.beginPath();
+            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
+            ctx.fillStyle = "var(--accent-glow)";
+            ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.roundRect(x, y, this.width, this.height, 7);
+        ctx.fillStyle = color.fill;
+        ctx.fill();
+        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
+        ctx.lineWidth = selected ? 2.5 : 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 12px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const dims = this.dimSelections.length;
+        const used = this.dimSelections.filter((d) => d && d !== ":").length;
+        ctx.fillText(dims + "D", this.x, this.y - 6);
+        ctx.font = "10px Inter, sans-serif";
+        ctx.fillText(
+            used > 0 ? used + " sliced" : "Select",
+            this.x,
+            this.y + 12,
+        );
+    }
+
+    _parseDimInput(input, maxIndex) {
+        if (!input || input.trim() === "" || input.trim() === ":") {
+            if (maxIndex !== null && maxIndex >= 0) {
+                const result = [];
+                for (let i = 0; i <= maxIndex; i++) result.push(i);
+                return result;
+            }
+            return [];
+        }
+
+        const clean = input.replace(/\s+/g, "");
+        if (!clean) return [];
+
+        const indices = new Set();
+        const parts = clean.split(",");
+
+        for (const part of parts) {
+            if (!part) continue;
+
+            if (part.includes(":")) {
+                const colonParts = part.split(":");
+                if (colonParts.length === 2) {
+                    const startStr = colonParts[0];
+                    const endStr = colonParts[1];
+                    if (startStr === "" && endStr === "") {
+                        // ":" → all
+                        if (maxIndex !== null) {
+                            for (let i = 0; i <= maxIndex; i++) indices.add(i);
+                        }
+                    } else if (startStr === "") {
+                        // ":N" → 0 to N
+                        const end = parseInt(endStr);
+                        if (!isNaN(end)) {
+                            for (
+                                let i = 0;
+                                i <= end &&
+                                (maxIndex === null || i <= maxIndex);
+                                i++
+                            )
+                                indices.add(i);
+                        }
+                    } else if (endStr === "") {
+                        // "N:" → N to max
+                        const start = parseInt(startStr);
+                        if (!isNaN(start) && maxIndex !== null) {
+                            for (let i = start; i <= maxIndex; i++)
+                                indices.add(i);
+                        }
+                    } else {
+                        const start = parseInt(startStr) || 0;
+                        const end = parseInt(endStr);
+                        if (!isNaN(end)) {
+                            for (
+                                let i = start;
+                                i <= end &&
+                                (maxIndex === null || i <= maxIndex);
+                                i++
+                            )
+                                indices.add(i);
+                        }
+                    }
+                } else if (colonParts.length === 3) {
+                    // "::step"
+                    const step = parseInt(colonParts[2]) || 1;
+                    if (maxIndex !== null) {
+                        for (let i = 0; i <= maxIndex; i += step)
+                            indices.add(i);
+                    }
+                }
+            } else {
+                const idx = parseInt(part);
+                if (!isNaN(idx) && idx >= 0) indices.add(idx);
+            }
+        }
+
+        return [...indices].sort((a, b) => a - b);
+    }
+
+    _computeOutputShape() {
+        const shape = [];
+        for (let i = 0; i < this.dimSelections.length; i++) {
+            const indices = this._parseDimInput(
+                this.dimSelections[i],
+                this.inputShape ? this.inputShape[i] - 1 : null,
+            );
+            shape.push(
+                indices.length > 0
+                    ? indices.length
+                    : this.inputShape
+                      ? this.inputShape[i]
+                      : "?",
+            );
+        }
+        return shape;
+    }
+
+    toJSON() {
+        const base = super.toJSON();
+        return {
+            ...base,
+            inputShape: this.inputShape,
+            dimSelections: this.dimSelections,
+            computedIndices: this.computedIndices,
+        };
+    }
+
+    fromJSON(data) {
+        super.fromJSON(data);
+        if (data.inputShape) this.inputShape = data.inputShape;
+        if (data.dimSelections) this.dimSelections = data.dimSelections;
+        if (data.computedIndices) this.computedIndices = data.computedIndices;
+    }
+
+    getPropertiesHTML() {
+        const shapeKnown = this.inputShape && this.inputShape.length > 0;
+        const shapePreview = this._computeOutputShape();
+
+        let dimRows = "";
+        for (let i = 0; i < this.dimSelections.length; i++) {
+            const dimSize =
+                shapeKnown && this.inputShape[i] !== undefined
+                    ? this.inputShape[i]
+                    : "?";
+            dimRows += `
+                <div class="dim-row">
+                    <span class="dim-label">Dim ${i} (${dimSize})</span>
+                    <input type="text" class="prop-input dim-input" 
+                           value="${this.dimSelections[i] || ""}"
+                           placeholder=":"
+                           data-dim="${i}"
+                           onchange="SketchMod._updateDimSelect(this)">
+                    <button class="dim-remove" data-dim="${i}" 
+                            onclick="SketchMod._removeDimRow(this)" 
+                            title="Remove dimension">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+            `;
+        }
+
+        return `
+            ${
+                shapeKnown
+                    ? `
+            <div class="prop-group">
+                <label>Input Shape</label>
+                <p class="prop-hint">(${this.inputShape.join(", ")})</p>
+            </div>
+            `
+                    : `
+            <div class="prop-group">
+                <label>Input Shape</label>
+                <p class="prop-hint">Unknown — connect data first</p>
+            </div>
+            `
+            }
+            <div class="prop-group">
+                <label>Dimensions</label>
+                <div class="dim-list" id="dimList">
+                    ${dimRows}
+                </div>
+                <button class="prop-btn prop-btn-add" onclick="SketchMod._addDimRow()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Add Dimension
+                </button>
+            </div>
+            <div class="prop-group">
+                <label>Output Shape</label>
+                <p class="prop-hint">(${shapePreview.join(", ")})</p>
+            </div>
+        `;
     }
 }
 // ========== TRAIN/TEST SPLIT NODE ==========

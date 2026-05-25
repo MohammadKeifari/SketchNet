@@ -528,3 +528,57 @@
     font-size: 0.78rem;
     color: #b45309;
 }
+/* ===== DIM SELECT ===== */
+.dim-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.dim-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dim-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    min-width: 60px;
+}
+
+.dim-input {
+    flex: 1;
+    padding: 6px 8px !important;
+    font-size: 0.8rem !important;
+}
+
+.dim-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.dim-remove:hover {
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.1);
+}
+
+.prop-btn-add {
+    background: var(--bg-hover);
+    color: var(--accent);
+    width: 100%;
+}
+
+.prop-btn-add:hover {
+    background: var(--accent-glow);
+}
