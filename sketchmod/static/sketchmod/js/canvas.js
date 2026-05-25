@@ -987,10 +987,22 @@ const SketchMod = {
             subTypeOptions = allSubTypes;
         }
 
+        const shapeColor =
+            port.hasShape() && port.shape.known
+                ? "#ffffff"
+                : "var(--text-secondary)";
+        const shapeText = port.shapeDisplay();
+
         content.innerHTML = `
         <div class="prop-group">
             <label>Port</label>
             <p class="prop-hint">${port.type === "input" ? "Input" : "Output"} #${port.index + 1} — ${port.node.type}</p>
+        </div>
+        <div class="prop-group">
+            <label>Shape</label>
+            <p class="prop-hint" style="font-family: monospace; color: ${shapeColor}; font-size: 0.85rem;">
+                ${shapeText}
+            </p>
         </div>
         ${
             port.type === "output"
@@ -1116,6 +1128,7 @@ const SketchMod = {
         const data = {
             nodes: this.nodes.map((n) => n.toJSON()),
             links: this.links.map((l) => l.toJSON()),
+            ports: this.ports.map((p) => p.toJSON()),
             nodeCounter: this.nodeCounter,
         };
         sessionStorage.setItem("sketchmod-graph", JSON.stringify(data));
@@ -1156,10 +1169,19 @@ const SketchMod = {
             }
             this.ports = this._collectPorts();
 
+            // After ports are built in _loadFromSession and _restoreState:
             for (const l of data.links) {
                 const from = this.ports.find((p) => p.id === l.from);
                 const to = this.ports.find((p) => p.id === l.to);
                 if (from && to) this.links.push(new Link(from, to, l.weight));
+            }
+
+            // Restore port shapes
+            for (const p of data.ports || []) {
+                const port = this.ports.find((pp) => pp.id === p.id);
+                if (port && p.shape) {
+                    port.setShape(p.shape.shape, p.shape.dtype, p.shape.known);
+                }
             }
         } catch (e) {
             console.warn("Session restore failed:", e);
@@ -1309,10 +1331,19 @@ const SketchMod = {
             }
         }
         this.ports = this._collectPorts();
-        for (const l of state.links) {
+        // After ports are built in _loadFromSession and _restoreState:
+        for (const l of data.links) {
             const from = this.ports.find((p) => p.id === l.from);
             const to = this.ports.find((p) => p.id === l.to);
             if (from && to) this.links.push(new Link(from, to, l.weight));
+        }
+
+        // Restore port shapes
+        for (const p of data.ports || []) {
+            const port = this.ports.find((pp) => pp.id === p.id);
+            if (port && p.shape) {
+                port.setShape(p.shape.shape, p.shape.dtype, p.shape.known);
+            }
         }
     },
 
@@ -2972,6 +3003,31 @@ class Port {
         this.radius = 5;
         this.hoverRadius = 10;
         this.id = `${node.id}_${type}_${index}`;
+
+        // Shape information
+        this.shape = null; // { shape: [1000, 28, 28], dtype: "float32", known: true }
+    }
+
+    setShape(shapeArray, dtype, known) {
+        this.shape = {
+            shape: shapeArray || null,
+            dtype: dtype || "float32",
+            known: known || false,
+        };
+    }
+
+    clearShape() {
+        this.shape = null;
+    }
+
+    hasShape() {
+        return this.shape && this.shape.shape && this.shape.shape.length > 0;
+    }
+
+    shapeDisplay() {
+        if (!this.hasShape()) return "Unknown";
+        const shapeStr = "(" + this.shape.shape.join(", ") + ")";
+        return shapeStr + (this.shape.known ? "" : " (estimated)");
     }
 
     draw(ctx) {
@@ -3025,6 +3081,7 @@ class Port {
             type: this.type,
             index: this.index,
             subType: this.subType,
+            shape: this.shape,
         };
     }
 }
