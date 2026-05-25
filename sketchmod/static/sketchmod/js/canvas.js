@@ -786,6 +786,7 @@ const SketchMod = {
         this._saveUndoState();
         this.links.push(new Link(outPort, inPort));
         this._saveToSession();
+        this._propagateShapes();
     },
 
     _collectPorts() {
