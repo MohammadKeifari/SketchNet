@@ -1431,7 +1431,7 @@ class NeuronNode extends BaseNode {
 
         if (selected) {
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius + 6, 0, Math.PI * 2);
+            ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
             ctx.fillStyle = "var(--accent-glow)";
             ctx.fill();
         }
@@ -1511,7 +1511,7 @@ class LayerNode extends BaseNode {
 
         if (selected) {
             ctx.beginPath();
-            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 10);
+            ctx.roundRect(x - 1, y - 1, this.width + 2, this.height + 2, 10);
             ctx.fillStyle = "var(--accent-glow)";
             ctx.fill();
         }
@@ -1698,7 +1698,7 @@ class OutputNode extends BaseNode {
 
         if (selected) {
             ctx.beginPath();
-            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
+            ctx.roundRect(x - 1, y - 1, this.width + 2, this.height + 2, 8);
             ctx.fillStyle = "var(--accent-glow)";
             ctx.fill();
         }
