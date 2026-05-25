@@ -22,8 +22,9 @@ const SketchMod = {
     spacePressed: false,
 
     // Selection state
-    selectedNodes: [], // Array of selected nodes (replaces selectedNode)
-    selectedLinks: [], // Array of selected links (replaces selectedLink)
+    selectedNodes: [], // Array of selected nodes
+    selectedLinks: [], // Array of selected links
+    selectedPorts: [], // Array of selected ports
     isDraggingNode: false,
     dragOffsetX: 0,
     dragOffsetY: 0,
@@ -248,21 +249,29 @@ const SketchMod = {
         const mx = e.offsetX;
         const my = e.offsetY;
 
+        // === RIGHT CLICK ===
         if (e.button === 2) {
             const hit = this._hitTest(mx, my);
+
+            // Right-click on port
             if (hit && hit.port) {
                 this._showPortContextMenu(e.clientX, e.clientY, hit.port);
                 return;
             }
+
+            // Right-click on node
             if (hit && hit.node) {
                 if (!this.selectedNodes.includes(hit.node)) {
                     this.selectedNodes = [hit.node];
-                    this.selectedLinks = [];
                 }
                 this._showContextMenu(e.clientX, e.clientY, hit.node);
+                return;
             }
+
             return;
         }
+
+        // === LEFT CLICK ===
 
         // Pan
         if (this.spacePressed || this.currentTool === "pan") {
@@ -297,6 +306,10 @@ const SketchMod = {
 
         // Delete tool
         if (this.currentTool === "delete") {
+            if (hit && hit.port) {
+                this._deletePort(hit.port);
+                return;
+            }
             if (hit && hit.node) {
                 this._deleteNode(hit.node);
                 return;
@@ -308,10 +321,19 @@ const SketchMod = {
             return;
         }
 
-        // Port click — start linking
+        // Click on port — select it (add to selection with shift)
         if (hit && hit.port) {
-            this.isLinking = true;
-            this.linkStartPort = hit.port;
+            if (this.shiftPressed) {
+                const idx = this.selectedPorts.indexOf(hit.port);
+                if (idx >= 0) {
+                    this.selectedPorts.splice(idx, 1);
+                } else {
+                    this.selectedPorts.push(hit.port);
+                }
+            } else {
+                this.selectedPorts = [hit.port];
+            }
+            this._showPortProperties();
             this._render();
             return;
         }
@@ -319,31 +341,24 @@ const SketchMod = {
         // Click on node
         if (hit && hit.node) {
             if (this.shiftPressed) {
-                // Toggle selection
                 const idx = this.selectedNodes.indexOf(hit.node);
                 if (idx >= 0) {
                     this.selectedNodes.splice(idx, 1);
                 } else {
                     this.selectedNodes.push(hit.node);
                 }
-                this.selectedLinks = [];
-                if (this.selectedNodes.length === 1) {
-                    this._showProperties(this.selectedNodes[0]);
-                } else {
-                    this._hideProperties();
-                }
             } else {
-                // Select only this node (if not already the only one selected)
-                if (
-                    this.selectedNodes.length !== 1 ||
-                    this.selectedNodes[0] !== hit.node
-                ) {
-                    this.selectedNodes = [hit.node];
-                    this.selectedLinks = [];
-                    this._showProperties(hit.node);
-                }
+                this.selectedNodes = [hit.node];
             }
-            // Start dragging all selected nodes
+            this.selectedLinks = [];
+            this.selectedPorts = [];
+
+            if (this.selectedNodes.length === 1) {
+                this._showProperties(this.selectedNodes[0]);
+            } else {
+                this._hideProperties();
+            }
+
             this.isDraggingNode = true;
             this.dragOffsets = this.selectedNodes.map((n) => {
                 const s = this._toScreen(n.x, n.y);
@@ -365,32 +380,30 @@ const SketchMod = {
             } else {
                 this.selectedLinks = [hit.link];
                 this.selectedNodes = [];
+                this.selectedPorts = [];
                 this._hideProperties();
             }
             this._render();
             return;
         }
 
-        // Click on empty — start selection box (select tool only)
+        // Click on empty
         if (this.currentTool === "select") {
             this.isSelecting = true;
-            this.selectionBox = {
-                startX: mx,
-                startY: my,
-                endX: mx,
-                endY: my,
-            };
+            this.selectionBox = { startX: mx, startY: my, endX: mx, endY: my };
             if (!this.shiftPressed) {
                 this.selectedNodes = [];
                 this.selectedLinks = [];
+                this.selectedPorts = [];
                 this._hideProperties();
             }
             return;
         }
 
-        // Click on empty with other tools — deselect
+        // Deselect all on empty click with other tools
         this.selectedNodes = [];
         this.selectedLinks = [];
+        this.selectedPorts = [];
         this.isLinking = false;
         this.linkStartPort = null;
         this._hideProperties();
@@ -491,6 +504,7 @@ const SketchMod = {
                 }
             }
             this.selectedLinks = [];
+            this.selectedPorts = [];
             if (this.selectedNodes.length === 1) {
                 this._showProperties(this.selectedNodes[0]);
             }
@@ -522,6 +536,7 @@ const SketchMod = {
         if (e.key === "Escape") {
             this.selectedNodes = [];
             this.selectedLinks = [];
+            this.selectedPorts = [];
             this._hideProperties();
             this._render();
         }
@@ -881,7 +896,77 @@ const SketchMod = {
     _hideProperties() {
         document.getElementById("propertiesPanel").style.display = "none";
     },
+    _showPortProperties() {
+        const panel = document.getElementById("propertiesPanel");
+        const content = document.getElementById("propertiesContent");
+        panel.style.display = "block";
 
+        if (this.selectedPorts.length === 0) {
+            panel.style.display = "none";
+            return;
+        }
+
+        if (this.selectedPorts.length > 1) {
+            content.innerHTML = `<p class='prop-hint'>${this.selectedPorts.length} ports selected</p>`;
+            return;
+        }
+
+        const port = this.selectedPorts[0];
+        const connectedLinks = this.links.filter(
+            (l) => l.from === port || l.to === port,
+        );
+
+        const subTypeOptions = [
+            { value: "", label: "Default" },
+            { value: "train", label: "Train" },
+            { value: "test", label: "Test" },
+            { value: "features", label: "Features" },
+            { value: "labels", label: "Labels" },
+        ];
+
+        content.innerHTML = `
+        <div class="prop-group">
+            <label>Port</label>
+            <p class="prop-hint">${port.type === "input" ? "Input" : "Output"} #${port.index + 1} — ${port.node.type}</p>
+        </div>
+        ${
+            port.type === "output"
+                ? `
+        <div class="prop-group">
+            <label>Output Type</label>
+            <select id="prop-port-subtype" class="prop-select" onchange="SketchMod._updatePortSubType(this)">
+                ${subTypeOptions
+                    .map(
+                        (o) => `
+                    <option value="${o.value}" ${port.subType === o.value ? "selected" : ""}>${o.label}</option>
+                `,
+                    )
+                    .join("")}
+            </select>
+        </div>
+        `
+                : ""
+        }
+        <div class="prop-group">
+            <label>Connections</label>
+            <p class="prop-hint">${connectedLinks.length} link${connectedLinks.length !== 1 ? "s" : ""}</p>
+        </div>
+        <div class="prop-group">
+            <button class="prop-btn prop-btn-danger" onclick="SketchMod._disconnectPort(SketchMod.selectedPorts[0])">
+                Disconnect All
+            </button>
+        </div>
+    `;
+
+        this._currentPortForProps = port;
+    },
+
+    _updatePortSubType(select) {
+        if (!this._currentPortForProps) return;
+        this._currentPortForProps.subType = select.value || null;
+        this._saveToSession();
+        this._render();
+    },
     _bindPropertiesEvents(node) {
         const actSelect = document.getElementById("prop-activation");
         if (actSelect) {
@@ -1115,6 +1200,8 @@ const SketchMod = {
 
         // Ports
         for (const port of this.ports) {
+            const isSelected = this.selectedPorts.includes(port);
+            if (isSelected) port.drawHighlight(ctx);
             port.draw(ctx);
         }
 
@@ -1176,14 +1263,22 @@ class BaseNode {
         return px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h;
     }
 
-    addInput() {
+    addInput(max) {
+        if (max !== undefined && this.inputs.length >= max) return null;
         const p = new Port(this, "input", this.inputs.length);
         this.inputs.push(p);
         this.updatePorts();
         return p;
     }
-    addOutput() {
-        const p = new Port(this, "output", this.outputs.length);
+
+    addOutput(max, subType) {
+        if (max !== undefined && this.outputs.length >= max) return null;
+        const p = new Port(
+            this,
+            "output",
+            this.outputs.length,
+            subType || null,
+        );
         this.outputs.push(p);
         this.updatePorts();
         return p;
@@ -1548,8 +1643,8 @@ class ColumnSelectNode extends BaseNode {
         this.height = 60;
         this.selectedColumns = []; // Column names to keep
         this.availableColumns = []; // From connected dataset
-        this.addInput();
-        this.addOutput();
+        this.addInput(1);
+        this.addOutput(1);
     }
 
     getBounds() {
@@ -1660,9 +1755,9 @@ class TrainTestSplitNode extends BaseNode {
         this.trainRatio = 0.7;
         this.testRatio = 0.3;
         this.randomSeed = 42;
-        this.addInput();
-        this.addOutput(); // train
-        this.addOutput(); // test
+        this.addInput(1);
+        this.addOutput(2, "train"); // train
+        this.addOutput(2, "test"); // test
     }
 
     getBounds() {
@@ -1769,8 +1864,8 @@ class NormalizeNode extends BaseNode {
         this.width = 100;
         this.height = 55;
         this.method = "standard"; // "standard" or "minmax"
-        this.addInput();
-        this.addOutput();
+        this.addInput(1);
+        this.addOutput(1);
     }
 
     getBounds() {
@@ -1858,31 +1953,50 @@ class NormalizeNode extends BaseNode {
 // ========== PORT ==========
 
 class Port {
-    constructor(node, type, index) {
+    constructor(node, type, index, subType) {
         this.node = node;
         this.type = type;
         this.index = index;
+        this.subType = subType || null;
         this.x = node.x;
         this.y = node.y;
         this.radius = 5;
-        this.hoverRadius = 8;
+        this.hoverRadius = 10;
         this.id = `${node.id}_${type}_${index}`;
     }
 
     draw(ctx) {
-        // Hover area (invisible)
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
-
-        // Port circle
+        // Fill
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this.type === "input" ? "#d4353d" : "#60a5fa";
+        ctx.fillStyle = this._getColor();
         ctx.fill();
-        //ctx.strokeStyle = "var(--bg-secondary)";
-        ctx.strokeStyle = "black";
+
+        // Border
+        ctx.strokeStyle = "#1a1d2e";
         ctx.lineWidth = 1.5;
         ctx.stroke();
+    }
+
+    drawHighlight(ctx) {
+        // Glow ring when selected
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+    }
+
+    _getColor() {
+        if (this.subType === "train") return "#f59e0b";
+        if (this.subType === "test") return "#4ade80";
+        if (this.subType === "features") return "#60a5fa";
+        if (this.subType === "labels") return "#a78bfa";
+        if (this.type === "input") return "#ef4444";
+        if (this.type === "output") return "#60a5fa";
+        return "#94a3b8";
     }
 
     containsPoint(sx, sy) {
@@ -1892,8 +2006,17 @@ class Port {
         };
         return (
             Math.hypot(sx - ps.x, sy - ps.y) <
-            this.hoverRadius * SketchMod.scale + 3
+            this.hoverRadius * SketchMod.scale + 4
         );
+    }
+
+    toJSON() {
+        return {
+            id: this.id,
+            type: this.type,
+            index: this.index,
+            subType: this.subType,
+        };
     }
 }
 
