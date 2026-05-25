@@ -9,10 +9,7 @@ document.addEventListener("DOMContentLoaded", function () {
             .getAttribute("data-current-page")
             .replace(/\s/g, "");
         if (!currentPage) return;
-        console.log(currentPage);
         navLinks.forEach((link) => {
-            console.log(link.getAttribute("data-page"));
-
             if (link.getAttribute("data-page") === currentPage) {
                 link.classList.add("active");
             } else {
