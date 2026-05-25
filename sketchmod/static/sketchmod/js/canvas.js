@@ -1269,6 +1269,9 @@ const SketchMod = {
             else if (n.type === "normalize")
                 node = new NormalizeNode(n.id, n.x, n.y);
             if (node) {
+                // Clear default ports created by constructor
+                node.inputs = [];
+                node.outputs = [];
                 node.fromJSON(n);
                 this.nodes.push(node);
             }
@@ -1479,6 +1482,16 @@ class BaseNode {
             type: this.type,
             x: this.x,
             y: this.y,
+            inputPorts: this.inputs.map((p) => ({
+                id: p.id,
+                index: p.index,
+                subType: p.subType,
+            })),
+            outputPorts: this.outputs.map((p) => ({
+                id: p.id,
+                index: p.index,
+                subType: p.subType,
+            })),
             numInputs: this.inputs.length,
             numOutputs: this.outputs.length,
             activation: this.activation,
@@ -1489,8 +1502,36 @@ class BaseNode {
     fromJSON(data) {
         this.inputs = [];
         this.outputs = [];
-        for (let i = 0; i < (data.numInputs || 0); i++) this.addInput();
-        for (let i = 0; i < (data.numOutputs || 0); i++) this.addOutput();
+        // Restore inputs with their subTypes
+        if (data.inputPorts) {
+            for (const p of data.inputPorts) {
+                const port = new Port(
+                    this,
+                    "input",
+                    p.index,
+                    p.subType || null,
+                );
+                port.id = p.id;
+                this.inputs.push(port);
+            }
+        } else {
+            for (let i = 0; i < (data.numInputs || 0); i++) this.addInput();
+        }
+        // Restore outputs with their subTypes
+        if (data.outputPorts) {
+            for (const p of data.outputPorts) {
+                const port = new Port(
+                    this,
+                    "output",
+                    p.index,
+                    p.subType || null,
+                );
+                port.id = p.id;
+                this.outputs.push(port);
+            }
+        } else {
+            for (let i = 0; i < (data.numOutputs || 0); i++) this.addOutput();
+        }
         if (data.activation) this.activation = data.activation;
         if (data.numNeurons) this.numNeurons = data.numNeurons;
         this.updatePorts();
@@ -1681,8 +1722,7 @@ class InputDataNode extends BaseNode {
         this.minOutputs = 1;
         this.allowedOutputTypes = ["features", "labels"];
 
-        this.addOutput("features");
-        this.addOutput("labels");
+        this.addOutput();
     }
 
     getBounds() {
