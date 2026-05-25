@@ -66,6 +66,21 @@
                         {% endfor %}
                     </select>
                 </div>
+                <!-- Data Shape-->
+                <div class="form-group">
+                    <label for="id_user_shape">Data Shape (optional)</label>
+                    <input type="text"
+                           name="user_shape"
+                           id="id_user_shape"
+                           class="form-input"
+                           placeholder="e.g., (1000, 28, 28)"
+                           value="{{ dataset.user_shape|default:'' }}">
+                    <p style="font-size: 0.75rem;
+                              color: var(--text-secondary);
+                              margin-top: 4px">
+                        If provided, this overrides auto-detection. Format: (batch, features) or (batch, H, W, C)
+                    </p>
+                </div>
                 <!-- Cover Image -->
                 <div class="form-group">
                     <label for="id_cover_image">Cover Image (optional)</label>

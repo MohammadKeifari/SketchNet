@@ -6,7 +6,15 @@ from .services import validate_file_size, FORMAT_EXTENSIONS
 class DatasetForm(forms.ModelForm):
     class Meta:
         model = Dataset
-        fields = ["name", "description", "format", "file", "cover_image", "is_private"]
+        fields = [
+            "name",
+            "description",
+            "format",
+            "file",
+            "cover_image",
+            "is_private",
+            "user_shape",
+        ]
         widgets = {
             "name": forms.TextInput(
                 attrs={
@@ -24,6 +32,9 @@ class DatasetForm(forms.ModelForm):
             "format": forms.Select(attrs={"class": "form-input"}),
             "file": forms.FileInput(attrs={"class": "form-input-file"}),
             "cover_image": forms.FileInput(attrs={"class": "form-input-file"}),
+            "user_shape": forms.TextInput(
+                attrs={"class": "form-input", "placeholder": "e.g., (1000, 28, 28)"}
+            ),
         }
 
     def clean_file(self):

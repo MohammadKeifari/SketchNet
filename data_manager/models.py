@@ -39,6 +39,24 @@ class Dataset(models.Model):
     dataset_id = models.CharField(max_length=8, unique=True, db_index=True)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
+
+    # Shape fields
+    user_shape = models.CharField(
+        max_length=255, blank=True, null=True, help_text="User-provided shape"
+    )
+    inferred_shape = models.CharField(
+        max_length=255, blank=True, null=True, help_text="Auto-detected shape from file"
+    )
+    resolved_shape = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Final shape: user > inferred > none",
+    )
+    shape_known = models.BooleanField(
+        default=False, help_text="True if resolved_shape is confirmed"
+    )
+
     format = models.CharField(max_length=10, choices=FORMAT_CHOICES)
 
     # Files
@@ -77,9 +95,22 @@ class Dataset(models.Model):
     def __str__(self):
         return f"{self.name} ({self.dataset_id})"
 
+    def resolve_shape(self):
+        """Apply priority: user_shape > inferred_shape > None"""
+        if self.user_shape:
+            self.resolved_shape = self.user_shape
+            self.shape_known = True
+        elif self.inferred_shape:
+            self.resolved_shape = self.inferred_shape
+            self.shape_known = True
+        else:
+            self.resolved_shape = None
+            self.shape_known = False
+
     def save(self, *args, **kwargs):
         if not self.dataset_id:
             self.dataset_id = generate_dataset_id()
+        self.resolve_shape()
         super().save(*args, **kwargs)
 
     @property

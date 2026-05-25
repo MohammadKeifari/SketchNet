@@ -64,7 +64,14 @@ def upload_dataset(request):
         if form.is_valid():
             dataset = form.save(commit=False)
             dataset.owner = request.user
-            dataset.save()
+            dataset.save()  # Save first so file is on disk
+
+            from .services import infer_dataset_shape
+
+            shape, _ = infer_dataset_shape(dataset)
+            if shape:
+                dataset.inferred_shape = shape
+            dataset.save()  # Triggers resolve_shape()
 
             if dataset.is_private:
                 messages.success(
@@ -98,6 +105,13 @@ def edit_dataset(request, dataset_id):
         form = DatasetEditForm(request.POST, request.FILES, instance=dataset)
         if form.is_valid():
             form.save()
+            from .services import infer_dataset_shape
+
+            # Re-infer if file was changed or no inferred shape exists
+            shape, _ = infer_dataset_shape(dataset)
+            if shape:
+                dataset.inferred_shape = shape
+            dataset.save()  # Triggers resolve_shape()
             messages.success(request, "Dataset updated.")
             return redirect("data:detail", dataset_id=dataset.dataset_id)
     else:
@@ -374,6 +388,8 @@ def api_dataset_list(request):
                 "is_owner": (
                     request.user == d.owner if request.user.is_authenticated else False
                 ),
+                "data_shape": d.resolved_shape,
+                "data_shape_known": d.shape_known,
             }
         )
 
