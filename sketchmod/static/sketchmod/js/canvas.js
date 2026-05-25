@@ -444,7 +444,12 @@ const SketchMod = {
             this._render();
             return;
         }
-
+        // Track mouse for temp link line
+        if (this.linking.active) {
+            this.linking.mouseX = mx;
+            this.linking.mouseY = my;
+            this._render();
+        }
         // Cursor
         const hit = this._hitTest(mx, my);
         if (hit && hit.port) this.canvas.style.cursor = "pointer";
@@ -611,14 +616,14 @@ const SketchMod = {
     },
 
     _deleteNode(node) {
-        if (node instanceof InputDataNode || node instanceof OutputNode) return; // Can't delete
+        if (node instanceof InputDataNode || node instanceof OutputNode) return;
         this.links = this.links.filter(
             (l) => l.from.node !== node && l.to.node !== node,
         );
         this.nodes = this.nodes.filter((n) => n !== node);
         this.ports = this._collectPorts();
-        if (this.selectedNode === node) {
-            this.selectedNode = null;
+        this.selectedNodes = this.selectedNodes.filter((n) => n !== node);
+        if (this.selectedNodes.length === 0) {
             this._hideProperties();
         }
         this._saveToSession();
@@ -627,7 +632,7 @@ const SketchMod = {
 
     _deleteLink(link) {
         this.links = this.links.filter((l) => l !== link);
-        this.selectedLink = null;
+        this.selectedLinks = this.selectedLinks.filter((l) => l !== link);
         this._saveToSession();
         this._render();
     },
@@ -1184,16 +1189,34 @@ const SketchMod = {
             link.draw(ctx, this.selectedLinks.includes(link));
         }
 
-        // Link preview
-        if (this.isLinking && this.linkStartPort) {
+        // Temp link line while dragging from port
+        if (this.linking.active && this.linking.sourcePort) {
+            const from = this.linking.sourcePort;
+            let toX, toY;
+            if (this.linking.mouseX !== undefined) {
+                const world = this._toWorld(
+                    this.linking.mouseX,
+                    this.linking.mouseY,
+                );
+                toX = world.x;
+                toY = world.y;
+            } else {
+                toX = from.x + 100;
+                toY = from.y;
+            }
             ctx.strokeStyle = "var(--accent)";
             ctx.lineWidth = 2;
             ctx.setLineDash([6, 4]);
             ctx.beginPath();
-            ctx.moveTo(this.linkStartPort.x, this.linkStartPort.y);
-            ctx.lineTo(this.linkStartPort.x + 50, this.linkStartPort.y);
+            ctx.moveTo(from.x, from.y);
+            ctx.lineTo(toX, toY);
             ctx.stroke();
             ctx.setLineDash([]);
+
+            ctx.beginPath();
+            ctx.arc(toX, toY, 4, 0, Math.PI * 2);
+            ctx.fillStyle = "var(--accent)";
+            ctx.fill();
         }
 
         // Nodes
