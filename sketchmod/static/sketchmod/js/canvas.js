@@ -1921,6 +1921,45 @@ class BaseNode {
         }
         return null;
     }
+    _getShapeSummaryHTML() {
+        let html = "";
+
+        // Input ports
+        if (this.inputs.length > 0) {
+            html += '<div class="prop-group"><label>Input Shapes</label>';
+            for (let i = 0; i < this.inputs.length; i++) {
+                const port = this.inputs[i];
+                const shapeText = port.shapeDisplay();
+                const color =
+                    port.hasShape() && port.shape.known
+                        ? "var(--accent)"
+                        : "var(--text-secondary)";
+                html += `<p class="prop-hint" style="font-family: monospace; color: ${color}; font-size: 0.8rem;">
+                Port ${i + 1}: ${shapeText}
+            </p>`;
+            }
+            html += "</div>";
+        }
+
+        // Output ports
+        if (this.outputs.length > 0) {
+            html += '<div class="prop-group"><label>Output Shapes</label>';
+            for (let i = 0; i < this.outputs.length; i++) {
+                const port = this.outputs[i];
+                const shapeText = port.shapeDisplay();
+                const color =
+                    port.hasShape() && port.shape.known
+                        ? "var(--accent)"
+                        : "var(--text-secondary)";
+                html += `<p class="prop-hint" style="font-family: monospace; color: ${color}; font-size: 0.8rem;">
+                Port ${i + 1}: ${shapeText}
+            </p>`;
+            }
+            html += "</div>";
+        }
+
+        return html;
+    }
 }
 
 class NeuronNode extends BaseNode {
@@ -2007,11 +2046,14 @@ class NeuronNode extends BaseNode {
     }
 
     getPropertiesHTML() {
-        return `<div class="prop-group"><label>Activation</label><select id="prop-activation" class="prop-select">
+        return (
+            this._getShapeSummaryHTML() +
+            `<div class="prop-group"><label>Activation</label><select id="prop-activation" class="prop-select">
             <option value="relu" ${this.activation === "relu" ? "selected" : ""}>ReLU</option>
             <option value="sigmoid" ${this.activation === "sigmoid" ? "selected" : ""}>Sigmoid</option>
             <option value="tanh" ${this.activation === "tanh" ? "selected" : ""}>Tanh</option>
-        </select></div>`;
+        </select></div>`
+        );
     }
 }
 
@@ -2098,12 +2140,15 @@ class LayerNode extends BaseNode {
     }
 
     getPropertiesHTML() {
-        return `<div class="prop-group"><label>Neurons</label><input type="number" id="prop-size" class="prop-input" value="${this.numNeurons}" min="1" max="4096"></div>
+        return (
+            this._getShapeSummaryHTML() +
+            `<div class="prop-group"><label>Neurons</label><input type="number" id="prop-size" class="prop-input" value="${this.numNeurons}" min="1" max="4096"></div>
         <div class="prop-group"><label>Activation</label><select id="prop-activation" class="prop-select">
             <option value="relu" ${this.activation === "relu" ? "selected" : ""}>ReLU</option>
             <option value="sigmoid" ${this.activation === "sigmoid" ? "selected" : ""}>Sigmoid</option>
             <option value="tanh" ${this.activation === "tanh" ? "selected" : ""}>Tanh</option>
-        </select></div>`;
+        </select></div>`
+        );
     }
 }
 
@@ -2191,7 +2236,9 @@ class InputDataNode extends BaseNode {
     }
 
     getPropertiesHTML() {
-        return `
+        return (
+            this._getShapeSummaryHTML() +
+            `
         <div class="prop-group">
             <label>Dataset Source</label>
             <div class="radio-group">
@@ -2243,7 +2290,8 @@ class InputDataNode extends BaseNode {
                        onchange="SketchMod._updateManualShape(this)">
             </div>
         </div>
-    `;
+    `
+        );
     }
 
     toJSON() {
@@ -2334,7 +2382,10 @@ class OutputNode extends BaseNode {
     }
 
     getPropertiesHTML() {
-        return "<p class='prop-hint'>Output node — collects results.</p>";
+        return (
+            this._getShapeSummaryHTML() +
+            "<p class='prop-hint'>Output node — collects results.</p>"
+        );
     }
 }
 // ========== COLUMN SELECT NODE ==========
@@ -2471,7 +2522,9 @@ class ColumnSelectNode extends BaseNode {
     getPropertiesHTML() {
         const hasDataset = this.columnCount > 0;
 
-        return `
+        return (
+            this._getShapeSummaryHTML() +
+            `
         ${
             hasDataset
                 ? `
@@ -2515,7 +2568,8 @@ class ColumnSelectNode extends BaseNode {
                 }
             </p>
         </div>
-    `;
+    `
+        );
     }
 }
 // ========== ROW SELECT NODE ==========
@@ -2663,7 +2717,9 @@ class RowSelectNode extends BaseNode {
             { value: "indices", label: "Specific indices" },
         ];
 
-        return `
+        return (
+            this._getShapeSummaryHTML() +
+            `
             <div class="prop-group">
                 <label>Method</label>
                 <select id="prop-row-method" class="prop-select" onchange="SketchMod._updateRowMethod(this)">
@@ -2699,7 +2755,8 @@ class RowSelectNode extends BaseNode {
                 <label>Preview</label>
                 <p class="prop-hint">${this.rowCount > 0 ? `~${this.rowCount} rows` : "Enter a value"}</p>
             </div>
-        `;
+        `
+        );
     }
 
     _getPlaceholder() {
@@ -2983,7 +3040,9 @@ class DimSelectNode extends BaseNode {
             `;
         }
 
-        return `
+        return (
+            this._getShapeSummaryHTML() +
+            `
             ${
                 shapeKnown
                     ? `
@@ -3016,7 +3075,8 @@ class DimSelectNode extends BaseNode {
                 <label>Output Shape</label>
                 <p class="prop-hint">(${shapePreview.join(", ")})</p>
             </div>
-        `;
+        `
+        );
     }
 }
 // ========== TRAIN/TEST SPLIT NODE ==========
@@ -3141,7 +3201,9 @@ class TrainTestSplitNode extends BaseNode {
     }
 
     getPropertiesHTML() {
-        return `
+        return (
+            this._getShapeSummaryHTML() +
+            `
             <div class="prop-group">
                 <label>Train Ratio</label>
                 <input type="range" id="prop-train-ratio" class="prop-range" min="0.1" max="0.9" step="0.05"
@@ -3156,7 +3218,8 @@ class TrainTestSplitNode extends BaseNode {
                 <input type="number" id="prop-random-seed" class="prop-input" value="${this.randomSeed}"
                        onchange="SketchMod._updateTrainTestSeed(this)">
             </div>
-        `;
+        `
+        );
     }
 }
 
@@ -3256,7 +3319,9 @@ class NormalizeNode extends BaseNode {
     }
 
     getPropertiesHTML() {
-        return `
+        return (
+            this._getShapeSummaryHTML() +
+            `
             <div class="prop-group">
                 <label>Method</label>
                 <select id="prop-normalize-method" class="prop-select" onchange="SketchMod._updateNormalize(this)">
@@ -3264,7 +3329,8 @@ class NormalizeNode extends BaseNode {
                     <option value="minmax" ${this.method === "minmax" ? "selected" : ""}>Min-Max (0 to 1)</option>
                 </select>
             </div>
-        `;
+        `
+        );
     }
 }
 // ========== PORT ==========
