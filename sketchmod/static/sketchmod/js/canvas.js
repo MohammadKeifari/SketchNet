@@ -399,6 +399,12 @@ const SketchMod = {
         // Place node
         if (this.currentTool === "neuron") this._addNode("neuron", mx, my);
         else if (this.currentTool === "layer") this._addNode("layer", mx, my);
+        else if (this.currentTool === "column-select")
+            this._addNode("column-select", mx, my);
+        else if (this.currentTool === "train-test")
+            this._addNode("train-test", mx, my);
+        else if (this.currentTool === "normalize")
+            this._addNode("normalize", mx, my);
     },
 
     _onMouseMove(e) {
@@ -562,17 +568,22 @@ const SketchMod = {
 
     // ========== NODES ==========
     _addNode(type, sx, sy) {
-        if (type === "input-data" || type === "output") return; // Can't add manually
+        if (type === "input-data" || type === "output") return; //disabling multiple input and output nodes
         const w = this._toWorld(sx, sy);
         const id = type[0] + ++this.nodeCounter;
         let node;
         if (type === "neuron") node = new NeuronNode(id, w.x, w.y);
         else if (type === "layer") node = new LayerNode(id, w.x, w.y);
+        else if (type === "column-select")
+            node = new ColumnSelectNode(id, w.x, w.y);
+        else if (type === "train-test")
+            node = new TrainTestSplitNode(id, w.x, w.y);
+        else if (type === "normalize") node = new NormalizeNode(id, w.x, w.y);
         if (!node) return;
 
         this.nodes.push(node);
         this.ports = this._collectPorts();
-        this.selectedNode = node;
+        this.selectedNodes = [node];
         this._showProperties(node);
         this._saveToSession();
         this._render();
@@ -706,6 +717,62 @@ const SketchMod = {
             indicator.textContent = Math.round(this.scale * 100) + "%";
         }
     },
+    // ========== Update data nodes ==========
+    _updateColumnSelect(checkbox) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof ColumnSelectNode)) return;
+
+        if (checkbox.checked) {
+            if (!node.selectedColumns.includes(checkbox.value)) {
+                node.selectedColumns.push(checkbox.value);
+            }
+        } else {
+            node.selectedColumns = node.selectedColumns.filter(
+                (c) => c !== checkbox.value,
+            );
+        }
+        this._saveToSession();
+        this._render();
+    },
+
+    _updateTrainTest(slider) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof TrainTestSplitNode)) return;
+
+        node.trainRatio = parseFloat(slider.value);
+        node.testRatio = 1 - node.trainRatio;
+
+        // Update display
+        const values = slider.parentElement.querySelector(".range-values");
+        if (values) {
+            values.innerHTML = `
+            <span>Train: ${Math.round(node.trainRatio * 100)}%</span>
+            <span>Test: ${Math.round(node.testRatio * 100)}%</span>
+        `;
+        }
+        this._saveToSession();
+        this._render();
+    },
+
+    _updateTrainTestSeed(input) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof TrainTestSplitNode)) return;
+        node.randomSeed = parseInt(input.value) || 42;
+        this._saveToSession();
+    },
+
+    _updateNormalize(select) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof NormalizeNode)) return;
+        node.method = select.value;
+        this._saveToSession();
+        this._render();
+    },
+
     // ========== CONTEXT MENU ==========
     _showContextMenu(x, y, node) {
         const menu = document.getElementById("contextMenu");
@@ -920,6 +987,12 @@ const SketchMod = {
                     node = new InputDataNode(n.id, n.x, n.y);
                 else if (n.type === "output")
                     node = new OutputNode(n.id, n.x, n.y);
+                else if (n.type === "column-select")
+                    node = new ColumnSelectNode(n.id, n.x, n.y);
+                else if (n.type === "train-test")
+                    node = new TrainTestSplitNode(n.id, n.x, n.y);
+                else if (n.type === "normalize")
+                    node = new NormalizeNode(n.id, n.x, n.y);
                 if (node) {
                     node.fromJSON(n);
                     this.nodes.push(node);
@@ -1465,6 +1538,321 @@ class OutputNode extends BaseNode {
 
     getPropertiesHTML() {
         return "<p class='prop-hint'>Output node — collects results.</p>";
+    }
+}
+// ========== COLUMN SELECT NODE ==========
+class ColumnSelectNode extends BaseNode {
+    constructor(id, x, y) {
+        super(id, x, y, "column-select");
+        this.width = 100;
+        this.height = 60;
+        this.selectedColumns = []; // Column names to keep
+        this.availableColumns = []; // From connected dataset
+        this.addInput();
+        this.addOutput();
+    }
+
+    getBounds() {
+        return {
+            x: this.x - this.width / 2,
+            y: this.y - this.height / 2,
+            w: this.width,
+            h: this.height,
+        };
+    }
+
+    updatePorts() {
+        const hw = this.width / 2 + 8;
+        this.inputs.forEach((p, i) => {
+            p.x = this.x - hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.inputs.length + 1)) * (i + 1);
+        });
+        this.outputs.forEach((p, i) => {
+            p.x = this.x + hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.outputs.length + 1)) * (i + 1);
+        });
+    }
+
+    draw(ctx, selected) {
+        const color = SketchMod._getNodeColor();
+        const x = this.x - this.width / 2;
+        const y = this.y - this.height / 2;
+
+        if (selected) {
+            ctx.beginPath();
+            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
+            ctx.fillStyle = "var(--accent-glow)";
+            ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.roundRect(x, y, this.width, this.height, 7);
+        ctx.fillStyle = color.fill;
+        ctx.fill();
+        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
+        ctx.lineWidth = selected ? 2.5 : 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 11px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const label =
+            this.selectedColumns.length > 0
+                ? this.selectedColumns.length + " cols"
+                : "Columns";
+        ctx.fillText(label, this.x, this.y);
+    }
+
+    toJSON() {
+        const base = super.toJSON();
+        return {
+            ...base,
+            selectedColumns: this.selectedColumns,
+            availableColumns: this.availableColumns,
+        };
+    }
+
+    fromJSON(data) {
+        super.fromJSON(data);
+        if (data.selectedColumns) this.selectedColumns = data.selectedColumns;
+        if (data.availableColumns)
+            this.availableColumns = data.availableColumns;
+    }
+
+    getPropertiesHTML() {
+        const colList =
+            this.availableColumns.length > 0
+                ? this.availableColumns
+                      .map(
+                          (c) => `
+                <label class="checkbox-label">
+                    <input type="checkbox" value="${c}" ${this.selectedColumns.includes(c) ? "checked" : ""}
+                           onchange="SketchMod._updateColumnSelect(this)">
+                    ${c}
+                </label>
+            `,
+                      )
+                      .join("")
+                : "<p class='prop-hint'>Connect a dataset to see columns</p>";
+
+        return `
+            <div class="prop-group">
+                <label>Select Columns</label>
+                <div class="checkbox-group" id="columnCheckboxes">${colList}</div>
+            </div>
+        `;
+    }
+}
+
+// ========== TRAIN/TEST SPLIT NODE ==========
+class TrainTestSplitNode extends BaseNode {
+    constructor(id, x, y) {
+        super(id, x, y, "train-test");
+        this.width = 110;
+        this.height = 70;
+        this.trainRatio = 0.7;
+        this.testRatio = 0.3;
+        this.randomSeed = 42;
+        this.addInput();
+        this.addOutput(); // train
+        this.addOutput(); // test
+    }
+
+    getBounds() {
+        return {
+            x: this.x - this.width / 2,
+            y: this.y - this.height / 2,
+            w: this.width,
+            h: this.height,
+        };
+    }
+
+    updatePorts() {
+        const hw = this.width / 2 + 8;
+        this.inputs.forEach((p, i) => {
+            p.x = this.x - hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.inputs.length + 1)) * (i + 1);
+        });
+        this.outputs.forEach((p, i) => {
+            p.x = this.x + hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.outputs.length + 1)) * (i + 1);
+        });
+    }
+
+    draw(ctx, selected) {
+        const color = SketchMod._getNodeColor();
+        const x = this.x - this.width / 2;
+        const y = this.y - this.height / 2;
+
+        if (selected) {
+            ctx.beginPath();
+            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
+            ctx.fillStyle = "var(--accent-glow)";
+            ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.roundRect(x, y, this.width, this.height, 7);
+        ctx.fillStyle = color.fill;
+        ctx.fill();
+        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
+        ctx.lineWidth = selected ? 2.5 : 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 12px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Train/Test", this.x, this.y - 8);
+        ctx.font = "10px Inter, sans-serif";
+        ctx.fillText(
+            `${Math.round(this.trainRatio * 100)}/${Math.round(this.testRatio * 100)}`,
+            this.x,
+            this.y + 10,
+        );
+    }
+
+    toJSON() {
+        const base = super.toJSON();
+        return {
+            ...base,
+            trainRatio: this.trainRatio,
+            testRatio: this.testRatio,
+            randomSeed: this.randomSeed,
+        };
+    }
+
+    fromJSON(data) {
+        super.fromJSON(data);
+        if (data.trainRatio) this.trainRatio = data.trainRatio;
+        if (data.testRatio) this.testRatio = data.testRatio;
+        if (data.randomSeed) this.randomSeed = data.randomSeed;
+    }
+
+    getPropertiesHTML() {
+        return `
+            <div class="prop-group">
+                <label>Train Ratio</label>
+                <input type="range" id="prop-train-ratio" class="prop-range" min="0.1" max="0.9" step="0.05"
+                       value="${this.trainRatio}" oninput="SketchMod._updateTrainTest(this)">
+                <div class="range-values">
+                    <span>Train: ${Math.round(this.trainRatio * 100)}%</span>
+                    <span>Test: ${Math.round(this.testRatio * 100)}%</span>
+                </div>
+            </div>
+            <div class="prop-group">
+                <label>Random Seed</label>
+                <input type="number" id="prop-random-seed" class="prop-input" value="${this.randomSeed}"
+                       onchange="SketchMod._updateTrainTestSeed(this)">
+            </div>
+        `;
+    }
+}
+
+// ========== NORMALIZE NODE ==========
+class NormalizeNode extends BaseNode {
+    constructor(id, x, y) {
+        super(id, x, y, "normalize");
+        this.width = 100;
+        this.height = 55;
+        this.method = "standard"; // "standard" or "minmax"
+        this.addInput();
+        this.addOutput();
+    }
+
+    getBounds() {
+        return {
+            x: this.x - this.width / 2,
+            y: this.y - this.height / 2,
+            w: this.width,
+            h: this.height,
+        };
+    }
+
+    updatePorts() {
+        const hw = this.width / 2 + 8;
+        this.inputs.forEach((p, i) => {
+            p.x = this.x - hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.inputs.length + 1)) * (i + 1);
+        });
+        this.outputs.forEach((p, i) => {
+            p.x = this.x + hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.outputs.length + 1)) * (i + 1);
+        });
+    }
+
+    draw(ctx, selected) {
+        const color = SketchMod._getNodeColor();
+        const x = this.x - this.width / 2;
+        const y = this.y - this.height / 2;
+
+        if (selected) {
+            ctx.beginPath();
+            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
+            ctx.fillStyle = "var(--accent-glow)";
+            ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.roundRect(x, y, this.width, this.height, 7);
+        ctx.fillStyle = color.fill;
+        ctx.fill();
+        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
+        ctx.lineWidth = selected ? 2.5 : 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 11px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(
+            this.method === "standard" ? "Standard" : "MinMax",
+            this.x,
+            this.y - 6,
+        );
+        ctx.font = "10px Inter, sans-serif";
+        ctx.fillText("Normalize", this.x, this.y + 12);
+    }
+
+    toJSON() {
+        const base = super.toJSON();
+        return { ...base, method: this.method };
+    }
+
+    fromJSON(data) {
+        super.fromJSON(data);
+        if (data.method) this.method = data.method;
+    }
+
+    getPropertiesHTML() {
+        return `
+            <div class="prop-group">
+                <label>Method</label>
+                <select id="prop-normalize-method" class="prop-select" onchange="SketchMod._updateNormalize(this)">
+                    <option value="standard" ${this.method === "standard" ? "selected" : ""}>Standard (Z-score)</option>
+                    <option value="minmax" ${this.method === "minmax" ? "selected" : ""}>Min-Max (0 to 1)</option>
+                </select>
+            </div>
+        `;
     }
 }
 // ========== PORT ==========
