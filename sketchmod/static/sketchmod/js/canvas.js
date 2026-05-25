@@ -50,6 +50,9 @@ const SketchMod = {
     //propagation
     shapePropagationEnabled: true,
 
+    // Node registry
+    nodeRegistry: [],
+
     _getNodeColor() {
         const theme =
             document.documentElement.getAttribute("data-theme") || "light";
@@ -73,7 +76,10 @@ const SketchMod = {
         }
         return colors[theme] || colors.light;
     },
-
+    //=========== register node =============
+    registerNode(config) {
+        this.nodeRegistry.push(config);
+    },
     // ========== INIT ==========
     init() {
         this.canvas = document.getElementById("sketchCanvas");
@@ -153,9 +159,7 @@ const SketchMod = {
             .getElementById("btnZoomFit")
             ?.addEventListener("click", () => this._zoomFit());
         // Toolbar
-        document.querySelectorAll(".tool-btn[data-tool]").forEach((btn) => {
-            btn.addEventListener("click", () => this.setTool(btn.dataset.tool));
-        });
+        this._buildToolbar();
 
         // Context menu actions
         document.querySelectorAll(".context-menu-item").forEach((item) => {
@@ -489,18 +493,12 @@ const SketchMod = {
         this._render();
 
         // Place node
-        if (this.currentTool === "neuron") this._addNode("neuron", mx, my);
-        else if (this.currentTool === "layer") this._addNode("layer", mx, my);
-        else if (this.currentTool === "column-select")
-            this._addNode("column-select", mx, my);
-        else if (this.currentTool === "train-test")
-            this._addNode("train-test", mx, my);
-        else if (this.currentTool === "normalize")
-            this._addNode("normalize", mx, my);
-        else if (this.currentTool === "row-select")
-            this._addNode("row-select", mx, my);
-        else if (this.currentTool === "dim-select")
-            this._addNode("dim-select", mx, my);
+        const entry = this.nodeRegistry.find(
+            (r) => r.type === this.currentTool,
+        );
+        if (entry) {
+            this._addNode(this.currentTool, mx, my);
+        }
     },
 
     _onMouseMove(e) {
@@ -701,19 +699,13 @@ const SketchMod = {
 
     // ========== NODES ==========
     _addNode(type, sx, sy) {
-        if (type === "input-data" || type === "output") return; //disabling multiple input and output nodes
+        if (type === "input-data" || type === "output") return;
+        const entry = this.nodeRegistry.find((r) => r.type === type);
+        if (!entry) return;
+
         const w = this._toWorld(sx, sy);
         const id = type[0] + ++this.nodeCounter;
-        let node;
-        if (type === "neuron") node = new NeuronNode(id, w.x, w.y);
-        else if (type === "layer") node = new LayerNode(id, w.x, w.y);
-        else if (type === "column-select")
-            node = new ColumnSelectNode(id, w.x, w.y);
-        else if (type === "train-test")
-            node = new TrainTestSplitNode(id, w.x, w.y);
-        else if (type === "normalize") node = new NormalizeNode(id, w.x, w.y);
-        else if (type === "row-select") node = new RowSelectNode(id, w.x, w.y);
-        else if (type === "dim-select") node = new DimSelectNode(id, w.x, w.y);
+        const node = new entry.class(id, w.x, w.y);
         if (!node) return;
 
         this._saveUndoState();
@@ -862,6 +854,80 @@ const SketchMod = {
         if (indicator) {
             indicator.textContent = Math.round(this.scale * 100) + "%";
         }
+    },
+
+    //========= building toolbar ===========
+    _buildToolbar() {
+        const toolbar = document.getElementById("leftToolbar");
+        if (!toolbar) return;
+
+        const sections = {
+            general: {
+                title: "General",
+                items: [
+                    {
+                        type: "select",
+                        label: "Select",
+                        active: true,
+                        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>`,
+                    },
+                    {
+                        type: "pan",
+                        label: "Pan",
+                        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/>
+                        <polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/></svg>`,
+                    },
+                    {
+                        type: "delete",
+                        label: "Delete",
+                        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+                    },
+                ],
+            },
+            data: { title: "Data", items: [] },
+            models: { title: "Models", items: [] },
+        };
+
+        // Group registered nodes by category
+        for (const entry of this.nodeRegistry) {
+            if (sections[entry.category]) {
+                sections[entry.category].items.push(entry);
+            }
+        }
+
+        // Build HTML
+        let html = "";
+        for (const [key, section] of Object.entries(sections)) {
+            if (section.items.length === 0) continue;
+            html += `<div class="toolbar-section">
+            <div class="toolbar-section-title">${section.title}</div>`;
+            for (const entry of section.items) {
+                const activeClass = entry.active ? " active" : "";
+                html += `
+            <button class="tool-btn${activeClass}" data-tool="${entry.type}" title="${entry.label}">
+                ${entry.icon || this._getDefaultIcon()}
+                <span class="tool-label">${entry.label}</span>
+            </button>`;
+            }
+            html += `</div>`;
+        }
+
+        toolbar.innerHTML = html;
+
+        // Re-bind toolbar clicks
+        toolbar.querySelectorAll(".tool-btn[data-tool]").forEach((btn) => {
+            btn.addEventListener("click", () => this.setTool(btn.dataset.tool));
+        });
+    },
+
+    _getDefaultIcon() {
+        return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+    </svg>`;
     },
     // ========== Update data nodes ==========
     _updateColumnSelect(checkbox) {
@@ -1228,24 +1294,15 @@ const SketchMod = {
             this.links = [];
 
             for (const n of data.nodes) {
+                const entry = this.nodeRegistry.find((r) => r.type === n.type);
                 let node;
-                if (n.type === "neuron") node = new NeuronNode(n.id, n.x, n.y);
-                else if (n.type === "layer")
-                    node = new LayerNode(n.id, n.x, n.y);
-                else if (n.type === "input-data")
+                if (entry) {
+                    node = new entry.class(n.id, n.x, n.y);
+                } else if (n.type === "input-data") {
                     node = new InputDataNode(n.id, n.x, n.y);
-                else if (n.type === "output")
+                } else if (n.type === "output") {
                     node = new OutputNode(n.id, n.x, n.y);
-                else if (n.type === "column-select")
-                    node = new ColumnSelectNode(n.id, n.x, n.y);
-                else if (n.type === "train-test")
-                    node = new TrainTestSplitNode(n.id, n.x, n.y);
-                else if (n.type === "normalize")
-                    node = new NormalizeNode(n.id, n.x, n.y);
-                else if (n.type === "row-select")
-                    node = new RowSelectNode(n.id, n.x, n.y);
-                else if (n.type === "dim-select")
-                    node = new DimSelectNode(n.id, n.x, n.y);
+                }
                 if (node) {
                     node.fromJSON(n);
                     this.nodes.push(node);
@@ -1395,22 +1452,16 @@ const SketchMod = {
         this.links = [];
         this.nodeCounter = state.nodeCounter;
         for (const n of state.nodes) {
+            const entry = this.nodeRegistry.find((r) => r.type === n.type);
             let node;
-            if (n.type === "neuron") node = new NeuronNode(n.id, n.x, n.y);
-            else if (n.type === "layer") node = new LayerNode(n.id, n.x, n.y);
-            else if (n.type === "input-data")
+            if (entry) {
+                node = new entry.class(n.id, n.x, n.y);
+            } else if (n.type === "input-data") {
                 node = new InputDataNode(n.id, n.x, n.y);
-            else if (n.type === "output") node = new OutputNode(n.id, n.x, n.y);
-            else if (n.type === "column-select")
-                node = new ColumnSelectNode(n.id, n.x, n.y);
-            else if (n.type === "train-test")
-                node = new TrainTestSplitNode(n.id, n.x, n.y);
-            else if (n.type === "normalize")
-                node = new NormalizeNode(n.id, n.x, n.y);
-            else if (n.type === "row-select")
-                node = new RowSelectNode(n.id, n.x, n.y);
+            } else if (n.type === "output") {
+                node = new OutputNode(n.id, n.x, n.y);
+            }
             if (node) {
-                // Clear default ports created by constructor
                 node.inputs = [];
                 node.outputs = [];
                 node.fromJSON(n);
@@ -3495,6 +3546,81 @@ class Link {
         return { from: this.from.id, to: this.to.id, weight: this.weight };
     }
 }
+// ========== REGISTER NODES ==========
+SketchMod.registerNode({
+    type: "neuron",
+    label: "Neuron",
+    category: "models",
+    class: NeuronNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><line x1="12" y1="9" x2="12" y2="2"/>
+        <line x1="12" y1="22" x2="12" y2="15"/><line x1="9" y1="12" x2="2" y2="12"/>
+        <line x1="22" y1="12" x2="15" y2="12"/></svg>`,
+});
+
+SketchMod.registerNode({
+    type: "layer",
+    label: "Layer",
+    category: "models",
+    class: LayerNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="4" width="20" height="4" rx="1"/>
+        <rect x="2" y="10" width="20" height="4" rx="1"/>
+        <rect x="2" y="16" width="20" height="4" rx="1"/></svg>`,
+});
+
+SketchMod.registerNode({
+    type: "column-select",
+    label: "Column Select",
+    category: "data",
+    class: ColumnSelectNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/>
+        <rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+});
+
+SketchMod.registerNode({
+    type: "train-test",
+    label: "Train/Test",
+    category: "data",
+    class: TrainTestSplitNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M3 16v5h5"/>
+        <path d="M21 16v5h-5"/><line x1="3" y1="3" x2="21" y2="21"/></svg>`,
+});
+
+SketchMod.registerNode({
+    type: "normalize",
+    label: "Normalize",
+    category: "data",
+    class: NormalizeNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="4" y1="20" x2="20" y2="20"/>
+        <polyline points="4 20 8 12 12 16 16 6 20 10"/></svg>`,
+});
+
+SketchMod.registerNode({
+    type: "row-select",
+    label: "Row Select",
+    category: "data",
+    class: RowSelectNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="18" rx="1"/>
+        <rect x="14" y="3" width="7" height="18" rx="1"/></svg>`,
+});
+
+SketchMod.registerNode({
+    type: "dim-select",
+    label: "Dim Select",
+    category: "data",
+    class: DimSelectNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <rect x="7" y="7" width="10" height="4" rx="1"/>
+        <rect x="7" y="13" width="10" height="4" rx="1"/></svg>`,
+});
 
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
