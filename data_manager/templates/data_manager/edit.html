@@ -83,17 +83,28 @@
                 </div>
                 <!-- Cover Image -->
                 <div class="form-group">
-                    <label for="id_cover_image">Cover Image (optional)</label>
-                    {% if dataset.cover_image %}
-                        <p style="font-size: 0.85rem;
-                                  color: var(--text-secondary);
-                                  margin-bottom: 8px">Current: {{ dataset.cover_image.name }}</p>
-                    {% endif %}
-                    <input type="file"
-                           name="cover_image"
-                           id="id_cover_image"
-                           class="form-input-file"
-                           accept="image/*">
+                    <label>Cover Image (optional)</label>
+                    <div class="cover-upload-wrapper">
+                        <label class="cover-upload-label" for="id_cover_image">
+                            <svg width="20"
+                                 height="20"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
+                            </svg>
+                            <span class="cover_choose_image_text">Choose cover image</span>
+                        </label>
+                        <input type="file"
+                               name="cover_image"
+                               id="id_cover_image"
+                               class="cover-file-input"
+                               accept="image/*">
+                        <span class="cover-file-name" id="coverFileName">No file chosen</span>
+                    </div>
                 </div>
                 <!-- Private Toggle -->
                 <div class="form-group">
