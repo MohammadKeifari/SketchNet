@@ -1658,6 +1658,15 @@ class BaseNode {
         this.allowedOutputTypes = null; // null = any, ["train", "test"] = only train or test
     }
 
+    computeOutputShapes() {
+        // Override in subclasses
+        // Returns array of { shape, dtype, known } for each output port
+        return this.outputs.map(() => ({
+            shape: null,
+            dtype: "float32",
+            known: false,
+        }));
+    }
     containsPoint(px, py) {
         const b = this.getBounds();
         return px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h;
@@ -1811,7 +1820,27 @@ class NeuronNode extends BaseNode {
         this.addInput();
         this.addOutput();
     }
+    computeOutputShapes() {
+        // Single neuron: input (B, F) → output (B, 1) per output port
+        const inShape = this._getFirstInputShape();
+        const shape = inShape ? [inShape[0], 1] : null;
+        return this.outputs.map(() => ({
+            shape,
+            dtype: "float32",
+            known: !!inShape,
+        }));
+    }
 
+    _getFirstInputShape() {
+        // Get shape from first connected input port
+        for (const port of this.inputs) {
+            const link = SketchMod.links.find((l) => l.to === port);
+            if (link && link.from.shape && link.from.shape.shape) {
+                return link.from.shape.shape;
+            }
+        }
+        return null;
+    }
     getBounds() {
         return {
             x: this.x - this.radius,
@@ -1895,7 +1924,16 @@ class LayerNode extends BaseNode {
         this.addInput();
         this.addOutput();
     }
-
+    computeOutputShapes() {
+        // Dense layer: input (B, in_features) → output (B, num_neurons)
+        const inShape = this._getFirstInputShape();
+        const shape = inShape ? [inShape[0], this.numNeurons] : null;
+        return this.outputs.map(() => ({
+            shape,
+            dtype: "float32",
+            known: !!inShape,
+        }));
+    }
     getBounds() {
         return {
             x: this.x - this.width / 2,
@@ -1979,7 +2017,26 @@ class InputDataNode extends BaseNode {
 
         this.addOutput();
     }
+    computeOutputShapes() {
+        // Parse shape from dataset
+        let shape = null;
+        let known = false;
 
+        if (this.dataShape) {
+            // Parse "(1000, 28, 28)" or "1000, 28, 28"
+            const cleaned = this.dataShape.replace(/[()]/g, "");
+            const parts = cleaned
+                .split(",")
+                .map((s) => parseInt(s.trim()))
+                .filter((n) => !isNaN(n));
+            if (parts.length > 0) {
+                shape = parts;
+                known = true;
+            }
+        }
+
+        return this.outputs.map(() => ({ shape, dtype: "float32", known }));
+    }
     getBounds() {
         return {
             x: this.x - this.width / 2,
@@ -2113,7 +2170,16 @@ class OutputNode extends BaseNode {
 
         this.addInput();
     }
-
+    computeOutputShapes() {
+        // Output just passes through whatever comes in
+        const inShape = this._getFirstInputShape();
+        return this.outputs.map(() => ({
+            shape: null,
+            dtype: "float32",
+            known: false,
+        }));
+        // Output node has no outputs, so this returns empty array
+    }
     getBounds() {
         return {
             x: this.x - this.width / 2,
@@ -2184,7 +2250,37 @@ class ColumnSelectNode extends BaseNode {
         this.addInput();
         this.addOutput();
     }
+    computeOutputShapes() {
+        const inShape = this._getFirstInputShape();
+        if (!inShape) {
+            return this.outputs.map(() => ({
+                shape: null,
+                dtype: "float32",
+                known: false,
+            }));
+        }
+        // Columns selected from feature dimension
+        const selectedCount =
+            this.selectedColumns.length > 0
+                ? this.selectedColumns.length
+                : this.columnInput
+                  ? this._countFromInput()
+                  : inShape[1];
+        const shape = [inShape[0], selectedCount];
+        return this.outputs.map(() => ({
+            shape,
+            dtype: "float32",
+            known: this.selectedColumns.length > 0,
+        }));
+    }
 
+    _countFromInput() {
+        const indices = SketchMod._parseColumnInput(
+            this.columnInput,
+            this.columnCount - 1,
+        );
+        return indices.length || null;
+    }
     getBounds() {
         return {
             x: this.x - this.width / 2,
@@ -2334,7 +2430,23 @@ class RowSelectNode extends BaseNode {
         this.addInput();
         this.addOutput();
     }
-
+    computeOutputShapes() {
+        const inShape = this._getFirstInputShape();
+        if (!inShape) {
+            return this.outputs.map(() => ({
+                shape: null,
+                dtype: "float32",
+                known: false,
+            }));
+        }
+        const rowCount = this.rowCount > 0 ? this.rowCount : inShape[0];
+        const shape = [rowCount, ...inShape.slice(1)];
+        return this.outputs.map(() => ({
+            shape,
+            dtype: "float32",
+            known: this.rowCount > 0,
+        }));
+    }
     getBounds() {
         return {
             x: this.x - this.width / 2,
@@ -2531,7 +2643,34 @@ class DimSelectNode extends BaseNode {
         this.addInput();
         this.addOutput();
     }
-
+    computeOutputShapes() {
+        const inShape = this._getFirstInputShape();
+        if (!inShape) {
+            return this.outputs.map(() => ({
+                shape: null,
+                dtype: "float32",
+                known: false,
+            }));
+        }
+        const outShape = [];
+        for (let i = 0; i < this.dimSelections.length; i++) {
+            const indices = this._parseDimInput(
+                this.dimSelections[i],
+                inShape[i] ? inShape[i] - 1 : null,
+            );
+            outShape.push(
+                indices.length > 0 ? indices.length : inShape[i] || 1,
+            );
+        }
+        const allEmpty = this.dimSelections.every(
+            (d) => !d || d === ":" || d.trim() === "",
+        );
+        return this.outputs.map(() => ({
+            shape: outShape,
+            dtype: "float32",
+            known: !allEmpty && inShape.length > 0,
+        }));
+    }
     getBounds() {
         return {
             x: this.x - this.width / 2,
@@ -2793,7 +2932,30 @@ class TrainTestSplitNode extends BaseNode {
         this.addOutput("train");
         this.addOutput("test");
     }
+    computeOutputShapes() {
+        const inShape = this._getFirstInputShape();
+        if (!inShape) {
+            return this.outputs.map(() => ({
+                shape: null,
+                dtype: "float32",
+                known: false,
+            }));
+        }
+        const trainRows = Math.floor(inShape[0] * this.trainRatio);
+        const testRows = inShape[0] - trainRows;
 
+        const results = [];
+        // Output 0 = train, Output 1 = test
+        for (let i = 0; i < this.outputs.length; i++) {
+            const rows = i === 0 ? trainRows : testRows;
+            results.push({
+                shape: [rows, ...inShape.slice(1)],
+                dtype: "float32",
+                known: true,
+            });
+        }
+        return results;
+    }
     getBounds() {
         return {
             x: this.x - this.width / 2,
@@ -2907,7 +3069,15 @@ class NormalizeNode extends BaseNode {
         this.addInput();
         this.addOutput();
     }
-
+    computeOutputShapes() {
+        // Normalize doesn't change shape
+        const inShape = this._getFirstInputShape();
+        return this.outputs.map(() => ({
+            shape: inShape ? [...inShape] : null,
+            dtype: "float32",
+            known: !!inShape,
+        }));
+    }
     getBounds() {
         return {
             x: this.x - this.width / 2,
