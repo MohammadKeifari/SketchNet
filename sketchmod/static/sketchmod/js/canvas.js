@@ -155,14 +155,17 @@ const SketchMod = {
                 const action = item.dataset.action;
 
                 if (action === "add-input") {
+                    this._saveUndoState();
                     const port = node.addInput();
                     if (port) this.ports = this._collectPorts();
                 }
                 if (action === "add-output") {
+                    this._saveUndoState();
                     const port = node.addOutput();
                     if (port) this.ports = this._collectPorts();
                 }
                 if (action === "remove-input") {
+                    this._saveUndoState();
                     const port = node.removeInput();
                     if (port) {
                         this.links = this.links.filter(
@@ -173,6 +176,7 @@ const SketchMod = {
                     }
                 }
                 if (action === "remove-output") {
+                    this._saveUndoState();
                     const port = node.removeOutput();
                     if (port) {
                         this.links = this.links.filter(
@@ -183,6 +187,7 @@ const SketchMod = {
                     }
                 }
                 if (action === "delete-node") {
+                    this._saveUndoState();
                     this._deleteNode(node);
                 }
 
@@ -1229,6 +1234,10 @@ const SketchMod = {
     },
     _undo() {
         if (this.undoStack.length === 0) return;
+        this.selectedNodes = [];
+        this.selectedLinks = [];
+        this.selectedPorts = [];
+        this._hideProperties();
         this.redoStack.push(this._captureState());
         this._restoreState(this.undoStack.pop());
         this.ports = this._collectPorts();
@@ -1237,6 +1246,10 @@ const SketchMod = {
 
     _redo() {
         if (this.redoStack.length === 0) return;
+        this.selectedNodes = [];
+        this.selectedLinks = [];
+        this.selectedPorts = [];
+        this._hideProperties();
         this.undoStack.push(this._captureState());
         this._restoreState(this.redoStack.pop());
         this.ports = this._collectPorts();
@@ -2009,6 +2022,7 @@ class TrainTestSplitNode extends BaseNode {
         this.width = 110;
         this.height = 70;
         this.trainRatio = 0.7;
+        this.testRatio = 0.3;
         this.randomSeed = 42;
 
         this.maxInputs = 1;
