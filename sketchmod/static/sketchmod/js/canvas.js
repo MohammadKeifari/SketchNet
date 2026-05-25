@@ -132,6 +132,13 @@ const SketchMod = {
         document
             .getElementById("btnTranslate")
             ?.addEventListener("click", () => this._translate());
+        // Undo and redo button
+        document
+            .getElementById("btnUndo")
+            ?.addEventListener("click", () => this._undo());
+        document
+            .getElementById("btnRedo")
+            ?.addEventListener("click", () => this._redo());
         // Zoom buttons
         document
             .getElementById("btnZoomIn")
