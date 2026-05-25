@@ -331,6 +331,12 @@ const SketchMod = {
                 }
             }
         }
+        if (this.selectedNodes.length === 1) {
+            this._showProperties(this.selectedNodes[0]);
+        }
+        if (this.selectedPorts.length === 1) {
+            this._showPortProperties();
+        }
     },
     // ========== scroll ==========
     _onScroll(e) {
@@ -1560,6 +1566,8 @@ const SketchMod = {
         input.value = value;
         node.dataShape = value || null;
         this._saveToSession();
+        this._propagateShapes();
+        this._render();
     },
 
     //=========== column and row parsing and fetching methods ==============
