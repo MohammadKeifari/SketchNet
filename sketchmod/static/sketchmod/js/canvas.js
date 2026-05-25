@@ -311,7 +311,12 @@ const SketchMod = {
             for (let i = 0; i < node.outputs.length; i++) {
                 if (i < outputShapes.length && outputShapes[i].shape) {
                     const s = outputShapes[i];
-                    node.outputs[i].setShape(s.shape, s.dtype, s.known);
+                    node.outputs[i].setShape(
+                        s.shape,
+                        s.dtype,
+                        s.known,
+                        s.symbolic,
+                    );
                 }
             }
 
@@ -1326,7 +1331,12 @@ const SketchMod = {
             for (const p of data.ports || []) {
                 const port = this.ports.find((pp) => pp.id === p.id);
                 if (port && p.shape) {
-                    port.setShape(p.shape.shape, p.shape.dtype, p.shape.known);
+                    port.setShape(
+                        p.shape.shape,
+                        p.shape.dtype,
+                        p.shape.known,
+                        p.shape.symbolic,
+                    );
                 }
             }
         } catch (e) {
@@ -1485,7 +1495,12 @@ const SketchMod = {
         for (const p of state.ports || []) {
             const port = this.ports.find((pp) => pp.id === p.id);
             if (port && p.shape) {
-                port.setShape(p.shape.shape, p.shape.dtype, p.shape.known);
+                port.setShape(
+                    p.shape.shape,
+                    p.shape.dtype,
+                    p.shape.known,
+                    p.shape.symbolic,
+                );
             }
         }
     },
@@ -1975,6 +1990,23 @@ class BaseNode {
     getPropertiesHTML() {
         return "";
     }
+    _emptyShapes() {
+        return this.outputs.map(() => ({
+            shape: null,
+            dtype: "float32",
+            known: false,
+            symbolic: false,
+        }));
+    }
+
+    _makeShapes(shape, symbolic, known) {
+        return this.outputs.map(() => ({
+            shape,
+            dtype: "float32",
+            known: !!known,
+            symbolic: !!symbolic,
+        }));
+    }
     _getFirstInputShapeObj() {
         for (const port of this.inputs) {
             const link = SketchMod.links.find((l) => l.to === port);
@@ -2025,37 +2057,80 @@ class BaseNode {
     }
 }
 
-class NeuronNode extends BaseNode {
-    constructor(id, x, y) {
-        super(id, x, y, "neuron");
-        this.radius = 28;
-        this.activation = "relu";
-
-        this.maxInputs = Infinity;
-        this.minInputs = 1;
-        this.maxOutputs = Infinity;
-        this.minOutputs = 1;
-
-        this.addInput();
-        this.addOutput();
+// ========== NODE FACTORY ==========
+class RectNode extends BaseNode {
+    // For rectangular nodes (Layer, ColumnSelect, RowSelect, Normalize, DimSelect, InputData, Output)
+    constructor(id, x, y, type, width, height) {
+        super(id, x, y, type);
+        this.width = width;
+        this.height = height;
     }
-    computeOutputShapes() {
-        const inputShape = this._getFirstInputShapeObj();
-        if (!inputShape)
-            return this.outputs.map(() => ({
-                shape: null,
-                dtype: "float32",
-                known: false,
-                symbolic: false,
-            }));
 
-        const shape = [inputShape.shape[0], 1];
-        return this.outputs.map(() => ({
-            shape,
-            dtype: "float32",
-            known: true,
-            symbolic: inputShape.symbolic,
-        }));
+    getBounds() {
+        return {
+            x: this.x - this.width / 2,
+            y: this.y - this.height / 2,
+            w: this.width,
+            h: this.height,
+        };
+    }
+
+    updatePorts() {
+        const hw = this.width / 2 + 8;
+        this.inputs.forEach((p, i) => {
+            p.x = this.x - hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.inputs.length + 1)) * (i + 1);
+        });
+        this.outputs.forEach((p, i) => {
+            p.x = this.x + hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.outputs.length + 1)) * (i + 1);
+        });
+    }
+
+    draw(ctx, selected) {
+        const color = SketchMod._getNodeColor();
+        const x = this.x - this.width / 2;
+        const y = this.y - this.height / 2;
+
+        if (selected) {
+            ctx.beginPath();
+            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
+            ctx.fillStyle = "var(--accent-glow)";
+            ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.roundRect(x, y, this.width, this.height, 7);
+        ctx.fillStyle = color.fill;
+        ctx.fill();
+        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
+        ctx.lineWidth = selected ? 2.5 : 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 13px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        this.drawLabel(ctx);
+    }
+
+    drawLabel(ctx) {
+        // Override in subclass
+        ctx.fillText(this.type, this.x, this.y);
+    }
+}
+
+class CircleNode extends BaseNode {
+    // For circle nodes (Neuron)
+    constructor(id, x, y, type, radius) {
+        super(id, x, y, type);
+        this.radius = radius;
     }
 
     getBounds() {
@@ -2093,14 +2168,12 @@ class NeuronNode extends BaseNode {
 
     draw(ctx, selected) {
         const color = SketchMod._getNodeColor();
-
         if (selected) {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
             ctx.fillStyle = "var(--accent-glow)";
             ctx.fill();
         }
-
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = color.fill;
@@ -2113,217 +2186,114 @@ class NeuronNode extends BaseNode {
         ctx.font = "bold 15px Inter, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("N", this.x, this.y);
+        this.drawLabel(ctx);
     }
 
-    getPropertiesHTML() {
-        return (
-            this._getShapeSummaryHTML() +
-            `<div class="prop-group"><label>Activation</label><select id="prop-activation" class="prop-select">
-            <option value="relu" ${this.activation === "relu" ? "selected" : ""}>ReLU</option>
-            <option value="sigmoid" ${this.activation === "sigmoid" ? "selected" : ""}>Sigmoid</option>
-            <option value="tanh" ${this.activation === "tanh" ? "selected" : ""}>Tanh</option>
-        </select></div>`
-        );
+    drawLabel(ctx) {
+        ctx.fillText("?", this.x, this.y);
     }
 }
 
-class LayerNode extends BaseNode {
+// ========== NEURON ==========
+class NeuronNode extends CircleNode {
     constructor(id, x, y) {
-        super(id, x, y, "layer");
-        this.width = 110;
-        this.height = 65;
+        super(id, x, y, "neuron", 28);
+        this.activation = "relu";
+        this.maxInputs = Infinity;
+        this.minInputs = 1;
+        this.maxOutputs = Infinity;
+        this.minOutputs = 1;
+        this.addInput();
+        this.addOutput();
+    }
+    drawLabel(ctx) {
+        ctx.fillText("N", this.x, this.y);
+    }
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        return this._makeShapes([s.shape[0], 1], s.symbolic);
+    }
+    getPropertiesHTML() {
+        return this._getShapeSummaryHTML() + this._activationSelect();
+    }
+    _activationSelect() {
+        return `<div class="prop-group"><label>Activation</label><select id="prop-activation" class="prop-select">
+            <option value="relu" ${this.activation === "relu" ? "selected" : ""}>ReLU</option>
+            <option value="sigmoid" ${this.activation === "sigmoid" ? "selected" : ""}>Sigmoid</option>
+            <option value="tanh" ${this.activation === "tanh" ? "selected" : ""}>Tanh</option>
+        </select></div>`;
+    }
+}
+
+// ========== LAYER ==========
+class LayerNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "layer", 110, 65);
         this.numNeurons = 64;
         this.activation = "relu";
-
         this.maxInputs = 1;
         this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
-
         this.addInput();
         this.addOutput();
     }
-    computeOutputShapes() {
-        const inputShape = this._getFirstInputShapeObj();
-        if (!inputShape)
-            return this.outputs.map(() => ({
-                shape: null,
-                dtype: "float32",
-                known: false,
-                symbolic: false,
-            }));
-
-        const shape = [inputShape.shape[0], this.numNeurons];
-        return this.outputs.map(() => ({
-            shape,
-            dtype: "float32",
-            known: true,
-            symbolic: inputShape.symbolic,
-        }));
-    }
-    getBounds() {
-        return {
-            x: this.x - this.width / 2,
-            y: this.y - this.height / 2,
-            w: this.width,
-            h: this.height,
-        };
-    }
-
-    updatePorts() {
-        const hw = this.width / 2 + 8;
-        this.inputs.forEach((p, i) => {
-            p.x = this.x - hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.inputs.length + 1)) * (i + 1);
-        });
-        this.outputs.forEach((p, i) => {
-            p.x = this.x + hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.outputs.length + 1)) * (i + 1);
-        });
-    }
-
-    draw(ctx, selected) {
-        const color = SketchMod._getNodeColor();
-        const x = this.x - this.width / 2;
-        const y = this.y - this.height / 2;
-
-        if (selected) {
-            ctx.beginPath();
-            ctx.roundRect(x - 1, y - 1, this.width + 2, this.height + 2, 10);
-            ctx.fillStyle = "var(--accent-glow)";
-            ctx.fill();
-        }
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, this.width, this.height, 8);
-        ctx.fillStyle = color.fill;
-        ctx.fill();
-        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
-        ctx.lineWidth = selected ? 2.5 : 1.5;
-        ctx.stroke();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 14px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
+    drawLabel(ctx) {
         ctx.fillText(this.numNeurons + "", this.x, this.y - 9);
         ctx.font = "11px Inter, sans-serif";
         ctx.fillText("Layer", this.x, this.y + 12);
     }
-
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        return this._makeShapes([s.shape[0], this.numNeurons], s.symbolic);
+    }
     getPropertiesHTML() {
         return (
             this._getShapeSummaryHTML() +
-            `<div class="prop-group"><label>Neurons</label><input type="number" id="prop-size" class="prop-input" value="${this.numNeurons}" min="1" max="4096"></div>
-        <div class="prop-group"><label>Activation</label><select id="prop-activation" class="prop-select">
-            <option value="relu" ${this.activation === "relu" ? "selected" : ""}>ReLU</option>
-            <option value="sigmoid" ${this.activation === "sigmoid" ? "selected" : ""}>Sigmoid</option>
-            <option value="tanh" ${this.activation === "tanh" ? "selected" : ""}>Tanh</option>
-        </select></div>`
+            `
+            <div class="prop-group"><label>Neurons</label><input type="number" id="prop-size" class="prop-input" value="${this.numNeurons}" min="1" max="4096"></div>
+            ${this._activationSelect()}`
         );
+    }
+    _activationSelect() {
+        return NeuronNode.prototype._activationSelect.call(this);
     }
 }
 
-class InputDataNode extends BaseNode {
+// ========== INPUT DATA ==========
+class InputDataNode extends RectNode {
     constructor(id, x, y) {
-        super(id, x, y, "input-data");
-        this.width = 100;
-        this.height = 55;
+        super(id, x, y, "input-data", 100, 55);
         this.datasetId = null;
         this.datasetName = null;
         this.dataShape = null;
-
         this.maxInputs = 0;
         this.minInputs = 0;
         this.maxOutputs = 2;
         this.minOutputs = 1;
         this.allowedOutputTypes = ["features", "labels"];
-
         this.addOutput();
     }
+    drawLabel(ctx) {
+        ctx.fillText("Input", this.x, this.y);
+    }
     computeOutputShapes() {
-        let shape = null;
-        let known = false;
-        let symbolic = false;
-
+        let shape = null,
+            symbolic = false;
         if (this.dataShape) {
             const cleaned = this.dataShape.replace(/[()]/g, "");
             const parts = cleaned.split(",").map((s) => {
-                const trimmed = s.trim();
-                const num = parseInt(trimmed);
-                if (!isNaN(num) && num.toString() === trimmed) {
-                    return num; // Numeric
-                } else {
-                    symbolic = true;
-                    return trimmed; // Symbolic variable
-                }
+                const n = parseInt(s.trim());
+                if (!isNaN(n) && n.toString() === s.trim()) return n;
+                symbolic = true;
+                return s.trim();
             });
-            if (parts.length > 0) {
-                shape = parts;
-                known = true;
-            }
+            if (parts.length > 0) shape = parts;
         }
-
-        return this.outputs.map(() => ({
-            shape,
-            dtype: "float32",
-            known,
-            symbolic,
-        }));
+        return this._makeShapes(shape, symbolic, !!shape);
     }
-    getBounds() {
-        return {
-            x: this.x - this.width / 2,
-            y: this.y - this.height / 2,
-            w: this.width,
-            h: this.height,
-        };
-    }
-
-    updatePorts() {
-        this.outputs.forEach((p, i) => {
-            p.x = this.x + this.width / 2 + 8;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.outputs.length + 1)) * (i + 1);
-        });
-    }
-
-    draw(ctx, selected) {
-        const color = SketchMod._getNodeColor();
-        const x = this.x - this.width / 2;
-        const y = this.y - this.height / 2;
-
-        if (selected) {
-            ctx.beginPath();
-            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
-            ctx.fillStyle = "var(--accent-glow)";
-            ctx.fill();
-        }
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, this.width, this.height, 7);
-        ctx.fillStyle = color.fill;
-        ctx.fill();
-        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
-        ctx.lineWidth = selected ? 2.5 : 1.5;
-        ctx.stroke();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 13px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("Input", this.x, this.y);
-    }
-
     getPropertiesHTML() {
         return (
             this._getShapeSummaryHTML() +
@@ -2384,92 +2354,38 @@ class InputDataNode extends BaseNode {
     }
 
     toJSON() {
-        const base = super.toJSON();
+        const b = super.toJSON();
         return {
-            ...base,
+            ...b,
             datasetId: this.datasetId,
             datasetName: this.datasetName,
             dataShape: this.dataShape,
         };
     }
-
-    fromJSON(data) {
-        super.fromJSON(data);
-        if (data.datasetId) this.datasetId = data.datasetId;
-        if (data.datasetName) this.datasetName = data.datasetName;
-        if (data.dataShape) this.dataShape = data.dataShape;
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.datasetId) this.datasetId = d.datasetId;
+        if (d.datasetName) this.datasetName = d.datasetName;
+        if (d.dataShape) this.dataShape = d.dataShape;
     }
 }
 
-class OutputNode extends BaseNode {
+// ========== OUTPUT ==========
+class OutputNode extends RectNode {
     constructor(id, x, y) {
-        super(id, x, y, "output");
-        this.width = 100;
-        this.height = 55;
-
+        super(id, x, y, "output", 100, 55);
         this.maxInputs = Infinity;
         this.minInputs = 1;
         this.maxOutputs = 0;
         this.minOutputs = 0;
-
         this.addInput();
     }
-    computeOutputShapes() {
-        // Output just passes through whatever comes in
-        const inShape = this._getFirstInputShape();
-        return this.outputs.map(() => ({
-            shape: null,
-            dtype: "float32",
-            known: false,
-        }));
-        // Output node has no outputs, so this returns empty array
-    }
-    getBounds() {
-        return {
-            x: this.x - this.width / 2,
-            y: this.y - this.height / 2,
-            w: this.width,
-            h: this.height,
-        };
-    }
-
-    updatePorts() {
-        this.inputs.forEach((p, i) => {
-            p.x = this.x - this.width / 2 - 8;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.inputs.length + 1)) * (i + 1);
-        });
-    }
-
-    draw(ctx, selected) {
-        const color = SketchMod._getNodeColor();
-        const x = this.x - this.width / 2;
-        const y = this.y - this.height / 2;
-
-        if (selected) {
-            ctx.beginPath();
-            ctx.roundRect(x - 1, y - 1, this.width + 2, this.height + 2, 8);
-            ctx.fillStyle = "var(--accent-glow)";
-            ctx.fill();
-        }
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, this.width, this.height, 7);
-        ctx.fillStyle = color.fill;
-        ctx.fill();
-        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
-        ctx.lineWidth = selected ? 2.5 : 1.5;
-        ctx.stroke();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 13px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
+    drawLabel(ctx) {
         ctx.fillText("Output", this.x, this.y);
     }
-
+    computeOutputShapes() {
+        return [];
+    }
     getPropertiesHTML() {
         return (
             this._getShapeSummaryHTML() +
@@ -2478,48 +2394,44 @@ class OutputNode extends BaseNode {
     }
 }
 // ========== COLUMN SELECT NODE ==========
-class ColumnSelectNode extends BaseNode {
+class ColumnSelectNode extends RectNode {
     constructor(id, x, y) {
-        super(id, x, y, "column-select");
-        this.width = 100;
-        this.height = 60;
-        this.selectedColumns = []; // Parsed array of indices
-        this.columnInput = ""; // Raw text like "1:3, 5, 6"
-        this.availableColumns = []; // Column names from dataset
-        this.columnCount = 0; // Total columns in dataset
-        this.datasetId = null; // Connected dataset ID
-
+        super(id, x, y, "column-select", 100, 60);
+        this.selectedColumns = [];
+        this.columnInput = "";
+        this.availableColumns = [];
+        this.columnCount = 0;
+        this.datasetId = null;
         this.maxInputs = 1;
         this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
-
         this.addInput();
         this.addOutput();
     }
-    computeOutputShapes() {
-        const inputShape = this._getFirstInputShapeObj();
-        if (!inputShape)
-            return this.outputs.map(() => ({
-                shape: null,
-                dtype: "float32",
-                known: false,
-                symbolic: false,
-            }));
 
-        const selectedCount =
+    drawLabel(ctx) {
+        const label =
+            this.selectedColumns.length > 0
+                ? this.selectedColumns.length + " cols"
+                : "Columns";
+        ctx.fillText(label, this.x, this.y);
+    }
+
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        const count =
             this.selectedColumns.length > 0
                 ? this.selectedColumns.length
                 : this.columnInput
                   ? this._countFromInput()
-                  : inputShape.shape[1];
-        const shape = [inputShape.shape[0], selectedCount];
-        return this.outputs.map(() => ({
-            shape,
-            dtype: "float32",
-            known: this.selectedColumns.length > 0,
-            symbolic: inputShape.symbolic,
-        }));
+                  : s.shape[1];
+        return this._makeShapes(
+            [s.shape[0], count],
+            s.symbolic,
+            this.selectedColumns.length > 0,
+        );
     }
 
     _countFromInput() {
@@ -2529,68 +2441,10 @@ class ColumnSelectNode extends BaseNode {
         );
         return indices.length || null;
     }
-    getBounds() {
-        return {
-            x: this.x - this.width / 2,
-            y: this.y - this.height / 2,
-            w: this.width,
-            h: this.height,
-        };
-    }
-
-    updatePorts() {
-        const hw = this.width / 2 + 8;
-        this.inputs.forEach((p, i) => {
-            p.x = this.x - hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.inputs.length + 1)) * (i + 1);
-        });
-        this.outputs.forEach((p, i) => {
-            p.x = this.x + hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.outputs.length + 1)) * (i + 1);
-        });
-    }
-
-    draw(ctx, selected) {
-        const color = SketchMod._getNodeColor();
-        const x = this.x - this.width / 2;
-        const y = this.y - this.height / 2;
-
-        if (selected) {
-            ctx.beginPath();
-            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
-            ctx.fillStyle = "var(--accent-glow)";
-            ctx.fill();
-        }
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, this.width, this.height, 7);
-        ctx.fillStyle = color.fill;
-        ctx.fill();
-        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
-        ctx.lineWidth = selected ? 2.5 : 1.5;
-        ctx.stroke();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 11px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        const label =
-            this.selectedColumns.length > 0
-                ? this.selectedColumns.length + " cols"
-                : "Columns";
-        ctx.fillText(label, this.x, this.y);
-    }
 
     toJSON() {
-        const base = super.toJSON();
         return {
-            ...base,
+            ...super.toJSON(),
             selectedColumns: this.selectedColumns,
             columnInput: this.columnInput,
             availableColumns: this.availableColumns,
@@ -2598,15 +2452,13 @@ class ColumnSelectNode extends BaseNode {
             datasetId: this.datasetId,
         };
     }
-
-    fromJSON(data) {
-        super.fromJSON(data);
-        if (data.selectedColumns) this.selectedColumns = data.selectedColumns;
-        if (data.columnInput) this.columnInput = data.columnInput;
-        if (data.availableColumns)
-            this.availableColumns = data.availableColumns;
-        if (data.columnCount) this.columnCount = data.columnCount;
-        if (data.datasetId) this.datasetId = data.datasetId;
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.selectedColumns) this.selectedColumns = d.selectedColumns;
+        if (d.columnInput) this.columnInput = d.columnInput;
+        if (d.availableColumns) this.availableColumns = d.availableColumns;
+        if (d.columnCount) this.columnCount = d.columnCount;
+        if (d.datasetId) this.datasetId = d.datasetId;
     }
 
     getPropertiesHTML() {
@@ -2663,116 +2515,35 @@ class ColumnSelectNode extends BaseNode {
     }
 }
 // ========== ROW SELECT NODE ==========
-class RowSelectNode extends BaseNode {
+class RowSelectNode extends RectNode {
     constructor(id, x, y) {
-        super(id, x, y, "row-select");
-        this.width = 100;
-        this.height = 60;
-        this.method = "first-n"; // "first-n", "random", "slice", "indices"
-        this.value = "100"; // String: "100", "0:500", "0,5,10", etc.
+        super(id, x, y, "row-select", 100, 60);
+        this.method = "first-n";
+        this.value = "100";
         this.randomSeed = 42;
-        this.rowCount = 0; // Preview count
-
+        this.rowCount = 0;
         this.maxInputs = 1;
         this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
-
         this.addInput();
         this.addOutput();
     }
-    computeOutputShapes() {
-        const inputShape = this._getFirstInputShapeObj();
-        if (!inputShape)
-            return this.outputs.map(() => ({
-                shape: null,
-                dtype: "float32",
-                known: false,
-                symbolic: false,
-            }));
 
-        const rowCount =
-            this.rowCount > 0 ? this.rowCount : inputShape.shape[0];
-        const shape = [rowCount, ...inputShape.shape.slice(1)];
-        return this.outputs.map(() => ({
-            shape,
-            dtype: "float32",
-            known: this.rowCount > 0,
-            symbolic: inputShape.symbolic,
-        }));
-    }
-    getBounds() {
-        return {
-            x: this.x - this.width / 2,
-            y: this.y - this.height / 2,
-            w: this.width,
-            h: this.height,
-        };
-    }
-
-    updatePorts() {
-        const hw = this.width / 2 + 8;
-        this.inputs.forEach((p, i) => {
-            p.x = this.x - hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.inputs.length + 1)) * (i + 1);
-        });
-        this.outputs.forEach((p, i) => {
-            p.x = this.x + hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.outputs.length + 1)) * (i + 1);
-        });
-    }
-
-    draw(ctx, selected) {
-        const color = SketchMod._getNodeColor();
-        const x = this.x - this.width / 2;
-        const y = this.y - this.height / 2;
-
-        if (selected) {
-            ctx.beginPath();
-            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
-            ctx.fillStyle = "var(--accent-glow)";
-            ctx.fill();
-        }
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, this.width, this.height, 7);
-        ctx.fillStyle = color.fill;
-        ctx.fill();
-        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
-        ctx.lineWidth = selected ? 2.5 : 1.5;
-        ctx.stroke();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 11px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
+    drawLabel(ctx) {
         const label = this.rowCount > 0 ? this.rowCount + " rows" : "Rows";
         ctx.fillText(label, this.x, this.y);
     }
 
-    toJSON() {
-        const base = super.toJSON();
-        return {
-            ...base,
-            method: this.method,
-            value: this.value,
-            randomSeed: this.randomSeed,
-            rowCount: this.rowCount,
-        };
-    }
-
-    fromJSON(data) {
-        super.fromJSON(data);
-        if (data.method) this.method = data.method;
-        if (data.value) this.value = data.value;
-        if (data.randomSeed) this.randomSeed = data.randomSeed;
-        if (data.rowCount) this.rowCount = data.rowCount;
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        const rows = this.rowCount > 0 ? this.rowCount : s.shape[0];
+        return this._makeShapes(
+            [rows, ...s.shape.slice(1)],
+            s.symbolic,
+            this.rowCount > 0,
+        );
     }
 
     _computeRowCount() {
@@ -2800,6 +2571,22 @@ class RowSelectNode extends BaseNode {
             default:
                 return 0;
         }
+    }
+    toJSON() {
+        return {
+            ...super.toJSON(),
+            method: this.method,
+            value: this.value,
+            randomSeed: this.randomSeed,
+            rowCount: this.rowCount,
+        };
+    }
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.method) this.method = d.method;
+        if (d.value) this.value = d.value;
+        if (d.randomSeed) this.randomSeed = d.randomSeed;
+        if (d.rowCount) this.rowCount = d.rowCount;
     }
 
     getPropertiesHTML() {
@@ -2883,106 +2670,21 @@ class RowSelectNode extends BaseNode {
     }
 }
 // ========== DIM SELECT NODE ==========
-class DimSelectNode extends BaseNode {
+class DimSelectNode extends RectNode {
     constructor(id, x, y) {
-        super(id, x, y, "dim-select");
-        this.width = 110;
-        this.height = 70;
-        this.inputShape = null; // e.g., [1000, 28, 28] or null
-        this.dimSelections = ["", ""]; // One string per dimension
-        this.computedIndices = []; // Parsed indices per dimension [[0,1,2...], [0,1,...]]
-
+        super(id, x, y, "dim-select", 110, 70);
+        this.inputShape = null;
+        this.dimSelections = ["", ""];
+        this.computedIndices = [];
         this.maxInputs = 1;
         this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
-
         this.addInput();
         this.addOutput();
     }
-    computeOutputShapes() {
-        const inputShape = this._getFirstInputShapeObj();
-        if (!inputShape)
-            return this.outputs.map(() => ({
-                shape: null,
-                dtype: "float32",
-                known: false,
-                symbolic: false,
-            }));
 
-        const outShape = [];
-        for (let i = 0; i < this.dimSelections.length; i++) {
-            const indices = this._parseDimInput(
-                this.dimSelections[i],
-                typeof inputShape.shape[i] === "number"
-                    ? inputShape.shape[i] - 1
-                    : null,
-            );
-            outShape.push(
-                indices.length > 0 ? indices.length : inputShape.shape[i] || 1,
-            );
-        }
-        const allEmpty = this.dimSelections.every(
-            (d) => !d || d === ":" || d.trim() === "",
-        );
-        return this.outputs.map(() => ({
-            shape: outShape,
-            dtype: "float32",
-            known: !allEmpty,
-            symbolic: inputShape.symbolic,
-        }));
-    }
-    getBounds() {
-        return {
-            x: this.x - this.width / 2,
-            y: this.y - this.height / 2,
-            w: this.width,
-            h: this.height,
-        };
-    }
-
-    updatePorts() {
-        const hw = this.width / 2 + 8;
-        this.inputs.forEach((p, i) => {
-            p.x = this.x - hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.inputs.length + 1)) * (i + 1);
-        });
-        this.outputs.forEach((p, i) => {
-            p.x = this.x + hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.outputs.length + 1)) * (i + 1);
-        });
-    }
-
-    draw(ctx, selected) {
-        const color = SketchMod._getNodeColor();
-        const x = this.x - this.width / 2;
-        const y = this.y - this.height / 2;
-
-        if (selected) {
-            ctx.beginPath();
-            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
-            ctx.fillStyle = "var(--accent-glow)";
-            ctx.fill();
-        }
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, this.width, this.height, 7);
-        ctx.fillStyle = color.fill;
-        ctx.fill();
-        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
-        ctx.lineWidth = selected ? 2.5 : 1.5;
-        ctx.stroke();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 12px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
+    drawLabel(ctx) {
         const dims = this.dimSelections.length;
         const used = this.dimSelections.filter((d) => d && d !== ":").length;
         ctx.fillText(dims + "D", this.x, this.y - 6);
@@ -2992,6 +2694,25 @@ class DimSelectNode extends BaseNode {
             this.x,
             this.y + 12,
         );
+    }
+
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        const outShape = [];
+        for (let i = 0; i < this.dimSelections.length; i++) {
+            const indices = this._parseDimInput(
+                this.dimSelections[i],
+                typeof s.shape[i] === "number" ? s.shape[i] - 1 : null,
+            );
+            outShape.push(
+                indices.length > 0 ? indices.length : s.shape[i] || 1,
+            );
+        }
+        const allEmpty = this.dimSelections.every(
+            (d) => !d || d === ":" || d.trim() === "",
+        );
+        return this._makeShapes(outShape, s.symbolic, !allEmpty);
     }
 
     _parseDimInput(input, maxIndex) {
@@ -3071,7 +2792,6 @@ class DimSelectNode extends BaseNode {
 
         return [...indices].sort((a, b) => a - b);
     }
-
     _computeOutputShape() {
         const shape = [];
         for (let i = 0; i < this.dimSelections.length; i++) {
@@ -3089,22 +2809,19 @@ class DimSelectNode extends BaseNode {
         }
         return shape;
     }
-
     toJSON() {
-        const base = super.toJSON();
         return {
-            ...base,
+            ...super.toJSON(),
             inputShape: this.inputShape,
             dimSelections: this.dimSelections,
             computedIndices: this.computedIndices,
         };
     }
-
-    fromJSON(data) {
-        super.fromJSON(data);
-        if (data.inputShape) this.inputShape = data.inputShape;
-        if (data.dimSelections) this.dimSelections = data.dimSelections;
-        if (data.computedIndices) this.computedIndices = data.computedIndices;
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.inputShape) this.inputShape = d.inputShape;
+        if (d.dimSelections) this.dimSelections = d.dimSelections;
+        if (d.computedIndices) this.computedIndices = d.computedIndices;
     }
 
     getPropertiesHTML() {
@@ -3177,109 +2894,23 @@ class DimSelectNode extends BaseNode {
     }
 }
 // ========== TRAIN/TEST SPLIT NODE ==========
-class TrainTestSplitNode extends BaseNode {
+class TrainTestSplitNode extends RectNode {
     constructor(id, x, y) {
-        super(id, x, y, "train-test");
-        this.width = 110;
-        this.height = 70;
+        super(id, x, y, "train-test", 110, 70);
         this.trainRatio = 0.7;
         this.testRatio = 0.3;
         this.randomSeed = 42;
-
         this.maxInputs = 1;
         this.minInputs = 1;
         this.maxOutputs = 2;
         this.minOutputs = 2;
         this.allowedOutputTypes = ["train", "test"];
-
         this.addInput();
         this.addOutput("train");
         this.addOutput("test");
     }
-    computeOutputShapes() {
-        const inputShape = this._getFirstInputShapeObj();
-        if (!inputShape)
-            return this.outputs.map(() => ({
-                shape: null,
-                dtype: "float32",
-                known: false,
-                symbolic: false,
-            }));
 
-        // Symbolic: keep batch as expression
-        const batchDim = inputShape.shape[0];
-        const trainRows =
-            typeof batchDim === "number"
-                ? Math.floor(batchDim * this.trainRatio)
-                : `0.7*${batchDim}`;
-        const testRows =
-            typeof batchDim === "number"
-                ? batchDim - trainRows
-                : `0.3*${batchDim}`;
-
-        const results = [];
-        for (let i = 0; i < this.outputs.length; i++) {
-            const rows = i === 0 ? trainRows : testRows;
-            results.push({
-                shape: [rows, ...inputShape.shape.slice(1)],
-                dtype: "float32",
-                known: true,
-                symbolic: inputShape.symbolic,
-            });
-        }
-        return results;
-    }
-    getBounds() {
-        return {
-            x: this.x - this.width / 2,
-            y: this.y - this.height / 2,
-            w: this.width,
-            h: this.height,
-        };
-    }
-
-    updatePorts() {
-        const hw = this.width / 2 + 8;
-        this.inputs.forEach((p, i) => {
-            p.x = this.x - hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.inputs.length + 1)) * (i + 1);
-        });
-        this.outputs.forEach((p, i) => {
-            p.x = this.x + hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.outputs.length + 1)) * (i + 1);
-        });
-    }
-
-    draw(ctx, selected) {
-        const color = SketchMod._getNodeColor();
-        const x = this.x - this.width / 2;
-        const y = this.y - this.height / 2;
-
-        if (selected) {
-            ctx.beginPath();
-            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
-            ctx.fillStyle = "var(--accent-glow)";
-            ctx.fill();
-        }
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, this.width, this.height, 7);
-        ctx.fillStyle = color.fill;
-        ctx.fill();
-        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
-        ctx.lineWidth = selected ? 2.5 : 1.5;
-        ctx.stroke();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 12px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
+    drawLabel(ctx) {
         ctx.fillText("Train/Test", this.x, this.y - 8);
         ctx.font = "10px Inter, sans-serif";
         ctx.fillText(
@@ -3289,21 +2920,45 @@ class TrainTestSplitNode extends BaseNode {
         );
     }
 
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        const batch = s.shape[0];
+        const trainRows =
+            typeof batch === "number"
+                ? Math.floor(batch * this.trainRatio)
+                : `0.7*${batch}`;
+        const testRows =
+            typeof batch === "number" ? batch - trainRows : `0.3*${batch}`;
+        return [
+            {
+                shape: [trainRows, ...s.shape.slice(1)],
+                dtype: "float32",
+                known: true,
+                symbolic: s.symbolic,
+            },
+            {
+                shape: [testRows, ...s.shape.slice(1)],
+                dtype: "float32",
+                known: true,
+                symbolic: s.symbolic,
+            },
+        ];
+    }
+
     toJSON() {
-        const base = super.toJSON();
         return {
-            ...base,
+            ...super.toJSON(),
             trainRatio: this.trainRatio,
             testRatio: this.testRatio,
             randomSeed: this.randomSeed,
         };
     }
-
-    fromJSON(data) {
-        super.fromJSON(data);
-        if (data.trainRatio) this.trainRatio = data.trainRatio;
-        if (data.testRatio) this.testRatio = data.testRatio;
-        if (data.randomSeed) this.randomSeed = data.randomSeed;
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.trainRatio) this.trainRatio = d.trainRatio;
+        if (d.testRatio) this.testRatio = d.testRatio;
+        if (d.randomSeed) this.randomSeed = d.randomSeed;
     }
 
     getPropertiesHTML() {
@@ -3329,90 +2984,19 @@ class TrainTestSplitNode extends BaseNode {
     }
 }
 
-// ========== NORMALIZE NODE ==========
-class NormalizeNode extends BaseNode {
+// ========== NORMALIZE ==========
+class NormalizeNode extends RectNode {
     constructor(id, x, y) {
-        super(id, x, y, "normalize");
-        this.width = 100;
-        this.height = 55;
+        super(id, x, y, "normalize", 100, 55);
         this.method = "standard";
-
         this.maxInputs = 1;
         this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
-
         this.addInput();
         this.addOutput();
     }
-    computeOutputShapes() {
-        const inputShape = this._getFirstInputShapeObj();
-        if (!inputShape)
-            return this.outputs.map(() => ({
-                shape: null,
-                dtype: "float32",
-                known: false,
-                symbolic: false,
-            }));
-
-        return this.outputs.map(() => ({
-            shape: [...inputShape.shape],
-            dtype: "float32",
-            known: true,
-            symbolic: inputShape.symbolic,
-        }));
-    }
-    getBounds() {
-        return {
-            x: this.x - this.width / 2,
-            y: this.y - this.height / 2,
-            w: this.width,
-            h: this.height,
-        };
-    }
-
-    updatePorts() {
-        const hw = this.width / 2 + 8;
-        this.inputs.forEach((p, i) => {
-            p.x = this.x - hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.inputs.length + 1)) * (i + 1);
-        });
-        this.outputs.forEach((p, i) => {
-            p.x = this.x + hw;
-            p.y =
-                this.y -
-                this.height / 2 +
-                (this.height / (this.outputs.length + 1)) * (i + 1);
-        });
-    }
-
-    draw(ctx, selected) {
-        const color = SketchMod._getNodeColor();
-        const x = this.x - this.width / 2;
-        const y = this.y - this.height / 2;
-
-        if (selected) {
-            ctx.beginPath();
-            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
-            ctx.fillStyle = "var(--accent-glow)";
-            ctx.fill();
-        }
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, this.width, this.height, 7);
-        ctx.fillStyle = color.fill;
-        ctx.fill();
-        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
-        ctx.lineWidth = selected ? 2.5 : 1.5;
-        ctx.stroke();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 11px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
+    drawLabel(ctx) {
         ctx.fillText(
             this.method === "standard" ? "Standard" : "MinMax",
             this.x,
@@ -3421,29 +3005,26 @@ class NormalizeNode extends BaseNode {
         ctx.font = "10px Inter, sans-serif";
         ctx.fillText("Normalize", this.x, this.y + 12);
     }
-
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        return this._makeShapes([...s.shape], s.symbolic, true);
+    }
     toJSON() {
-        const base = super.toJSON();
-        return { ...base, method: this.method };
+        return { ...super.toJSON(), method: this.method };
     }
-
-    fromJSON(data) {
-        super.fromJSON(data);
-        if (data.method) this.method = data.method;
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.method) this.method = d.method;
     }
-
     getPropertiesHTML() {
         return (
             this._getShapeSummaryHTML() +
             `
-            <div class="prop-group">
-                <label>Method</label>
-                <select id="prop-normalize-method" class="prop-select" onchange="SketchMod._updateNormalize(this)">
-                    <option value="standard" ${this.method === "standard" ? "selected" : ""}>Standard (Z-score)</option>
-                    <option value="minmax" ${this.method === "minmax" ? "selected" : ""}>Min-Max (0 to 1)</option>
-                </select>
-            </div>
-        `
+            <div class="prop-group"><label>Method</label><select id="prop-normalize-method" class="prop-select" onchange="SketchMod._updateNormalize(this)">
+                <option value="standard" ${this.method === "standard" ? "selected" : ""}>Standard (Z-score)</option>
+                <option value="minmax" ${this.method === "minmax" ? "selected" : ""}>Min-Max (0 to 1)</option>
+            </select></div>`
         );
     }
 }
