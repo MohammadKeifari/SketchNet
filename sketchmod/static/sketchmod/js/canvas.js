@@ -32,9 +32,15 @@ const SketchMod = {
     isSelecting: false, // True when dragging a selection box
     shiftPressed: false,
 
-    // Linking
-    isLinking: false,
-    linkStartPort: null,
+    // Linking (drag from port to port)
+    linking: {
+        active: false,
+        sourcePort: null,
+        startX: 0,
+        startY: 0,
+        mouseX: undefined,
+        mouseY: undefined,
+    },
 
     _getNodeColor() {
         const theme =
@@ -286,6 +292,7 @@ const SketchMod = {
         }
 
         // === LEFT CLICK ===
+        if (e.button !== 0) return;
 
         // Pan
         if (this.spacePressed || this.currentTool === "pan") {
@@ -296,27 +303,6 @@ const SketchMod = {
         }
 
         const hit = this._hitTest(mx, my);
-
-        // Link tool
-        if (this.currentTool === "link") {
-            if (hit && hit.port) {
-                if (!this.isLinking) {
-                    this.isLinking = true;
-                    this.linkStartPort = hit.port;
-                } else {
-                    if (hit.port !== this.linkStartPort) {
-                        this._addLink(this.linkStartPort, hit.port);
-                    }
-                    this.isLinking = false;
-                    this.linkStartPort = null;
-                }
-            } else {
-                this.isLinking = false;
-                this.linkStartPort = null;
-            }
-            this._render();
-            return;
-        }
 
         // Delete tool
         if (this.currentTool === "delete") {
@@ -335,19 +321,12 @@ const SketchMod = {
             return;
         }
 
-        // Click on port — select it (add to selection with shift)
+        // Click on port — drag to connect or click to select
         if (hit && hit.port) {
-            if (this.shiftPressed) {
-                const idx = this.selectedPorts.indexOf(hit.port);
-                if (idx >= 0) {
-                    this.selectedPorts.splice(idx, 1);
-                } else {
-                    this.selectedPorts.push(hit.port);
-                }
-            } else {
-                this.selectedPorts = [hit.port];
-            }
-            this._showPortProperties();
+            this.linking.active = true;
+            this.linking.sourcePort = hit.port;
+            this.linking.startX = mx;
+            this.linking.startY = my;
             this._render();
             return;
         }
@@ -418,8 +397,8 @@ const SketchMod = {
         this.selectedNodes = [];
         this.selectedLinks = [];
         this.selectedPorts = [];
-        this.isLinking = false;
-        this.linkStartPort = null;
+        this.linking.active = false;
+        this.linking.sourcePort = null;
         this._hideProperties();
         this._render();
 
@@ -478,14 +457,28 @@ const SketchMod = {
     },
 
     _onMouseUp(e) {
-        // Finish linking
-        if (this.isLinking && this.linkStartPort) {
-            const hit = this._hitTest(e.offsetX, e.offsetY);
-            if (hit && hit.port && hit.port !== this.linkStartPort) {
-                this._addLink(this.linkStartPort, hit.port);
+        // Handle port drag-link or select
+        if (this.linking.active && this.linking.sourcePort) {
+            const dx = e.offsetX - this.linking.startX;
+            const dy = e.offsetY - this.linking.startY;
+            const dragged = Math.sqrt(dx * dx + dy * dy) > 4;
+
+            if (dragged) {
+                // User dragged — try to connect
+                const hit = this._hitTest(e.offsetX, e.offsetY);
+                if (hit && hit.port && hit.port !== this.linking.sourcePort) {
+                    this._addLink(this.linking.sourcePort, hit.port);
+                }
+            } else {
+                // User just clicked without dragging — select the port
+                this.selectedPorts = [this.linking.sourcePort];
+                this.selectedNodes = [];
+                this.selectedLinks = [];
+                this._showPortProperties();
             }
-            this.isLinking = false;
-            this.linkStartPort = null;
+
+            this.linking.active = false;
+            this.linking.sourcePort = null;
             this._render();
         }
 
@@ -543,7 +536,6 @@ const SketchMod = {
         if (e.key === "s") this.setTool("select");
         if (e.key === "h") this.setTool("pan");
         if (e.key === "d") this.setTool("delete");
-        if (e.key === "l") this.setTool("link");
         if (e.key === "Delete") {
             this._deleteSelected();
         }
