@@ -429,6 +429,8 @@ const SketchMod = {
             this._addNode("train-test", mx, my);
         else if (this.currentTool === "normalize")
             this._addNode("normalize", mx, my);
+        else if (this.currentTool === "row-select")
+            this._addNode("row-select", mx, my);
     },
 
     _onMouseMove(e) {
@@ -640,6 +642,7 @@ const SketchMod = {
         else if (type === "train-test")
             node = new TrainTestSplitNode(id, w.x, w.y);
         else if (type === "normalize") node = new NormalizeNode(id, w.x, w.y);
+        else if (type === "row-select") node = new RowSelectNode(id, w.x, w.y);
         if (!node) return;
 
         this._saveUndoState();
@@ -1139,6 +1142,8 @@ const SketchMod = {
                     node = new TrainTestSplitNode(n.id, n.x, n.y);
                 else if (n.type === "normalize")
                     node = new NormalizeNode(n.id, n.x, n.y);
+                else if (n.type === "row-select")
+                    node = new RowSelectNode(n.id, n.x, n.y);
                 if (node) {
                     node.fromJSON(n);
                     this.nodes.push(node);
@@ -1288,6 +1293,8 @@ const SketchMod = {
                 node = new TrainTestSplitNode(n.id, n.x, n.y);
             else if (n.type === "normalize")
                 node = new NormalizeNode(n.id, n.x, n.y);
+            else if (n.type === "row-select")
+                node = new RowSelectNode(n.id, n.x, n.y);
             if (node) {
                 // Clear default ports created by constructor
                 node.inputs = [];
@@ -1415,7 +1422,7 @@ const SketchMod = {
         this._saveToSession();
     },
 
-    //=========== column parsing and fetching methods ==============
+    //=========== column and row parsing and fetching methods ==============
     _updateColumnInput(input) {
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
@@ -1497,6 +1504,40 @@ const SketchMod = {
                 }
             })
             .catch(() => {});
+    },
+    _updateRowMethod(select) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof RowSelectNode)) return;
+        this._saveUndoState();
+        node.method = select.value;
+        node.value = "";
+        node.rowCount = 0;
+        this._showProperties(node);
+        this._saveToSession();
+        this._render();
+    },
+
+    _updateRowValue(input) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof RowSelectNode)) return;
+        this._saveUndoState();
+        node.value = input.value.trim().replace(/\s+/g, "");
+        input.value = node.value;
+        node.rowCount = node._computeRowCount();
+        this._showProperties(node);
+        this._saveToSession();
+        this._render();
+    },
+
+    _updateRowSeed(input) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof RowSelectNode)) return;
+        this._saveUndoState();
+        node.randomSeed = parseInt(input.value) || 42;
+        this._saveToSession();
     },
     // ========== removing ports ==========
     _removePort(node, type) {
@@ -2198,7 +2239,204 @@ class ColumnSelectNode extends BaseNode {
     `;
     }
 }
+// ========== ROW SELECT NODE ==========
+class RowSelectNode extends BaseNode {
+    constructor(id, x, y) {
+        super(id, x, y, "row-select");
+        this.width = 100;
+        this.height = 60;
+        this.method = "first-n"; // "first-n", "random", "slice", "indices"
+        this.value = "100"; // String: "100", "0:500", "0,5,10", etc.
+        this.randomSeed = 42;
+        this.rowCount = 0; // Preview count
 
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+
+        this.addInput();
+        this.addOutput();
+    }
+
+    getBounds() {
+        return {
+            x: this.x - this.width / 2,
+            y: this.y - this.height / 2,
+            w: this.width,
+            h: this.height,
+        };
+    }
+
+    updatePorts() {
+        const hw = this.width / 2 + 8;
+        this.inputs.forEach((p, i) => {
+            p.x = this.x - hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.inputs.length + 1)) * (i + 1);
+        });
+        this.outputs.forEach((p, i) => {
+            p.x = this.x + hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (this.outputs.length + 1)) * (i + 1);
+        });
+    }
+
+    draw(ctx, selected) {
+        const color = SketchMod._getNodeColor();
+        const x = this.x - this.width / 2;
+        const y = this.y - this.height / 2;
+
+        if (selected) {
+            ctx.beginPath();
+            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
+            ctx.fillStyle = "var(--accent-glow)";
+            ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.roundRect(x, y, this.width, this.height, 7);
+        ctx.fillStyle = color.fill;
+        ctx.fill();
+        ctx.strokeStyle = selected ? "#ffffff" : color.stroke;
+        ctx.lineWidth = selected ? 2.5 : 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 11px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const label = this.rowCount > 0 ? this.rowCount + " rows" : "Rows";
+        ctx.fillText(label, this.x, this.y);
+    }
+
+    toJSON() {
+        const base = super.toJSON();
+        return {
+            ...base,
+            method: this.method,
+            value: this.value,
+            randomSeed: this.randomSeed,
+            rowCount: this.rowCount,
+        };
+    }
+
+    fromJSON(data) {
+        super.fromJSON(data);
+        if (data.method) this.method = data.method;
+        if (data.value) this.value = data.value;
+        if (data.randomSeed) this.randomSeed = data.randomSeed;
+        if (data.rowCount) this.rowCount = data.rowCount;
+    }
+
+    _computeRowCount() {
+        const v = this.value.trim();
+        if (!v) return 0;
+
+        switch (this.method) {
+            case "first-n":
+                return parseInt(v) || 0;
+            case "random":
+                return parseInt(v) || 0;
+            case "slice":
+                const parts = v.split(":");
+                if (parts.length === 2) {
+                    const start = parseInt(parts[0]) || 0;
+                    const end = parseInt(parts[1]) || 0;
+                    return Math.max(0, end - start);
+                }
+                return 0;
+            case "indices":
+                return v
+                    .split(",")
+                    .filter((s) => s.trim() && !isNaN(parseInt(s.trim())))
+                    .length;
+            default:
+                return 0;
+        }
+    }
+
+    getPropertiesHTML() {
+        const methods = [
+            { value: "first-n", label: "First N rows" },
+            { value: "random", label: "Random sample" },
+            { value: "slice", label: "Slice (start:end)" },
+            { value: "indices", label: "Specific indices" },
+        ];
+
+        return `
+            <div class="prop-group">
+                <label>Method</label>
+                <select id="prop-row-method" class="prop-select" onchange="SketchMod._updateRowMethod(this)">
+                    ${methods
+                        .map(
+                            (m) => `
+                        <option value="${m.value}" ${this.method === m.value ? "selected" : ""}>${m.label}</option>
+                    `,
+                        )
+                        .join("")}
+                </select>
+            </div>
+            <div class="prop-group">
+                <label>Value</label>
+                <input type="text" id="prop-row-value" class="prop-input" 
+                       value="${this.value}"
+                       placeholder="${this._getPlaceholder()}"
+                       onchange="SketchMod._updateRowValue(this)">
+                <p class="prop-hint">${this._getHint()}</p>
+            </div>
+            ${
+                this.method === "random"
+                    ? `
+            <div class="prop-group">
+                <label>Random Seed</label>
+                <input type="number" id="prop-row-seed" class="prop-input" value="${this.randomSeed}"
+                       onchange="SketchMod._updateRowSeed(this)">
+            </div>
+            `
+                    : ""
+            }
+            <div class="prop-group">
+                <label>Preview</label>
+                <p class="prop-hint">${this.rowCount > 0 ? `~${this.rowCount} rows` : "Enter a value"}</p>
+            </div>
+        `;
+    }
+
+    _getPlaceholder() {
+        switch (this.method) {
+            case "first-n":
+                return "100";
+            case "random":
+                return "100";
+            case "slice":
+                return "0:500";
+            case "indices":
+                return "0, 5, 10, 15";
+            default:
+                return "";
+        }
+    }
+
+    _getHint() {
+        switch (this.method) {
+            case "first-n":
+                return "Number of rows from the start";
+            case "random":
+                return "Number of rows to sample randomly";
+            case "slice":
+                return "Python slice: start:end";
+            case "indices":
+                return "Comma-separated indices";
+            default:
+                return "";
+        }
+    }
+}
 // ========== TRAIN/TEST SPLIT NODE ==========
 class TrainTestSplitNode extends BaseNode {
     constructor(id, x, y) {
