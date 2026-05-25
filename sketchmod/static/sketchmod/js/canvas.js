@@ -1489,9 +1489,10 @@ class Port {
         // Port circle
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this.type === "input" ? "#4ade80" : "#60a5fa";
+        ctx.fillStyle = this.type === "input" ? "#d4353d" : "#60a5fa";
         ctx.fill();
-        ctx.strokeStyle = "var(--bg-secondary)";
+        //ctx.strokeStyle = "var(--bg-secondary)";
+        ctx.strokeStyle = "black";
         ctx.lineWidth = 1.5;
         ctx.stroke();
     }
