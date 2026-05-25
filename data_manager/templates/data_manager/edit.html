@@ -58,13 +58,49 @@
                 </div>
                 <!-- Format -->
                 <div class="form-group">
-                    <label for="id_format">Format *</label>
-                    <select name="format" id="id_format" class="form-input" required>
-                        {% for value, label in form.format.field.choices %}
-                            <option value="{{ value }}"
-                                    {% if dataset.format == value %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
+                    <label for="id_format">Format</label>
+                    <select name="format"
+                            id="id_format"
+                            class="form-input"
+                            required
+                            onchange="showFormatHint(this)">
+                        <option value="csv">CSV</option>
+                        <option value="json">JSON</option>
+                        <option value="xlsx">Excel</option>
+                        <option value="parquet">Parquet</option>
+                        <option value="rar">Image Set (RAR)</option>
+                        <option value="zip">Image Set (ZIP)</option>
+                        <option value="other">Other</option>
                     </select>
+                    <div class="format-hint" id="formatHint" style="display: none;">
+                        <svg width="16"
+                             height="16"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="16" x2="12" y2="12" />
+                            <line x1="12" y1="8" x2="12.01" y2="8" />
+                        </svg>
+                        <div>
+                            <strong style="color: var(--text-primary);">Image Set Format</strong>
+                            <p style="margin: 4px 0 0;">Organize your images in class folders:</p>
+                            <code>
+dataset.zip
+├── class_0/
+│   ├── img_001.jpg
+│   └── img_002.jpg
+├── class_1/
+│   ├── img_001.jpg
+│   └── img_002.jpg
+└── ...
+                            </code>
+                            <p style="margin: 8px 0 0; font-size: 0.75rem;">
+                                Resulting shape: <span style="color: var(--accent); font-family: monospace;">(num_images, H, W, C)</span>
+                            </p>
+                        </div>
+                    </div>
                 </div>
                 <!-- Data Shape-->
                 <div class="form-group">

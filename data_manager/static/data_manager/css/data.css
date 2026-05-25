@@ -930,3 +930,40 @@
     display: inline-block;
     transform: translateY(-5px);
 }
+
+/* ===== FORMAT HINT ===== */
+/* ===== FORMAT HINT ===== */
+.format-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 14px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-left: 3px solid #3b82f6;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+}
+
+.format-hint svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: #3b82f6;
+}
+
+.format-hint code {
+    display: block;
+    background: var(--bg-primary);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+    color: var(--text-primary);
+    margin-top: 6px;
+    white-space: pre;
+    line-height: 1.6;
+    overflow-x: auto;
+}

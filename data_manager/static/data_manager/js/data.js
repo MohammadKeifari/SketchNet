@@ -366,3 +366,15 @@ if (coverInput && coverFileName) {
         }
     });
 }
+
+// ===== FORMAT HINT =====
+function showFormatHint(select) {
+    const hint = document.getElementById("formatHint");
+    if (!hint) return;
+    const format = select.value;
+    if (format === "rar" || format === "zip") {
+        hint.style.display = "flex";
+    } else {
+        hint.style.display = "none";
+    }
+}
