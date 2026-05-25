@@ -42,6 +42,11 @@ const SketchMod = {
         mouseY: undefined,
     },
 
+    //history
+    undoStack: [],
+    redoStack: [],
+    maxUndo: 50,
+
     _getNodeColor() {
         const theme =
             document.documentElement.getAttribute("data-theme") || "light";
@@ -219,6 +224,7 @@ const SketchMod = {
         }
 
         this._render();
+        this._saveUndoState();
     },
 
     resize() {
@@ -525,6 +531,11 @@ const SketchMod = {
             this._render();
         }
 
+        // Save undo state after node dragging finishes
+        if (this.isDraggingNode) {
+            this._saveUndoState();
+        }
+
         this.isPanning = false;
         this.isDraggingNode = false;
         this.dragOffsets = null;
@@ -562,6 +573,18 @@ const SketchMod = {
         if (e.key === "0") {
             this._zoomFit();
             e.preventDefault();
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+            e.preventDefault();
+            this._undo();
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === "z" && e.shiftKey) {
+            e.preventDefault();
+            this._redo();
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+            e.preventDefault();
+            this._redo();
         }
     },
 
@@ -607,6 +630,7 @@ const SketchMod = {
         else if (type === "normalize") node = new NormalizeNode(id, w.x, w.y);
         if (!node) return;
 
+        this._saveUndoState();
         this.nodes.push(node);
         this.ports = this._collectPorts();
         this.selectedNodes = [node];
@@ -620,6 +644,8 @@ const SketchMod = {
         this.links = this.links.filter(
             (l) => l.from.node !== node && l.to.node !== node,
         );
+
+        this._saveUndoState();
         this.nodes = this.nodes.filter((n) => n !== node);
         this.ports = this._collectPorts();
         this.selectedNodes = this.selectedNodes.filter((n) => n !== node);
@@ -631,6 +657,7 @@ const SketchMod = {
     },
 
     _deleteLink(link) {
+        this._saveUndoState();
         this.links = this.links.filter((l) => l !== link);
         this.selectedLinks = this.selectedLinks.filter((l) => l !== link);
         this._saveToSession();
@@ -671,6 +698,8 @@ const SketchMod = {
             (l) => l.from === outPort && l.to === inPort,
         );
         if (exists) return;
+
+        this._saveUndoState();
         this.links.push(new Link(outPort, inPort));
         this._saveToSession();
     },
@@ -748,6 +777,7 @@ const SketchMod = {
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
         if (!(node instanceof ColumnSelectNode)) return;
+        this._saveUndoState();
 
         if (checkbox.checked) {
             if (!node.selectedColumns.includes(checkbox.value)) {
@@ -766,6 +796,7 @@ const SketchMod = {
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
         if (!(node instanceof TrainTestSplitNode)) return;
+        this._saveUndoState();
 
         node.trainRatio = parseFloat(slider.value);
         node.testRatio = 1 - node.trainRatio;
@@ -786,6 +817,8 @@ const SketchMod = {
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
         if (!(node instanceof TrainTestSplitNode)) return;
+        this._saveUndoState();
+
         node.randomSeed = parseInt(input.value) || 42;
         this._saveToSession();
     },
@@ -794,6 +827,8 @@ const SketchMod = {
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
         if (!(node instanceof NormalizeNode)) return;
+        this._saveUndoState();
+
         node.method = select.value;
         this._saveToSession();
         this._render();
@@ -867,6 +902,7 @@ const SketchMod = {
             });
         }
 
+        this._saveUndoState();
         this.links = this.links.filter((l) => l.from !== port && l.to !== port);
         this.ports = this._collectPorts();
         node.updatePorts();
@@ -875,6 +911,7 @@ const SketchMod = {
     },
 
     _disconnectPort(port) {
+        this._saveUndoState();
         // Remove all links connected to this port
         this.links = this.links.filter((l) => l.from !== port && l.to !== port);
         this._saveToSession();
@@ -971,6 +1008,8 @@ const SketchMod = {
 
     _updatePortSubType(select) {
         if (!this._currentPortForProps) return;
+        this._saveUndoState();
+
         this._currentPortForProps.subType = select.value || null;
         this._saveToSession();
         this._render();
@@ -979,6 +1018,7 @@ const SketchMod = {
         const actSelect = document.getElementById("prop-activation");
         if (actSelect) {
             actSelect.addEventListener("change", () => {
+                this._saveUndoState();
                 node.activation = actSelect.value;
                 this._saveToSession();
             });
@@ -986,6 +1026,7 @@ const SketchMod = {
         const sizeInput = document.getElementById("prop-size");
         if (sizeInput) {
             sizeInput.addEventListener("change", () => {
+                this._saveUndoState();
                 node.numNeurons = parseInt(sizeInput.value) || 64;
                 this._saveToSession();
             });
@@ -1173,6 +1214,72 @@ const SketchMod = {
         const btn = document.querySelector(`[data-tool="${toolName}"]`);
         if (btn) btn.classList.add("active");
     },
+    // ========== history ==========
+    _saveUndoState() {
+        const state = {
+            nodes: this.nodes.map((n) => n.toJSON()),
+            links: this.links.map((l) => l.toJSON()),
+            nodeCounter: this.nodeCounter,
+        };
+        this.undoStack.push(state);
+        if (this.undoStack.length > this.maxUndo) {
+            this.undoStack.shift();
+        }
+        this.redoStack = [];
+    },
+    _undo() {
+        if (this.undoStack.length === 0) return;
+        this.redoStack.push(this._captureState());
+        this._restoreState(this.undoStack.pop());
+        this.ports = this._collectPorts();
+        this._render();
+    },
+
+    _redo() {
+        if (this.redoStack.length === 0) return;
+        this.undoStack.push(this._captureState());
+        this._restoreState(this.redoStack.pop());
+        this.ports = this._collectPorts();
+        this._render();
+    },
+
+    _captureState() {
+        return {
+            nodes: this.nodes.map((n) => n.toJSON()),
+            links: this.links.map((l) => l.toJSON()),
+            nodeCounter: this.nodeCounter,
+        };
+    },
+
+    _restoreState(state) {
+        this.nodes = [];
+        this.links = [];
+        this.nodeCounter = state.nodeCounter;
+        for (const n of state.nodes) {
+            let node;
+            if (n.type === "neuron") node = new NeuronNode(n.id, n.x, n.y);
+            else if (n.type === "layer") node = new LayerNode(n.id, n.x, n.y);
+            else if (n.type === "input-data")
+                node = new InputDataNode(n.id, n.x, n.y);
+            else if (n.type === "output") node = new OutputNode(n.id, n.x, n.y);
+            else if (n.type === "column-select")
+                node = new ColumnSelectNode(n.id, n.x, n.y);
+            else if (n.type === "train-test")
+                node = new TrainTestSplitNode(n.id, n.x, n.y);
+            else if (n.type === "normalize")
+                node = new NormalizeNode(n.id, n.x, n.y);
+            if (node) {
+                node.fromJSON(n);
+                this.nodes.push(node);
+            }
+        }
+        this.ports = this._collectPorts();
+        for (const l of state.links) {
+            const from = this.ports.find((p) => p.id === l.from);
+            const to = this.ports.find((p) => p.id === l.to);
+            if (from && to) this.links.push(new Link(from, to, l.weight));
+        }
+    },
 
     // ========== RENDER ==========
     _render() {
@@ -1255,6 +1362,7 @@ const SketchMod = {
         if (type === "input" && node.inputs.length === 0) return;
         if (type === "output" && node.outputs.length === 0) return;
 
+        this._saveUndoState();
         // Remove the last port of that type
         let port;
         if (type === "input") {
