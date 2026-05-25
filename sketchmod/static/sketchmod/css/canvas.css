@@ -491,3 +491,40 @@
 #portContextMenu {
     min-width: 170px;
 }
+.radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 5px;
+    transition: var(--transition);
+}
+
+.radio-label:hover {
+    background: var(--bg-hover);
+}
+
+.radio-label input[type="radio"] {
+    accent-color: var(--accent);
+}
+
+.prop-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(243, 156, 18, 0.1);
+    border: 1px solid rgba(243, 156, 18, 0.3);
+    border-radius: 7px;
+    font-size: 0.78rem;
+    color: #b45309;
+}

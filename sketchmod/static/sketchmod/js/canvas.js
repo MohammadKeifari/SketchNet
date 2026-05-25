@@ -582,7 +582,7 @@ const SketchMod = {
             this._zoomStep(0.8);
             e.preventDefault();
         }
-        if (e.key === "0") {
+        if ((e.ctrlKey || e.metaKey) && e.key === "0") {
             this._zoomFit();
             e.preventDefault();
         }
@@ -1379,7 +1379,125 @@ const SketchMod = {
             ctx.setLineDash([]);
         }
     },
+    //=========== toggle and manual shape for dataset ==============
+    _toggleDatasetSource(mode) {
+        document.getElementById("datasetPickerSection").style.display =
+            mode === "select" ? "block" : "none";
+        document.getElementById("manualShapeSection").style.display =
+            mode === "none" ? "block" : "none";
 
+        if (mode === "none" && this.selectedNodes.length === 1) {
+            const node = this.selectedNodes[0];
+            if (node instanceof InputDataNode) {
+                this._saveUndoState();
+                node.datasetId = null;
+                node.datasetName = null;
+                this._saveToSession();
+            }
+        }
+    },
+
+    _updateManualShape(input) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof InputDataNode)) return;
+
+        this._saveUndoState();
+        let value = input.value.trim();
+        // Auto-clean whitespace
+        value = value
+            .replace(/\s+/g, " ")
+            .replace(/\s*,\s*/g, ", ")
+            .replace(/\s*\)/g, ")")
+            .replace(/\(\s*/g, "(");
+        input.value = value;
+        node.dataShape = value || null;
+        this._saveToSession();
+    },
+
+    //=========== column parsing and fetching methods ==============
+    _updateColumnInput(input) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof ColumnSelectNode)) return;
+
+        this._saveUndoState();
+        let value = input.value.trim();
+        // Auto-clean whitespace
+        value = value.replace(/\s+/g, "");
+        input.value = value;
+
+        node.columnInput = value;
+        node.selectedColumns = this._parseColumnInput(value, node.columnCount);
+        this._updateColumnPreview(node);
+        this._saveToSession();
+        this._render();
+    },
+
+    _parseColumnInput(input, maxColumns) {
+        if (!input) return [];
+        const indices = new Set();
+        const parts = input.split(",");
+        const max = maxColumns > 0 ? maxColumns - 1 : Infinity;
+
+        for (const part of parts) {
+            const trimmed = part.trim();
+            if (!trimmed) continue;
+
+            if (trimmed.includes(":")) {
+                const [startStr, endStr] = trimmed.split(":");
+                const start = parseInt(startStr) || 0;
+                let end = parseInt(endStr);
+                if (isNaN(end)) end = maxColumns > 0 ? maxColumns : start + 1;
+                for (let i = Math.max(0, start); i <= Math.min(end, max); i++) {
+                    indices.add(i);
+                }
+            } else {
+                const idx = parseInt(trimmed);
+                if (!isNaN(idx) && idx >= 0 && idx <= max) {
+                    indices.add(idx);
+                }
+            }
+        }
+        return [...indices].sort((a, b) => a - b);
+    },
+
+    _updateColumnPreview(node) {
+        const preview = document.getElementById("columnPreview");
+        if (preview) {
+            if (node.selectedColumns.length > 0) {
+                preview.textContent =
+                    node.selectedColumns.join(", ") +
+                    ` (${node.selectedColumns.length} columns)`;
+            } else {
+                preview.textContent = "None selected";
+            }
+        }
+    },
+
+    _fetchColumnsForNode(node) {
+        if (!node.datasetId) return;
+        const url = `/data/api/${node.datasetId}/columns/`;
+        fetch(url)
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.columns && data.columns.length > 0) {
+                    node.availableColumns = data.columns;
+                    node.columnCount = data.count;
+                    if (node.selectedColumns.length === 0 && node.columnInput) {
+                        node.selectedColumns = this._parseColumnInput(
+                            node.columnInput,
+                            data.count,
+                        );
+                    }
+                    this._saveToSession();
+                    if (this.selectedNodes.includes(node)) {
+                        this._showProperties(node);
+                    }
+                }
+            })
+            .catch(() => {});
+    },
     // ========== removing ports ==========
     _removePort(node, type) {
         if (type === "input" && node.inputs.length === 0) return;
@@ -1794,31 +1912,55 @@ class InputDataNode extends BaseNode {
     getPropertiesHTML() {
         return `
         <div class="prop-group">
-            <label>Dataset</label>
-            <div class="dataset-selector" id="datasetSelector">
-                <div class="dataset-select-display" id="datasetSelectDisplay" onclick="SketchMod._toggleDatasetPicker()">
-                    <span id="selectedDatasetName">${this.datasetName || "Select a dataset..."}</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                </div>
-                <div class="dataset-picker" id="datasetPicker" style="display: none;">
-                    <div class="dataset-picker-tabs">
-                        <button class="dataset-tab active" data-section="all">All</button>
-                        <button class="dataset-tab" data-section="mine">My</button>
-                        <button class="dataset-tab" data-section="liked">Liked</button>
+            <label>Dataset Source</label>
+            <div class="radio-group">
+                <label class="radio-label"> 
+                    <input type="radio" name="dataset-source" value="none" 
+                           ${!this.datasetId ? "checked" : ""} 
+                           onchange="SketchMod._toggleDatasetSource('none')">
+                    No dataset (manual shape)
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="dataset-source" value="select" 
+                           ${this.datasetId ? "checked" : ""} 
+                           onchange="SketchMod._toggleDatasetSource('select')">
+                    Select dataset
+                </label>
+            </div>
+        </div>
+        <div id="datasetPickerSection" style="display: ${this.datasetId ? "block" : "none"};">
+            <div class="prop-group">
+                <label>Dataset</label>
+                <div class="dataset-selector" id="datasetSelector">
+                    <div class="dataset-select-display" id="datasetSelectDisplay" onclick="SketchMod._toggleDatasetPicker()">
+                        <span id="selectedDatasetName">${this.datasetName || "Select a dataset..."}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
                     </div>
-                    <input type="text" class="prop-input dataset-search" id="datasetSearch" placeholder="Search datasets...">
-                    <div class="dataset-list" id="datasetList">
-                        <div class="dataset-loading">Loading...</div>
+                    <div class="dataset-picker" id="datasetPicker" style="display: none;">
+                        <div class="dataset-picker-tabs">
+                            <button class="dataset-tab active" data-section="all">All</button>
+                            <button class="dataset-tab" data-section="mine">My</button>
+                            <button class="dataset-tab" data-section="liked">Liked</button>
+                        </div>
+                        <input type="text" class="prop-input dataset-search" id="datasetSearch" placeholder="Search datasets...">
+                        <div class="dataset-list" id="datasetList">
+                            <div class="dataset-loading">Loading...</div>
+                        </div>
                     </div>
                 </div>
             </div>
+            ${this.datasetId ? `<div class="prop-group"><label>Dataset ID</label><p class="prop-hint" style="font-family: monospace;">${this.datasetId}</p></div>` : ""}
         </div>
-        ${this.datasetId ? `<div class="prop-group"><label>Dataset ID</label><p class="prop-hint" style="font-family: monospace;">${this.datasetId}</p></div>` : ""}
-        <div class="prop-group">
-            <label>Shape</label>
-            <p class="prop-hint">${this.dataShape || "Unknown — connect a dataset first"}</p>
+        <div id="manualShapeSection" style="display: ${!this.datasetId ? "block" : "none"};">
+            <div class="prop-group">
+                <label>Shape (optional)</label>
+                <input type="text" id="prop-manual-shape" class="prop-input" 
+                       placeholder="e.g. (None, 28, 28)" 
+                       value="${this.dataShape || ""}"
+                       onchange="SketchMod._updateManualShape(this)">
+            </div>
         </div>
     `;
     }
@@ -1911,8 +2053,11 @@ class ColumnSelectNode extends BaseNode {
         super(id, x, y, "column-select");
         this.width = 100;
         this.height = 60;
-        this.selectedColumns = [];
-        this.availableColumns = [];
+        this.selectedColumns = []; // Parsed array of indices
+        this.columnInput = ""; // Raw text like "1:3, 5, 6"
+        this.availableColumns = []; // Column names from dataset
+        this.columnCount = 0; // Total columns in dataset
+        this.datasetId = null; // Connected dataset ID
 
         this.maxInputs = 1;
         this.minInputs = 1;
@@ -1986,39 +2131,71 @@ class ColumnSelectNode extends BaseNode {
         return {
             ...base,
             selectedColumns: this.selectedColumns,
+            columnInput: this.columnInput,
             availableColumns: this.availableColumns,
+            columnCount: this.columnCount,
+            datasetId: this.datasetId,
         };
     }
 
     fromJSON(data) {
         super.fromJSON(data);
         if (data.selectedColumns) this.selectedColumns = data.selectedColumns;
+        if (data.columnInput) this.columnInput = data.columnInput;
         if (data.availableColumns)
             this.availableColumns = data.availableColumns;
+        if (data.columnCount) this.columnCount = data.columnCount;
+        if (data.datasetId) this.datasetId = data.datasetId;
     }
 
     getPropertiesHTML() {
-        const colList =
-            this.availableColumns.length > 0
-                ? this.availableColumns
-                      .map(
-                          (c) => `
-                <label class="checkbox-label">
-                    <input type="checkbox" value="${c}" ${this.selectedColumns.includes(c) ? "checked" : ""}
-                           onchange="SketchMod._updateColumnSelect(this)">
-                    ${c}
-                </label>
-            `,
-                      )
-                      .join("")
-                : "<p class='prop-hint'>Connect a dataset to see columns</p>";
+        const hasDataset = this.columnCount > 0;
 
         return `
-            <div class="prop-group">
-                <label>Select Columns</label>
-                <div class="checkbox-group" id="columnCheckboxes">${colList}</div>
+        ${
+            hasDataset
+                ? `
+        <div class="prop-group">
+            <label>Columns</label>
+            <p class="prop-hint">${this.columnCount} column${this.columnCount !== 1 ? "s" : ""} available</p>
+            <div class="checkbox-group" id="columnCheckboxes" style="max-height: 120px;">
+                ${this.availableColumns
+                    .map(
+                        (name, i) => `
+                    <label class="checkbox-label">
+                        <input type="checkbox" value="${i}" 
+                               ${this.selectedColumns.includes(i) ? "checked" : ""}
+                               onchange="SketchMod._updateColumnSelect(this)">
+                        ${i}: ${name}
+                    </label>
+                `,
+                    )
+                    .join("")}
             </div>
-        `;
+        </div>
+        `
+                : ""
+        }
+        <div class="prop-group">
+            <label>Custom Selection</label>
+            <input type="text" id="prop-column-input" class="prop-input" 
+                   placeholder="e.g. 0:3, 5, 7" 
+                   value="${this.columnInput}"
+                   onchange="SketchMod._updateColumnInput(this)">
+            <p class="prop-hint">Python slice notation: <code>start:end</code>, single indices, comma-separated</p>
+        </div>
+        <div class="prop-group">
+            <label>Selected</label>
+            <p class="prop-hint" id="columnPreview">
+                ${
+                    this.selectedColumns.length > 0
+                        ? this.selectedColumns.join(", ") +
+                          ` (${this.selectedColumns.length} columns)`
+                        : "None selected"
+                }
+            </p>
+        </div>
+    `;
     }
 }
 
