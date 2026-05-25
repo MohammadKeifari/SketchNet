@@ -47,6 +47,9 @@ const SketchMod = {
     redoStack: [],
     maxUndo: 50,
 
+    //propagation
+    shapePropagationEnabled: true,
+
     _getNodeColor() {
         const theme =
             document.documentElement.getAttribute("data-theme") || "light";
@@ -269,6 +272,65 @@ const SketchMod = {
             x: wx * this.scale + this.offsetX,
             y: wy * this.scale + this.offsetY,
         };
+    },
+    //============ propagation =======
+    _propagateShapes() {
+        if (!this.shapePropagationEnabled) return;
+
+        // Clear all port shapes
+        for (const port of this.ports) {
+            port.clearShape();
+        }
+
+        // Start from InputData nodes
+        const visited = new Set();
+        const queue = [];
+
+        for (const node of this.nodes) {
+            if (node instanceof InputDataNode) {
+                queue.push(node);
+            }
+        }
+
+        // Breadth-first traversal
+        while (queue.length > 0) {
+            const node = queue.shift();
+            if (visited.has(node.id)) continue;
+            visited.add(node.id);
+
+            // Compute output shapes for this node
+            const outputShapes = node.computeOutputShapes();
+
+            // Apply shapes to output ports
+            for (let i = 0; i < node.outputs.length; i++) {
+                if (i < outputShapes.length && outputShapes[i].shape) {
+                    const s = outputShapes[i];
+                    node.outputs[i].setShape(s.shape, s.dtype, s.known);
+                }
+            }
+
+            // Propagate to downstream nodes
+            for (const outPort of node.outputs) {
+                const links = this.links.filter((l) => l.from === outPort);
+                for (const link of links) {
+                    const targetPort = link.to;
+                    const targetNode = targetPort.node;
+
+                    // Copy shape from output port to connected input port
+                    if (outPort.shape && outPort.shape.shape) {
+                        targetPort.setShape(
+                            [...outPort.shape.shape],
+                            outPort.shape.dtype,
+                            outPort.shape.known,
+                        );
+                    }
+
+                    if (!visited.has(targetNode.id)) {
+                        queue.push(targetNode);
+                    }
+                }
+            }
+        }
     },
     // ========== scroll ==========
     _onScroll(e) {
@@ -654,6 +716,7 @@ const SketchMod = {
         this.selectedNodes = [node];
         this._showProperties(node);
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 
@@ -671,6 +734,7 @@ const SketchMod = {
             this._hideProperties();
         }
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 
@@ -679,6 +743,7 @@ const SketchMod = {
         this.links = this.links.filter((l) => l !== link);
         this.selectedLinks = this.selectedLinks.filter((l) => l !== link);
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 
@@ -697,6 +762,7 @@ const SketchMod = {
         this.selectedNodes = [];
         this.selectedLinks = [];
         this._hideProperties();
+        this._propagateShapes();
         this._render();
     },
     _addLink(fromPort, toPort) {
@@ -807,6 +873,7 @@ const SketchMod = {
             );
         }
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 
@@ -828,6 +895,7 @@ const SketchMod = {
         `;
         }
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 
@@ -849,6 +917,7 @@ const SketchMod = {
 
         node.method = select.value;
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 
@@ -925,6 +994,7 @@ const SketchMod = {
         this.ports = this._collectPorts();
         node.updatePorts();
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 
@@ -933,6 +1003,7 @@ const SketchMod = {
         // Remove all links connected to this port
         this.links = this.links.filter((l) => l.from !== port && l.to !== port);
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
     // ========== PROPERTIES ==========
@@ -1051,6 +1122,8 @@ const SketchMod = {
                 this._saveUndoState();
                 node.activation = actSelect.value;
                 this._saveToSession();
+                this._propagateShapes();
+                this._render();
             });
         }
         const sizeInput = document.getElementById("prop-size");
@@ -1059,6 +1132,8 @@ const SketchMod = {
                 this._saveUndoState();
                 node.numNeurons = parseInt(sizeInput.value) || 64;
                 this._saveToSession();
+                this._propagateShapes();
+                this._render();
             });
         }
     },
@@ -1118,7 +1193,9 @@ const SketchMod = {
         ) {
             this.selectedNodes[0].datasetId = datasetId;
             this.selectedNodes[0].datasetName = datasetName;
+            this._fetchDatasetShape(this.selectedNodes[0]);
             this._showProperties(this.selectedNodes[0]);
+            this._propagateShapes();
             this._saveToSession();
         }
     },
@@ -1186,6 +1263,7 @@ const SketchMod = {
         } catch (e) {
             console.warn("Session restore failed:", e);
         }
+        this._propagateShapes();
     },
 
     // ========== SERVER ==========
@@ -1280,6 +1358,7 @@ const SketchMod = {
         this.redoStack.push(this._captureState());
         this._restoreState(this.undoStack.pop());
         this.ports = this._collectPorts();
+        this._propagateShapes();
         this._render();
     },
 
@@ -1292,6 +1371,7 @@ const SketchMod = {
         this.undoStack.push(this._captureState());
         this._restoreState(this.redoStack.pop());
         this.ports = this._collectPorts();
+        this._propagateShapes();
         this._render();
     },
 
@@ -1332,14 +1412,14 @@ const SketchMod = {
         }
         this.ports = this._collectPorts();
         // After ports are built in _loadFromSession and _restoreState:
-        for (const l of data.links) {
+        for (const l of state.links) {
             const from = this.ports.find((p) => p.id === l.from);
             const to = this.ports.find((p) => p.id === l.to);
             if (from && to) this.links.push(new Link(from, to, l.weight));
         }
 
         // Restore port shapes
-        for (const p of data.ports || []) {
+        for (const p of state.ports || []) {
             const port = this.ports.find((pp) => pp.id === p.id);
             if (port && p.shape) {
                 port.setShape(p.shape.shape, p.shape.dtype, p.shape.known);
@@ -1422,6 +1502,29 @@ const SketchMod = {
             ctx.setLineDash([]);
         }
     },
+
+    _fetchDatasetShape(node) {
+        if (!node.datasetId) return;
+        const url = `/data/api/${node.datasetId}/columns/`;
+        fetch(url)
+            .then((res) => res.json())
+            .then((data) => {
+                // If API returns shape info, use it
+                if (data.shape) {
+                    const parts = data.shape
+                        .replace(/[()]/g, "")
+                        .split(",")
+                        .map((s) => parseInt(s.trim()))
+                        .filter((n) => !isNaN(n));
+                    if (parts.length > 0) {
+                        node.dataShape = data.shape;
+                        this._propagateShapes();
+                        this._render();
+                    }
+                }
+            })
+            .catch(() => {});
+    },
     //=========== toggle and manual shape for dataset ==============
     _toggleDatasetSource(mode) {
         document.getElementById("datasetPickerSection").style.display =
@@ -1474,6 +1577,7 @@ const SketchMod = {
         node.selectedColumns = this._parseColumnInput(value, node.columnCount);
         this._updateColumnPreview(node);
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 
@@ -1551,6 +1655,7 @@ const SketchMod = {
         node.rowCount = 0;
         this._showProperties(node);
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 
@@ -1564,6 +1669,7 @@ const SketchMod = {
         node.rowCount = node._computeRowCount();
         this._showProperties(node);
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 
@@ -1587,6 +1693,7 @@ const SketchMod = {
         node.dimSelections[dim] = value;
         this._showProperties(node);
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 
@@ -1804,6 +1911,15 @@ class BaseNode {
     getPropertiesHTML() {
         return "";
     }
+    _getFirstInputShape() {
+        for (const port of this.inputs) {
+            const link = SketchMod.links.find((l) => l.to === port);
+            if (link && link.from.shape && link.from.shape.shape) {
+                return link.from.shape.shape;
+            }
+        }
+        return null;
+    }
 }
 
 class NeuronNode extends BaseNode {
@@ -1831,16 +1947,6 @@ class NeuronNode extends BaseNode {
         }));
     }
 
-    _getFirstInputShape() {
-        // Get shape from first connected input port
-        for (const port of this.inputs) {
-            const link = SketchMod.links.find((l) => l.to === port);
-            if (link && link.from.shape && link.from.shape.shape) {
-                return link.from.shape.shape;
-            }
-        }
-        return null;
-    }
     getBounds() {
         return {
             x: this.x - this.radius,
