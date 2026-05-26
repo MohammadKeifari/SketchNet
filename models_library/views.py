@@ -428,3 +428,35 @@ def edit_model(request, model_id):
         return redirect("models:view", model_id=model.model_id)
 
     return render(request, "models_library/edit.html", {"model": model})
+
+
+def download_model(request, model_id):
+    model = get_object_or_404(SketchModel, model_id=model_id)
+
+    if not model.can_view(request.user):
+        messages.error(request, "You don't have access to this model.")
+        return redirect("models:dashboard")
+
+    model.downloads += 1
+    model.save(update_fields=["downloads"])
+
+    response_data = model.graph_data
+    response_data["name"] = model.name  # ADD THIS
+
+    response = JsonResponse(response_data, json_dumps_params={"indent": 2})
+    response["Content-Disposition"] = f'attachment; filename="{model.name}.json"'
+    return response
+
+
+def api_model_data(request, model_id):
+    """Return model graph data as JSON for the canvas to load"""
+    model = get_object_or_404(SketchModel, model_id=model_id)
+
+    if not model.can_view(request.user):
+        return JsonResponse({"error": "Not allowed"}, status=403)
+
+    data = model.graph_data
+    data["name"] = model.name
+    data["model_id"] = model.model_id
+
+    return JsonResponse(data)

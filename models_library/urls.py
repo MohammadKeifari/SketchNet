@@ -29,4 +29,5 @@ urlpatterns = [
     path("liked/", views.liked_models, name="liked"),
     path("all/", views.all_models, name="all"),
     path("<str:model_id>/edit/", views.edit_model, name="edit"),
+    path("<str:model_id>/data/", views.api_model_data, name="api_data"),
 ]

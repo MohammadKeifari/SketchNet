@@ -88,6 +88,17 @@ const SketchMod = {
     init() {
         this.canvas = document.getElementById("sketchCanvas");
         this.ctx = this.canvas.getContext("2d");
+
+        // Check if loading a specific model
+        const urlParams = new URLSearchParams(window.location.search);
+        const loadModelId = urlParams.get("load");
+
+        if (loadModelId) {
+            this._loadModelFromServer(loadModelId);
+        } else {
+            this._loadFromSession();
+        }
+
         this.resize();
         window.addEventListener("resize", () => this.resize());
         this.canvas.addEventListener("mousedown", (e) => this._onMouseDown(e));
@@ -942,6 +953,25 @@ const SketchMod = {
 
         // Build HTML
         let html = "";
+        // Model info header
+        if (this._currentModelName || this._currentModelId) {
+            html += `
+        <div class="toolbar-model-info">
+            <div class="toolbar-model-name">${this._currentModelName || "Untitled"}</div>
+            ${this._currentModelId ? `<div class="toolbar-model-id" onclick="copyToClipboard('${this._currentModelId}')" title="Click to copy">${this._currentModelId}</div>` : ""}
+        </div>`;
+        }
+        // Add New Model button
+        html += `
+<div class="toolbar-section">
+    <button class="tool-btn new-model-btn" onclick="SketchMod._newModel()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span class="tool-label">New Model</span>
+    </button>
+</div>`;
         for (const [key, section] of Object.entries(sections)) {
             if (section.items.length === 0) continue;
             html += `<div class="toolbar-section">
@@ -2136,6 +2166,82 @@ const SketchMod = {
             toast.style.opacity = "0";
             setTimeout(() => toast.remove(), 300);
         }, 2000);
+    },
+    _loadModelFromServer(modelId) {
+        fetch(`/models/${modelId}/data/`)
+            .then((res) => res.json())
+            .then((data) => {
+                // Clear current graph
+                this.nodes = [];
+                this.links = [];
+                this.ports = [];
+
+                // Load nodes
+                if (data.nodes) {
+                    this.nodeCounter = data.nodeCounter || 0;
+                    for (const n of data.nodes) {
+                        const entry = this.nodeRegistry.find(
+                            (r) => r.type === n.type,
+                        );
+                        let node;
+                        if (entry) {
+                            node = new entry.class(n.id, n.x, n.y);
+                        } else if (n.type === "input-data") {
+                            node = new InputDataNode(n.id, n.x, n.y);
+                        } else if (n.type === "output") {
+                            node = new OutputNode(n.id, n.x, n.y);
+                        }
+                        if (node) {
+                            node.fromJSON(n);
+                            this.nodes.push(node);
+                        }
+                    }
+                    this.ports = this._collectPorts();
+                }
+
+                // Load links
+                if (data.links) {
+                    for (const l of data.links) {
+                        const from = this.ports.find((p) => p.id === l.from);
+                        const to = this.ports.find((p) => p.id === l.to);
+                        if (from && to) {
+                            const link = new Link(from, to, l.weight);
+                            if (l.weightShape) link.weightShape = l.weightShape;
+                            if (l.hasWeight !== undefined)
+                                link.hasWeight = l.hasWeight;
+                            this.links.push(link);
+                        }
+                    }
+                }
+
+                // Restore port shapes
+                if (data.ports) {
+                    for (const p of data.ports) {
+                        const port = this.ports.find((pp) => pp.id === p.id);
+                        if (port && p.shape) {
+                            port.setShape(
+                                p.shape.shape,
+                                p.shape.dtype,
+                                p.shape.known,
+                                p.shape.symbolic,
+                            );
+                            if (p.bias !== undefined) port.bias = p.bias;
+                        }
+                    }
+                }
+
+                // Set model ownership
+                this._currentModelId = modelId;
+                this._currentModelName = data.name || "";
+
+                this._saveToSession();
+                this._propagateShapes();
+                this._render();
+            })
+            .catch((err) => {
+                console.error("Failed to load model:", err);
+                this._loadFromSession();
+            });
     },
 };
 

@@ -285,7 +285,8 @@
                             </svg>
                             Edit Details
                         </a>
-                        <a href="{% url 'sketchmod:canvas' %}" class="btn btn-primary">
+                        <a href="{% url 'sketchmod:canvas' %}?load={{ model.model_id }}"
+                           class="btn btn-primary">
                             <svg width="16"
                                  height="16"
                                  viewBox="0 0 24 24"
