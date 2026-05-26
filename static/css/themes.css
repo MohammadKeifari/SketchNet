@@ -14,6 +14,9 @@
     --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     --font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
     --nav-height: 60px;
+    --canvas-bg: #e4e7eb;
+    --canvas-grid-small: rgba(0, 0, 0, 0.05);
+    --canvas-grid-large: rgba(0, 0, 0, 0.03);
 }
 
 /* ===== DARK ===== */
@@ -27,6 +30,9 @@
     --accent-light: #a29bfe;
     --accent-glow: rgba(124, 111, 240, 0.25);
     --border: #2a2d3a;
+    --canvas-bg: #0f1117;
+    --canvas-grid-small: rgba(255, 255, 255, 0.03);
+    --canvas-grid-large: rgba(255, 255, 255, 0.02);
 }
 
 /* ===== ROSE ===== */
@@ -40,6 +46,9 @@
     --accent-light: #d43d56;
     --accent-glow: rgba(232, 83, 108, 0.18);
     --border: #efd5da;
+    --canvas-bg: #efe5e7;
+    --canvas-grid-small: rgba(0, 0, 0, 0.04);
+    --canvas-grid-large: rgba(0, 0, 0, 0.02);
 }
 
 /* ===== DARK ROSE ===== */
@@ -53,6 +62,9 @@
     --accent-light: #ff8a9e;
     --accent-glow: rgba(240, 98, 122, 0.25);
     --border: #3a252b;
+    --canvas-bg: #1a1114;
+    --canvas-grid-small: rgba(255, 255, 255, 0.03);
+    --canvas-grid-large: rgba(255, 255, 255, 0.02);
 }
 
 /* ===== FOREST (green light) ===== */
@@ -66,6 +78,9 @@
     --accent-light: #2d6e2d;
     --accent-glow: rgba(58, 138, 58, 0.18);
     --border: #d4e4d4;
+    --canvas-bg: #e3ebe3;
+    --canvas-grid-small: rgba(0, 0, 0, 0.04);
+    --canvas-grid-large: rgba(0, 0, 0, 0.02);
 }
 
 /* ===== FOREST DARK (green dark) ===== */
@@ -79,6 +94,9 @@
     --accent-light: #66d968;
     --accent-glow: rgba(76, 175, 80, 0.25);
     --border: #263528;
+    --canvas-bg: #0f1611;
+    --canvas-grid-small: rgba(255, 255, 255, 0.03);
+    --canvas-grid-large: rgba(255, 255, 255, 0.02);
 }
 
 /* ===== HONEY (yellow light) ===== */
@@ -92,6 +110,9 @@
     --accent-light: #a67c00;
     --accent-glow: rgba(200, 150, 12, 0.18);
     --border: #ede0c0;
+    --canvas-bg: #f0ecd8;
+    --canvas-grid-small: rgba(0, 0, 0, 0.04);
+    --canvas-grid-large: rgba(0, 0, 0, 0.02);
 }
 
 /* ===== HONEY DARK (yellow dark) ===== */
@@ -105,4 +126,7 @@
     --accent-light: #ffd866;
     --accent-glow: rgba(240, 192, 64, 0.25);
     --border: #3d3520;
+    --canvas-bg: #1a1608;
+    --canvas-grid-small: rgba(255, 255, 255, 0.03);
+    --canvas-grid-large: rgba(255, 255, 255, 0.02);
 }
