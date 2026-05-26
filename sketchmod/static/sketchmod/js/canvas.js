@@ -3399,6 +3399,49 @@ class DropoutNode extends RectNode {
         );
     }
 }
+// ========== BATCHNORM NODE ==========
+class BatchNormNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "batchnorm", 100, 55);
+        this.eps = 0.001;
+        this.momentum = 0.1;
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+        this.addInput();
+        this.addOutput();
+    }
+
+    drawLabel(ctx) {
+        ctx.font = "bold 12px Inter, sans-serif";
+        ctx.fillText("BatchNorm", this.x, this.y);
+    }
+
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        return this._makeShapes([...s.shape], s.symbolic, true);
+    }
+
+    toJSON() {
+        return { ...super.toJSON(), eps: this.eps, momentum: this.momentum };
+    }
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.eps) this.eps = d.eps;
+        if (d.momentum) this.momentum = d.momentum;
+    }
+
+    getPropertiesHTML() {
+        return (
+            this._getShapeSummaryHTML() +
+            `<div class="prop-group"><label>Epsilon</label><input type="number" id="prop-eps" class="prop-input" value="${this.eps}" step="0.0001" min="0.00001" max="0.1"></div>
+            <div class="prop-group"><label>Momentum</label><input type="number" id="prop-momentum" class="prop-input" value="${this.momentum}" step="0.01" min="0" max="1"></div>
+            <p class="prop-hint">Normalizes activations across the batch. Shape unchanged.</p>`
+        );
+    }
+}
 // ========== PORT ==========
 
 class Port {
@@ -3728,6 +3771,15 @@ SketchMod.registerNode({
         <circle cx="12" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>
         <line x1="4" y1="4" x2="8" y2="8"/><line x1="10" y1="4" x2="14" y2="8"/>
         <line x1="16" y1="4" x2="20" y2="8"/></svg>`,
+});
+SketchMod.registerNode({
+    type: "batchnorm",
+    label: "BatchNorm",
+    category: "models",
+    class: BatchNormNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/>
+        <line x1="2" y1="20" x2="22" y2="20"/></svg>`,
 });
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
