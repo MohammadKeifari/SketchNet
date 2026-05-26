@@ -782,3 +782,66 @@
     display: inline-block;
     transform: translateY(-5px);
 }
+.toolbar-model-info {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+}
+
+.toolbar-model-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.toolbar-model-id {
+    font-size: 0.7rem;
+    font-family: monospace;
+    color: var(--accent);
+    cursor: pointer;
+    margin-top: 2px;
+}
+
+.toolbar-model-id:hover {
+    text-decoration: underline;
+}
+
+.new-model-btn {
+    color: var(--accent) !important;
+    border-radius: 0 !important;
+    margin-top: 8px;
+    padding-top: 12px !important;
+}
+
+.new-model-btn:hover {
+    background: var(--accent-glow) !important;
+}
+.sidebar-model-info {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+}
+
+.sidebar-model-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-model-id {
+    font-size: 0.7rem;
+    font-family: monospace;
+    color: var(--accent);
+    cursor: pointer;
+    margin-top: 2px;
+}
+
+.sidebar-model-id:hover {
+    text-decoration: underline;
+}

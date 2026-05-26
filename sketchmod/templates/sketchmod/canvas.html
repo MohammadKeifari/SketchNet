@@ -21,6 +21,16 @@
         </div>
         <!-- Right Sidebar -->
         <div class="sidebar sidebar-right" id="rightSidebar">
+            <!-- Model Info -->
+            <div class="sidebar-model-info"
+                 id="sidebarModelInfo"
+                 style="display: none">
+                <div class="sidebar-model-name" id="sidebarModelName"></div>
+                <div class="sidebar-model-id"
+                     id="sidebarModelId"
+                     onclick="copyToClipboard(this.textContent)"
+                     title="Click to copy"></div>
+            </div>
             <div class="sidebar-section">
                 <button class="sidebar-btn" id="btnSave" title="Save to database">
                     <svg width="16"
@@ -119,6 +129,25 @@
             <div class="sidebar-section" id="propertiesPanel" style="display: none;">
                 <div class="sidebar-section-title">Properties</div>
                 <div id="propertiesContent"></div>
+            </div>
+            <!-- New Model Button -->
+            <div class="sidebar-section"
+                 style="border-top: 1px solid var(--border);
+                        padding-top: 12px">
+                <button class="sidebar-btn new-model-btn"
+                        id="btnNewModel"
+                        title="Start a new model">
+                    <svg width="16"
+                         height="16"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    <span>New Model</span>
+                </button>
             </div>
         </div>
     </div>

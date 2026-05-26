@@ -187,6 +187,9 @@ const SketchMod = {
         document
             .getElementById("modalCloseBtn")
             ?.addEventListener("click", () => this.closeSaveModal());
+        document
+            .getElementById("btnNewModel")
+            ?.addEventListener("click", () => this._newModel());
         // Toolbar
         this._buildToolbar();
 
@@ -953,25 +956,6 @@ const SketchMod = {
 
         // Build HTML
         let html = "";
-        // Model info header
-        if (this._currentModelName || this._currentModelId) {
-            html += `
-        <div class="toolbar-model-info">
-            <div class="toolbar-model-name">${this._currentModelName || "Untitled"}</div>
-            ${this._currentModelId ? `<div class="toolbar-model-id" onclick="copyToClipboard('${this._currentModelId}')" title="Click to copy">${this._currentModelId}</div>` : ""}
-        </div>`;
-        }
-        // Add New Model button
-        html += `
-<div class="toolbar-section">
-    <button class="tool-btn new-model-btn" onclick="SketchMod._newModel()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-        <span class="tool-label">New Model</span>
-    </button>
-</div>`;
         for (const [key, section] of Object.entries(sections)) {
             if (section.items.length === 0) continue;
             html += `<div class="toolbar-section">
@@ -1533,6 +1517,7 @@ const SketchMod = {
         } catch (e) {
             console.warn("Session restore failed:", e);
         }
+        this._updateModelInfo();
         this._propagateShapes();
     },
 
@@ -2089,6 +2074,8 @@ const SketchMod = {
                     SketchMod._currentModelName = data.name;
                     SketchMod._saveToSession();
                     SketchMod.closeSaveModal();
+                    SketchMod._buildToolbar();
+                    SketchMod._updateModelInfo();
                     SketchMod._showToast("Model saved!");
                 } else {
                     alert(data.error || "Save failed");
@@ -2114,8 +2101,10 @@ const SketchMod = {
         document.getElementById("saveName").value =
             this._currentModelName || "";
         document.getElementById("saveDescription").value = "";
-        document.getElementById("saveCoverFileName").textContent =
-            "No file chosen";
+        const fileNameDisplay = document.getElementById("saveCoverFileName");
+        if (fileNameDisplay) {
+            fileNameDisplay.textContent = "No file chosen";
+        }
     },
 
     closeSaveModal() {
@@ -2137,6 +2126,8 @@ const SketchMod = {
             .then((res) => res.json())
             .then((data) => {
                 if (data.success) {
+                    SketchMod._buildToolbar();
+                    SketchMod._updateModelInfo();
                     SketchMod._showToast("Model updated!");
                 } else {
                     alert(data.error || "Update failed");
@@ -2235,6 +2226,8 @@ const SketchMod = {
                 this._currentModelName = data.name || "";
 
                 this._saveToSession();
+                this._buildToolbar();
+                this._updateModelInfo();
                 this._propagateShapes();
                 this._render();
             })
@@ -2242,6 +2235,46 @@ const SketchMod = {
                 console.error("Failed to load model:", err);
                 this._loadFromSession();
             });
+    },
+    _newModel() {
+        if (confirm("Start a new model? Unsaved changes will be lost.")) {
+            // Clear everything
+            this.nodes = [];
+            this.links = [];
+            this.ports = [];
+            this.nodeCounter = 0;
+            this._currentModelId = null;
+            this._currentModelName = null;
+
+            // Clear session storage
+            sessionStorage.removeItem("sketchmod-graph");
+
+            // Create fresh default nodes
+            this._createDefaultNodes();
+
+            // Rebuild toolbar to show updated info
+            this._buildToolbar();
+            this._updateModelInfo();
+
+            // Reset view
+            this.offsetX = 0;
+            this.offsetY = 0;
+            this.scale = 1;
+            this._render();
+        }
+    },
+    _updateModelInfo() {
+        const infoDiv = document.getElementById("sidebarModelInfo");
+        const nameEl = document.getElementById("sidebarModelName");
+        const idEl = document.getElementById("sidebarModelId");
+
+        if (this._currentModelName || this._currentModelId) {
+            infoDiv.style.display = "block";
+            nameEl.textContent = this._currentModelName || "Untitled";
+            idEl.textContent = this._currentModelId || "";
+        } else {
+            infoDiv.style.display = "none";
+        }
     },
 };
 
