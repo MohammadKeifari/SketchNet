@@ -1245,36 +1245,67 @@ const SketchMod = {
 
         const link = this.selectedLinks[0];
         const ws = link.weightShape;
-        const isMatrix = ws && ws.shape && ws.shape[0] > 1;
+
+        // Build shape info
+        let shapeHTML = "";
+        if (link.from.shape && link.from.shape.shape) {
+            shapeHTML += `<div class="prop-group">
+            <label>Input Shape</label>
+            <p class="prop-hint" style="font-family: monospace; font-size: 0.8rem;">
+                (${link.from.shape.shape.join(", ")})
+            </p>
+        </div>`;
+        }
+        if (link.to.shape && link.to.shape.shape) {
+            shapeHTML += `<div class="prop-group">
+            <label>Output Shape</label>
+            <p class="prop-hint" style="font-family: monospace; font-size: 0.8rem;">
+                (${link.to.shape.shape.join(", ")})
+            </p>
+        </div>`;
+        }
+
+        // Build weight section
+        let weightHTML = "";
+        if (link.hasWeight && ws && ws.shape) {
+            const isScalarLike = ws.shape[0] === 1 && ws.shape[1] === 1;
+            weightHTML = `
+            <div class="prop-group">
+                <label>Weight Shape</label>
+                <p class="prop-hint" style="font-family: monospace; color: var(--accent); font-size: 0.85rem;">
+                    ${link.weightShapeDisplay()}
+                </p>
+            </div>
+            ${
+                isScalarLike
+                    ? `
+            <div class="prop-group">
+                <label>Weight Value</label>
+                <input type="number" id="prop-link-weight" class="prop-input" 
+                       value="${link.weight}" step="0.01"
+                       onchange="SketchMod._updateLinkWeight(this)">
+            </div>
+            `
+                    : `
+            <div class="prop-group">
+                <label>Initialization</label>
+                <input type="number" id="prop-link-weight" class="prop-input" 
+                       value="${link.weight}" step="0.01"
+                       onchange="SketchMod._updateLinkWeight(this)">
+                <p class="prop-hint">Scale for random initialization</p>
+            </div>
+            `
+            }
+        `;
+        }
 
         content.innerHTML = `
         <div class="prop-group">
             <label>Link</label>
             <p class="prop-hint">${link.from.node.type} → ${link.to.node.type}</p>
         </div>
-        <div class="prop-group">
-            <label>Weight Shape</label>
-            <p class="prop-hint" style="font-family: monospace; color: var(--accent); font-size: 0.85rem;">
-                ${link.weightShapeDisplay()}
-            </p>
-        </div>
-        ${
-            isMatrix
-                ? `
-        <div class="prop-group">
-            <label>Weight Matrix</label>
-            <p class="prop-hint">Initialized as matrix of shape (${ws.shape[0]}, ${ws.shape[1]})</p>
-        </div>
-        `
-                : `
-        <div class="prop-group">
-            <label>Weight Value</label>
-            <input type="number" id="prop-link-weight" class="prop-input" 
-                   value="${link.weight}" step="0.01"
-                   onchange="SketchMod._updateLinkWeight(this)">
-        </div>
-        `
-        }
+        ${shapeHTML}
+        ${weightHTML}
         <div class="prop-group">
             <button class="prop-btn prop-btn-danger" onclick="SketchMod._deleteLink(SketchMod.selectedLinks[0])">
                 Delete Link
@@ -1433,6 +1464,7 @@ const SketchMod = {
                 if (from && to) {
                     const link = new Link(from, to, l.weight);
                     if (l.weightShape) link.weightShape = l.weightShape;
+                    if (l.hasWeight !== undefined) link.hasWeight = l.hasWeight;
                     this.links.push(link);
                 }
             }
@@ -1603,6 +1635,7 @@ const SketchMod = {
             if (from && to) {
                 const link = new Link(from, to, l.weight);
                 if (l.weightShape) link.weightShape = l.weightShape;
+                if (l.hasWeight !== undefined) link.hasWeight = l.hasWeight;
                 this.links.push(link);
             }
         }
@@ -3238,17 +3271,35 @@ class Link {
         this.from = from;
         this.to = to;
         this.weight = weight || 0;
-        this.weightShape = null; // { shape: [128, 64], dtype: "float32" }
+        this.weightShape = null;
+        this.hasWeight = false; // True for Data→Model and Model→Model connections
     }
 
     computeWeightShape() {
         const fromNode = this.from.node;
         const toNode = this.to.node;
 
-        let inFeatures = null; // Current layer features (columns)
-        let outFeatures = null; // Next layer features (rows)
+        // Determine if this connection needs a weight
+        const fromIsModel =
+            fromNode instanceof NeuronNode || fromNode instanceof LayerNode;
+        const toIsModel =
+            toNode instanceof NeuronNode || toNode instanceof LayerNode;
+        const fromIsData = !fromIsModel && !(fromNode instanceof OutputNode);
+        const toIsOutput = toNode instanceof OutputNode;
 
-        // From node's output features = current layer size = columns
+        // Only Data→Model and Model→Model have weights
+        this.hasWeight =
+            (fromIsData && toIsModel) || (fromIsModel && toIsModel);
+
+        if (!this.hasWeight) {
+            this.weightShape = null;
+            return;
+        }
+
+        let inFeatures = null; // Current layer features (columns of W)
+        let outFeatures = null; // Next layer features (rows of W)
+
+        // Input features = last dim of source node's output shape
         if (fromNode.outputs.length > 0) {
             const outPort = fromNode.outputs[0];
             if (outPort.shape && outPort.shape.shape) {
@@ -3257,17 +3308,11 @@ class Link {
             }
         }
 
-        // To node's output features = next layer size = rows
+        // Output features = target node's neuron count
         if (toNode instanceof LayerNode) {
             outFeatures = toNode.numNeurons;
         } else if (toNode instanceof NeuronNode) {
             outFeatures = 1;
-        } else if (toNode.outputs.length > 0) {
-            const outPort = toNode.outputs[0];
-            if (outPort.shape && outPort.shape.shape) {
-                outFeatures =
-                    outPort.shape.shape[outPort.shape.shape.length - 1];
-            }
         }
 
         if (inFeatures !== null && outFeatures !== null) {
@@ -3281,7 +3326,7 @@ class Link {
     }
 
     weightShapeDisplay() {
-        if (!this.weightShape) return "Unknown";
+        if (!this.weightShape) return "N/A";
         return "(" + this.weightShape.shape.join(", ") + ")";
     }
 
@@ -3337,6 +3382,7 @@ class Link {
             to: this.to.id,
             weight: this.weight,
             weightShape: this.weightShape,
+            hasWeight: this.hasWeight,
         };
     }
 }
