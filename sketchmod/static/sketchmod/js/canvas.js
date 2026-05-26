@@ -349,6 +349,19 @@ const SketchMod = {
         if (this.selectedPorts.length === 1) {
             this._showPortProperties();
         }
+        for (const link of this.links) {
+            link.computeWeightShape();
+        }
+
+        if (this.selectedNodes.length === 1) {
+            this._showProperties(this.selectedNodes[0]);
+        }
+        if (this.selectedPorts.length === 1) {
+            this._showPortProperties();
+        }
+        if (this.selectedLinks.length === 1) {
+            this._showLinkProperties();
+        }
     },
     // ========== scroll ==========
     _onScroll(e) {
@@ -472,7 +485,7 @@ const SketchMod = {
                 this.selectedLinks = [hit.link];
                 this.selectedNodes = [];
                 this.selectedPorts = [];
-                this._hideProperties();
+                this._showLinkProperties();
             }
             this._render();
             return;
@@ -1159,6 +1172,18 @@ const SketchMod = {
             </p>
         </div>
         ${
+            port.type === "input"
+                ? `
+        <div class="prop-group">
+            <label>Bias</label>
+            <input type="number" id="prop-port-bias" class="prop-input" 
+                   value="${port.bias || 0}" step="0.01"
+                   onchange="SketchMod._updatePortBias(this)">
+        </div>
+        `
+                : ""
+        }
+        ${
             port.type === "output"
                 ? `
         <div class="prop-group">
@@ -1189,7 +1214,12 @@ const SketchMod = {
 
         this._currentPortForProps = port;
     },
-
+    _updatePortBias(input) {
+        if (!this._currentPortForProps) return;
+        this._saveUndoState();
+        this._currentPortForProps.bias = parseFloat(input.value) || 0;
+        this._saveToSession();
+    },
     _updatePortSubType(select) {
         if (!this._currentPortForProps) return;
         this._saveUndoState();
@@ -1197,6 +1227,68 @@ const SketchMod = {
         this._currentPortForProps.subType = select.value || null;
         this._saveToSession();
         this._render();
+    },
+    _showLinkProperties() {
+        const panel = document.getElementById("propertiesPanel");
+        const content = document.getElementById("propertiesContent");
+        panel.style.display = "block";
+
+        if (this.selectedLinks.length === 0) {
+            panel.style.display = "none";
+            return;
+        }
+
+        if (this.selectedLinks.length > 1) {
+            content.innerHTML = `<p class='prop-hint'>${this.selectedLinks.length} links selected</p>`;
+            return;
+        }
+
+        const link = this.selectedLinks[0];
+        const ws = link.weightShape;
+        const isMatrix = ws && ws.shape && ws.shape[0] > 1;
+
+        content.innerHTML = `
+        <div class="prop-group">
+            <label>Link</label>
+            <p class="prop-hint">${link.from.node.type} → ${link.to.node.type}</p>
+        </div>
+        <div class="prop-group">
+            <label>Weight Shape</label>
+            <p class="prop-hint" style="font-family: monospace; color: var(--accent); font-size: 0.85rem;">
+                ${link.weightShapeDisplay()}
+            </p>
+        </div>
+        ${
+            isMatrix
+                ? `
+        <div class="prop-group">
+            <label>Weight Matrix</label>
+            <p class="prop-hint">Initialized as matrix of shape (${ws.shape[0]}, ${ws.shape[1]})</p>
+        </div>
+        `
+                : `
+        <div class="prop-group">
+            <label>Weight Value</label>
+            <input type="number" id="prop-link-weight" class="prop-input" 
+                   value="${link.weight}" step="0.01"
+                   onchange="SketchMod._updateLinkWeight(this)">
+        </div>
+        `
+        }
+        <div class="prop-group">
+            <button class="prop-btn prop-btn-danger" onclick="SketchMod._deleteLink(SketchMod.selectedLinks[0])">
+                Delete Link
+            </button>
+        </div>
+    `;
+    },
+
+    _updateLinkWeight(input) {
+        if (this.selectedLinks.length !== 1) return;
+        const link = this.selectedLinks[0];
+        this._saveUndoState();
+        link.weight = parseFloat(input.value) || 0;
+        this._saveToSession();
     },
     _bindPropertiesEvents(node) {
         const actSelect = document.getElementById("prop-activation");
@@ -1320,13 +1412,6 @@ const SketchMod = {
             }
             this.ports = this._collectPorts();
 
-            // After ports are built in _loadFromSession and _restoreState:
-            for (const l of data.links) {
-                const from = this.ports.find((p) => p.id === l.from);
-                const to = this.ports.find((p) => p.id === l.to);
-                if (from && to) this.links.push(new Link(from, to, l.weight));
-            }
-
             // Restore port shapes
             for (const p of data.ports || []) {
                 const port = this.ports.find((pp) => pp.id === p.id);
@@ -1337,6 +1422,18 @@ const SketchMod = {
                         p.shape.known,
                         p.shape.symbolic,
                     );
+                    if (p.bias !== undefined) port.bias = p.bias;
+                }
+            }
+
+            // Restore link weight shapes
+            for (const l of data.links) {
+                const from = this.ports.find((p) => p.id === l.from);
+                const to = this.ports.find((p) => p.id === l.to);
+                if (from && to) {
+                    const link = new Link(from, to, l.weight);
+                    if (l.weightShape) link.weightShape = l.weightShape;
+                    this.links.push(link);
                 }
             }
         } catch (e) {
@@ -1484,12 +1581,6 @@ const SketchMod = {
             }
         }
         this.ports = this._collectPorts();
-        // After ports are built in _loadFromSession and _restoreState:
-        for (const l of state.links) {
-            const from = this.ports.find((p) => p.id === l.from);
-            const to = this.ports.find((p) => p.id === l.to);
-            if (from && to) this.links.push(new Link(from, to, l.weight));
-        }
 
         // Restore port shapes
         for (const p of state.ports || []) {
@@ -1501,6 +1592,18 @@ const SketchMod = {
                     p.shape.known,
                     p.shape.symbolic,
                 );
+                if (p.bias !== undefined) port.bias = p.bias;
+            }
+        }
+
+        // After ports are built in _loadFromSession and _restoreState:
+        for (const l of state.links) {
+            const from = this.ports.find((p) => p.id === l.from);
+            const to = this.ports.find((p) => p.id === l.to);
+            if (from && to) {
+                const link = new Link(from, to, l.weight);
+                if (l.weightShape) link.weightShape = l.weightShape;
+                this.links.push(link);
             }
         }
     },
@@ -3044,6 +3147,7 @@ class Port {
 
         // Shape information
         this.shape = null; // { shape: [1000, 28, 28], dtype: "float32", known: true }
+        this.bias = 0;
     }
 
     setShape(shapeArray, dtype, known, symbolic) {
@@ -3122,6 +3226,7 @@ class Port {
             index: this.index,
             subType: this.subType,
             shape: this.shape,
+            bias: this.bias,
         };
     }
 }
@@ -3133,23 +3238,51 @@ class Link {
         this.from = from;
         this.to = to;
         this.weight = weight || 0;
+        this.weightShape = null; // { shape: [128, 64], dtype: "float32" }
     }
 
-    hitTest(px, py) {
-        const dx = this.to.x - this.from.x;
-        const dy = this.to.y - this.from.y;
-        const len2 = dx * dx + dy * dy;
-        if (len2 === 0) return false;
-        const t = Math.max(
-            0,
-            Math.min(
-                1,
-                ((px - this.from.x) * dx + (py - this.from.y) * dy) / len2,
-            ),
-        );
-        const cx = this.from.x + t * dx;
-        const cy = this.from.y + t * dy;
-        return Math.hypot(px - cx, py - cy) < 8;
+    computeWeightShape() {
+        const fromNode = this.from.node;
+        const toNode = this.to.node;
+
+        let inFeatures = null; // Current layer features (columns)
+        let outFeatures = null; // Next layer features (rows)
+
+        // From node's output features = current layer size = columns
+        if (fromNode.outputs.length > 0) {
+            const outPort = fromNode.outputs[0];
+            if (outPort.shape && outPort.shape.shape) {
+                inFeatures =
+                    outPort.shape.shape[outPort.shape.shape.length - 1];
+            }
+        }
+
+        // To node's output features = next layer size = rows
+        if (toNode instanceof LayerNode) {
+            outFeatures = toNode.numNeurons;
+        } else if (toNode instanceof NeuronNode) {
+            outFeatures = 1;
+        } else if (toNode.outputs.length > 0) {
+            const outPort = toNode.outputs[0];
+            if (outPort.shape && outPort.shape.shape) {
+                outFeatures =
+                    outPort.shape.shape[outPort.shape.shape.length - 1];
+            }
+        }
+
+        if (inFeatures !== null && outFeatures !== null) {
+            this.weightShape = {
+                shape: [outFeatures, inFeatures], // (next_layer, current_layer)
+                dtype: "float32",
+            };
+        } else {
+            this.weightShape = null;
+        }
+    }
+
+    weightShapeDisplay() {
+        if (!this.weightShape) return "Unknown";
+        return "(" + this.weightShape.shape.join(", ") + ")";
     }
 
     draw(ctx, selected) {
@@ -3160,6 +3293,7 @@ class Link {
         ctx.lineWidth = selected ? 3 : 2;
         ctx.stroke();
 
+        // Arrow head
         const angle = Math.atan2(
             this.to.y - this.from.y,
             this.to.x - this.from.x,
@@ -3180,8 +3314,30 @@ class Link {
         ctx.fill();
     }
 
+    hitTest(px, py) {
+        const dx = this.to.x - this.from.x;
+        const dy = this.to.y - this.from.y;
+        const len2 = dx * dx + dy * dy;
+        if (len2 === 0) return false;
+        const t = Math.max(
+            0,
+            Math.min(
+                1,
+                ((px - this.from.x) * dx + (py - this.from.y) * dy) / len2,
+            ),
+        );
+        const cx = this.from.x + t * dx;
+        const cy = this.from.y + t * dy;
+        return Math.hypot(px - cx, py - cy) < 8;
+    }
+
     toJSON() {
-        return { from: this.from.id, to: this.to.id, weight: this.weight };
+        return {
+            from: this.from.id,
+            to: this.to.id,
+            weight: this.weight,
+            weightShape: this.weightShape,
+        };
     }
 }
 // ========== REGISTER NODES ==========
