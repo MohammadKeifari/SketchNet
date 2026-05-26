@@ -1969,6 +1969,18 @@ const SketchMod = {
         this.ports = this._collectPorts();
         node.updatePorts();
     },
+
+    _updateDropout(slider) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof DropoutNode)) return;
+        this._saveUndoState();
+        node.rate = parseFloat(slider.value);
+        this._showProperties(node);
+        this._saveToSession();
+        this._propagateShapes();
+        this._render();
+    },
 };
 
 // ========== NODE CLASSES ==========
@@ -3342,6 +3354,51 @@ class FlattenNode extends RectNode {
         );
     }
 }
+
+// ========== DROPOUT NODE ==========
+class DropoutNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "dropout", 90, 50);
+        this.rate = 0.5;
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+        this.addInput();
+        this.addOutput();
+    }
+
+    drawLabel(ctx) {
+        ctx.font = "bold 12px Inter, sans-serif";
+        ctx.fillText("Dropout", this.x, this.y - 6);
+        ctx.font = "10px Inter, sans-serif";
+        ctx.fillText(Math.round(this.rate * 100) + "%", this.x, this.y + 10);
+    }
+
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        return this._makeShapes([...s.shape], s.symbolic, true);
+    }
+
+    toJSON() {
+        return { ...super.toJSON(), rate: this.rate };
+    }
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.rate) this.rate = d.rate;
+    }
+
+    getPropertiesHTML() {
+        return (
+            this._getShapeSummaryHTML() +
+            `<div class="prop-group"><label>Dropout Rate</label>
+            <input type="range" id="prop-dropout-rate" class="prop-range" min="0" max="0.9" step="0.05"
+                   value="${this.rate}" oninput="SketchMod._updateDropout(this)">
+            <div class="range-values"><span>${Math.round(this.rate * 100)}%</span></div></div>`
+        );
+    }
+}
 // ========== PORT ==========
 
 class Port {
@@ -3658,6 +3715,19 @@ SketchMod.registerNode({
         <rect x="3" y="3" width="18" height="18" rx="2"/>
         <line x1="8" y1="12" x2="16" y2="12"/>
         <line x1="12" y1="8" x2="12" y2="16"/></svg>`,
+});
+SketchMod.registerNode({
+    type: "dropout",
+    label: "Dropout",
+    category: "models",
+    class: DropoutNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="6" cy="6" r="2"/><circle cx="12" cy="6" r="2"/>
+        <circle cx="18" cy="6" r="2"/><circle cx="9" cy="12" r="2"/>
+        <circle cx="15" cy="12" r="2"/><circle cx="6" cy="18" r="2"/>
+        <circle cx="12" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>
+        <line x1="4" y1="4" x2="8" y2="8"/><line x1="10" y1="4" x2="14" y2="8"/>
+        <line x1="16" y1="4" x2="20" y2="8"/></svg>`,
 });
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
