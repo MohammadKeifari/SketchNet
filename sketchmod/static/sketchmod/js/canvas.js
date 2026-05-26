@@ -1342,6 +1342,16 @@ const SketchMod = {
                 this._render();
             });
         }
+        const filtersInput = document.getElementById("prop-filters");
+        if (filtersInput) {
+            filtersInput.addEventListener("change", () => {
+                this._saveUndoState();
+                node.filters = parseInt(filtersInput.value) || 32;
+                this._saveToSession();
+                this._propagateShapes();
+                this._render();
+            });
+        }
     },
     _toggleDatasetPicker() {
         const picker = document.getElementById("datasetPicker");
@@ -3199,6 +3209,96 @@ class NormalizeNode extends RectNode {
         );
     }
 }
+// ========== CONV2D NODE ==========
+class Conv2DNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "conv2d", 120, 80);
+        this.filters = 32;
+        this.kernelSize = 3;
+        this.stride = 1;
+        this.padding = 0;
+        this.activation = "relu";
+        this.hasBias = true;
+        this.bias = 0;
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+        this.addInput();
+        this.addOutput();
+    }
+
+    drawLabel(ctx) {
+        ctx.font = "bold 12px Inter, sans-serif";
+        ctx.fillText(this.filters + "", this.x, this.y - 12);
+        ctx.font = "9px Inter, sans-serif";
+        ctx.fillText("Conv2D", this.x, this.y + 2);
+        ctx.fillText(
+            this.kernelSize + "×" + this.kernelSize,
+            this.x,
+            this.y + 14,
+        );
+    }
+
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s || s.shape.length < 3) return this._emptyShapes();
+        // Input: (B, H, W, C) or (B, C, H, W)
+        // Assume channels-last: (B, H, W, C)
+        const H = s.shape[s.shape.length - 3] || 1;
+        const W = s.shape[s.shape.length - 2] || 1;
+        const H_out =
+            Math.floor((H + 2 * this.padding - this.kernelSize) / this.stride) +
+            1;
+        const W_out =
+            Math.floor((W + 2 * this.padding - this.kernelSize) / this.stride) +
+            1;
+        const shape = [...s.shape.slice(0, -3), H_out, W_out, this.filters];
+        return this._makeShapes(shape, s.symbolic, true);
+    }
+
+    toJSON() {
+        return {
+            ...super.toJSON(),
+            filters: this.filters,
+            kernelSize: this.kernelSize,
+            stride: this.stride,
+            padding: this.padding,
+            activation: this.activation,
+            bias: this.bias,
+        };
+    }
+
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.filters) this.filters = d.filters;
+        if (d.kernelSize) this.kernelSize = d.kernelSize;
+        if (d.stride) this.stride = d.stride;
+        if (d.padding) this.padding = d.padding;
+        if (d.activation) this.activation = d.activation;
+        if (d.bias !== undefined) this.bias = d.bias;
+    }
+
+    getPropertiesHTML() {
+        return (
+            this._getShapeSummaryHTML() +
+            `<div class="prop-group"><label>Filters</label><input type="number" id="prop-filters" class="prop-input" value="${this.filters}" min="1" max="2048"></div>
+            <div class="prop-group"><label>Kernel Size</label><input type="number" id="prop-kernel" class="prop-input" value="${this.kernelSize}" min="1" max="11"></div>
+            <div class="prop-group"><label>Stride</label><input type="number" id="prop-stride" class="prop-input" value="${this.stride}" min="1" max="5"></div>
+            <div class="prop-group"><label>Padding</label><input type="number" id="prop-padding" class="prop-input" value="${this.padding}" min="0" max="5"></div>
+            <div class="prop-group"><label>Activation</label><select id="prop-activation" class="prop-select">
+                <option value="relu" ${this.activation === "relu" ? "selected" : ""}>ReLU</option>
+                <option value="sigmoid" ${this.activation === "sigmoid" ? "selected" : ""}>Sigmoid</option>
+                <option value="tanh" ${this.activation === "tanh" ? "selected" : ""}>Tanh</option>
+            </select></div>
+            <div class="prop-group">
+                <label>Bias</label>
+                <input type="number" id="prop-bias" class="prop-input" value="${this.bias}" step="0.01">
+                <p class="prop-hint">Bias per filter (${this.filters},)</p>
+            </div>`
+        );
+    }
+}
 // ========== PORT ==========
 
 class Port {
@@ -3496,5 +3596,15 @@ SketchMod.registerNode({
         <rect x="7" y="13" width="10" height="4" rx="1"/></svg>`,
 });
 
+SketchMod.registerNode({
+    type: "conv2d",
+    label: "Conv2D",
+    category: "models",
+    class: Conv2DNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <rect x="6" y="6" width="12" height="12" rx="1"/>
+        <circle cx="12" cy="12" r="3"/></svg>`,
+});
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
