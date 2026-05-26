@@ -3570,13 +3570,13 @@ class ConcatenateNode extends RectNode {
 // ========== ADD NODE (SKIP CONNECTION) ==========
 class AddNode extends RectNode {
     constructor(id, x, y) {
-        super(id, x, y, "add", 80, 50);
-        this.maxInputs = Infinity;
+        super(id, x, y, "add", 90, 55);
+        this.maxInputs = 2;
         this.minInputs = 2;
         this.maxOutputs = 1;
         this.minOutputs = 1;
-        this.addInput();
-        this.addInput();
+        this.addInput("main");
+        this.addInput("skip");
         this.addOutput();
     }
 
@@ -3586,7 +3586,6 @@ class AddNode extends RectNode {
     }
 
     computeOutputShapes() {
-        // Returns the shape of the first input (all inputs must match)
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
         return this._makeShapes([...s.shape], s.symbolic, true);
@@ -3602,7 +3601,7 @@ class AddNode extends RectNode {
     getPropertiesHTML() {
         return (
             this._getShapeSummaryHTML() +
-            "<p class='prop-hint'>Element-wise addition of all inputs. All inputs must have the same shape. Used for skip/residual connections.</p>"
+            "<p class='prop-hint'>Element-wise addition of two inputs. Both inputs must have the same shape. Used for skip/residual connections.</p>"
         );
     }
 }
@@ -3677,6 +3676,8 @@ class Port {
         if (this.subType === "test") return "#4ade80";
         if (this.subType === "features") return "#ff00b7";
         if (this.subType === "labels") return "#a78bfa";
+        if (this.subType === "main") return "#660135";
+        if (this.subType === "skip") return "#8a6f04";
         if (this.type === "input") return "#ef4444";
         if (this.type === "output") return "#60a5fa";
         return "#94a3b8";
