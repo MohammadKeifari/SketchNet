@@ -53,6 +53,10 @@ const SketchMod = {
     // Node registry
     nodeRegistry: [],
 
+    //save
+    _currentModelId: null,
+    _currentModelName: null,
+
     _getNodeColor() {
         const theme =
             document.documentElement.getAttribute("data-theme") || "light";
@@ -124,7 +128,11 @@ const SketchMod = {
                 );
             }
         });
-
+        document.addEventListener("click", (e) => {
+            if (e.target.id === "saveModal") {
+                this.closeSaveModal();
+            }
+        });
         // Dataset search input
         document.addEventListener("input", (e) => {
             if (e.target.id === "datasetSearch") {
@@ -134,10 +142,17 @@ const SketchMod = {
                 this._loadDatasets(section, e.target.value);
             }
         });
+        document.addEventListener("change", (e) => {
+            if (e.target.id === "saveCoverInput") {
+                const name = e.target.files[0]?.name || "No file chosen";
+                const display = document.getElementById("saveCoverFileName");
+                if (display) display.textContent = name;
+            }
+        });
         // Sidebar buttons
         document
             .getElementById("btnSave")
-            ?.addEventListener("click", () => this._saveToServer());
+            ?.addEventListener("click", () => this.openSaveModal());
         document
             .getElementById("btnTranslate")
             ?.addEventListener("click", () => this._translate());
@@ -158,6 +173,9 @@ const SketchMod = {
         document
             .getElementById("btnZoomFit")
             ?.addEventListener("click", () => this._zoomFit());
+        document
+            .getElementById("modalCloseBtn")
+            ?.addEventListener("click", () => this.closeSaveModal());
         // Toolbar
         this._buildToolbar();
 
@@ -1542,6 +1560,8 @@ const SketchMod = {
         return {
             nodes: this.nodes.map((n) => n.toJSON()),
             links: this.links.map((l) => l.toJSON()),
+            ports: this.ports.map((p) => p.toJSON()),
+            nodeCounter: this.nodeCounter,
         };
     },
 
@@ -1990,6 +2010,100 @@ const SketchMod = {
         this._saveToSession();
         this._propagateShapes();
         this._render();
+    },
+    // ========== SAVE ==========
+    _handleSave(event) {
+        event.preventDefault();
+
+        const name = document.getElementById("saveName")?.value.trim();
+        if (!name) return;
+
+        const description =
+            document.getElementById("saveDescription")?.value.trim() || "";
+        const viewAccess =
+            document.querySelector('input[name="view_access"]:checked')
+                ?.value || "public";
+        const forkAccess =
+            document.querySelector('input[name="fork_access"]:checked')
+                ?.value || "private";
+        const coverFile = document.getElementById("saveCoverInput")?.files[0];
+        const graphData = JSON.stringify(SketchMod._getGraphData());
+
+        const formData = new FormData();
+        formData.append("name", name);
+        formData.append("description", description);
+        formData.append("view_access", viewAccess);
+        formData.append("fork_access", forkAccess);
+        formData.append("graph_data", graphData);
+        if (coverFile) formData.append("cover_image", coverFile);
+
+        const url = SketchMod._currentModelId
+            ? `/models/${SketchMod._currentModelId}/update/`
+            : "/models/save/";
+
+        fetch(url, {
+            method: "POST",
+            body: formData,
+            headers: {
+                "X-CSRFToken": SketchMod._getCsrfToken(),
+            },
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.success) {
+                    SketchMod._currentModelId = data.model_id;
+                    SketchMod._currentModelName = data.name;
+                    SketchMod._saveToSession();
+                    SketchMod.closeSaveModal();
+                    SketchMod._showToast("Model saved!");
+                } else {
+                    alert(data.error || "Save failed");
+                }
+            })
+            .catch((err) => {
+                console.error("Save failed:", err);
+                alert("Save failed. Check console.");
+            });
+    },
+    _getCsrfToken() {
+        return (
+            document.querySelector("[name=csrfmiddlewaretoken]")?.value || ""
+        );
+    },
+
+    openSaveModal() {
+        const isFirstSave = !this._currentModelId;
+        document.getElementById("saveModal").style.display = "flex";
+        document.getElementById("saveName").value =
+            this._currentModelName || "";
+        document.getElementById("saveDescription").value = "";
+        document.getElementById("saveCoverFileName").textContent =
+            "No file chosen";
+    },
+
+    closeSaveModal() {
+        document.getElementById("saveModal").style.display = "none";
+    },
+
+    _showToast(message) {
+        let toast = document.createElement("div");
+        toast.className = "toast";
+        toast.textContent = message;
+        toast.style.cssText = `
+        position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+        background: var(--accent); color: #fff; padding: 10px 24px;
+        border-radius: 20px; font-size: 0.9rem; font-weight: 600;
+        z-index: 9999; opacity: 0; transition: opacity 0.3s;
+        pointer-events: none;
+    `;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = "1";
+        }, 50);
+        setTimeout(() => {
+            toast.style.opacity = "0";
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
     },
 };
 
@@ -3979,3 +4093,21 @@ SketchMod.registerNode({
 });
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
+
+// ========== GLOBAL MODAL HELPERS ==========
+function closeSaveModal() {
+    if (SketchMod && SketchMod.closeSaveModal) {
+        SketchMod.closeSaveModal();
+    }
+}
+
+function openSaveModal() {
+    if (SketchMod && SketchMod.openSaveModal) {
+        SketchMod.openSaveModal();
+    }
+}
+function handleSave(event) {
+    event.preventDefault();
+    SketchMod._handleSave(event);
+    return false;
+}
