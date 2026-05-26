@@ -395,3 +395,36 @@ def all_models(request):
             "sort": sort,
         },
     )
+
+
+# ============== edit ==================
+@login_required
+def edit_model(request, model_id):
+    model = get_object_or_404(SketchModel, model_id=model_id)
+
+    if not model.can_edit(request.user):
+        messages.error(request, "You don't have permission to edit this model.")
+        return redirect("models:view", model_id=model_id)
+
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        description = request.POST.get("description", "").strip()
+        view_access = request.POST.get("view_access", "public")
+        fork_access = request.POST.get("fork_access", "private")
+
+        if name:
+            model.name = name
+        model.description = description
+        model.view_access = view_access
+        model.fork_access = fork_access
+
+        if request.FILES.get("cover_image"):
+            if model.cover_image:
+                model.cover_image.delete(save=False)
+            model.cover_image = request.FILES["cover_image"]
+
+        model.save()
+        messages.success(request, "Model updated.")
+        return redirect("models:view", model_id=model.model_id)
+
+    return render(request, "models_library/edit.html", {"model": model})
