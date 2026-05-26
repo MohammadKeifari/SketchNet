@@ -2274,7 +2274,7 @@ class RectNode extends BaseNode {
 
         if (selected) {
             ctx.beginPath();
-            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 8);
+            ctx.roundRect(x - 1, y - 1, this.width + 2, this.height + 2, 8);
             ctx.fillStyle = "var(--accent-glow)";
             ctx.fill();
         }
