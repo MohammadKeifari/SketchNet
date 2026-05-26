@@ -1441,6 +1441,8 @@ const SketchMod = {
             links: this.links.map((l) => l.toJSON()),
             ports: this.ports.map((p) => p.toJSON()),
             nodeCounter: this.nodeCounter,
+            modelId: this._currentModelId,
+            modelName: this._currentModelName,
         };
         sessionStorage.setItem("sketchmod-graph", JSON.stringify(data));
     },
@@ -1451,6 +1453,8 @@ const SketchMod = {
         try {
             const data = JSON.parse(raw);
             this.nodeCounter = data.nodeCounter || 0;
+            this._currentModelId = data.modelId || null;
+            this._currentModelName = data.modelName || null;
             this.nodes = [];
             this.links = [];
 
@@ -2072,7 +2076,10 @@ const SketchMod = {
     },
 
     openSaveModal() {
-        const isFirstSave = !this._currentModelId;
+        if (this._currentModelId) {
+            this._handleQuickSave();
+            return;
+        }
         document.getElementById("saveModal").style.display = "flex";
         document.getElementById("saveName").value =
             this._currentModelName || "";
@@ -2083,6 +2090,31 @@ const SketchMod = {
 
     closeSaveModal() {
         document.getElementById("saveModal").style.display = "none";
+    },
+    _handleQuickSave() {
+        const graphData = JSON.stringify(SketchMod._getGraphData());
+
+        const formData = new FormData();
+        formData.append("graph_data", graphData);
+
+        fetch(`/models/${SketchMod._currentModelId}/update/`, {
+            method: "POST",
+            body: formData,
+            headers: {
+                "X-CSRFToken": SketchMod._getCsrfToken(),
+            },
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.success) {
+                    SketchMod._showToast("Model updated!");
+                } else {
+                    alert(data.error || "Update failed");
+                }
+            })
+            .catch((err) => {
+                console.error("Update failed:", err);
+            });
     },
 
     _showToast(message) {
