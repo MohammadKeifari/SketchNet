@@ -76,12 +76,12 @@
     flex: 1;
     position: relative;
     overflow: hidden;
-    background-color: var(--bg-primary);
+    background-color: var(--canvas-bg);
     background-image:
-        linear-gradient(rgba(128, 128, 128, 0.06) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(128, 128, 128, 0.06) 1px, transparent 1px),
-        linear-gradient(rgba(128, 128, 128, 0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(128, 128, 128, 0.04) 1px, transparent 1px);
+        linear-gradient(var(--canvas-grid-small) 1px, transparent 1px),
+        linear-gradient(90deg, var(--canvas-grid-small) 1px, transparent 1px),
+        linear-gradient(var(--canvas-grid-large) 1px, transparent 1px),
+        linear-gradient(90deg, var(--canvas-grid-large) 1px, transparent 1px);
     background-size:
         20px 20px,
         20px 20px,
@@ -844,20 +844,4 @@
 
 .sidebar-model-id:hover {
     text-decoration: underline;
-}
-.canvas-wrapper {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
-    background-color: var(--canvas-bg);
-    background-image:
-        linear-gradient(var(--canvas-grid-small) 1px, transparent 1px),
-        linear-gradient(90deg, var(--canvas-grid-small) 1px, transparent 1px),
-        linear-gradient(var(--canvas-grid-large) 1px, transparent 1px),
-        linear-gradient(90deg, var(--canvas-grid-large) 1px, transparent 1px);
-    background-size:
-        20px 20px,
-        20px 20px,
-        100px 100px,
-        100px 100px;
 }
