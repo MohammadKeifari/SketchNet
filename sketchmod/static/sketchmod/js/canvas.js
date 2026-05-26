@@ -3442,6 +3442,49 @@ class BatchNormNode extends RectNode {
         );
     }
 }
+// ========== ONEHOT ENCODE NODE ==========
+class OneHotEncodeNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "onehot", 110, 55);
+        this.numClasses = 10;
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+        this.addInput();
+        this.addOutput();
+    }
+
+    drawLabel(ctx) {
+        ctx.font = "bold 11px Inter, sans-serif";
+        ctx.fillText("OneHot", this.x, this.y - 6);
+        ctx.font = "9px Inter, sans-serif";
+        ctx.fillText(this.numClasses + " classes", this.x, this.y + 10);
+    }
+
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        const shape = [...s.shape, this.numClasses];
+        return this._makeShapes(shape, s.symbolic, true);
+    }
+
+    toJSON() {
+        return { ...super.toJSON(), numClasses: this.numClasses };
+    }
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.numClasses) this.numClasses = d.numClasses;
+    }
+
+    getPropertiesHTML() {
+        return (
+            this._getShapeSummaryHTML() +
+            `<div class="prop-group"><label>Number of Classes</label><input type="number" id="prop-classes" class="prop-input" value="${this.numClasses}" min="2" max="10000"></div>
+            <p class="prop-hint">Converts integer labels to one-hot vectors. Adds a dimension.</p>`
+        );
+    }
+}
 // ========== PORT ==========
 
 class Port {
@@ -3780,6 +3823,17 @@ SketchMod.registerNode({
     icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/>
         <line x1="2" y1="20" x2="22" y2="20"/></svg>`,
+});
+SketchMod.registerNode({
+    type: "onehot",
+    label: "OneHot Encode",
+    category: "data",
+    class: OneHotEncodeNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="4" height="18" rx="1"/>
+        <rect x="10" y="3" width="4" height="18" rx="1"/>
+        <rect x="17" y="3" width="4" height="18" rx="1"/>
+        <rect x="4" y="8" width="2" height="6" fill="currentColor" opacity="0.3"/></svg>`,
 });
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
