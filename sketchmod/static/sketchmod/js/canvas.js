@@ -3485,6 +3485,82 @@ class OneHotEncodeNode extends RectNode {
         );
     }
 }
+// ========== CONCATENATE NODE ==========
+class ConcatenateNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "concat", 100, 65);
+        this.axis = -1; // -1 = last dimension, 0 = batch, 1 = first feature dim, etc.
+        this.maxInputs = Infinity;
+        this.minInputs = 2;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+        this.addInput();
+        this.addInput();
+        this.addOutput();
+    }
+
+    drawLabel(ctx) {
+        ctx.font = "bold 12px Inter, sans-serif";
+        ctx.fillText("Concat", this.x, this.y - 5);
+        ctx.font = "9px Inter, sans-serif";
+        const axisLabel = this.axis === -1 ? "last" : this.axis;
+        ctx.fillText("axis: " + axisLabel, this.x, this.y + 10);
+    }
+
+    computeOutputShapes() {
+        if (this.inputs.length < 2) return this._emptyShapes();
+
+        let totalConcatDim = 0;
+        let baseShape = null;
+        let symbolic = false;
+        let known = true;
+
+        for (const port of this.inputs) {
+            const link = SketchMod.links.find((l) => l.to === port);
+            if (!link || !link.from.shape || !link.from.shape.shape) {
+                known = false;
+                continue;
+            }
+            const shape = link.from.shape.shape;
+            if (link.from.shape.symbolic) symbolic = true;
+
+            if (!baseShape) {
+                baseShape = [...shape];
+            }
+
+            const axis = this.axis === -1 ? shape.length - 1 : this.axis;
+            totalConcatDim += shape[axis];
+        }
+
+        if (!baseShape) return this._emptyShapes();
+        const axis = this.axis === -1 ? baseShape.length - 1 : this.axis;
+        baseShape[axis] = totalConcatDim;
+        return this._makeShapes(baseShape, symbolic, known);
+    }
+
+    toJSON() {
+        return { ...super.toJSON(), axis: this.axis };
+    }
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.axis !== undefined) this.axis = d.axis;
+    }
+
+    getPropertiesHTML() {
+        return (
+            this._getShapeSummaryHTML() +
+            `<div class="prop-group"><label>Concatenate Axis</label>
+            <select id="prop-concat-axis" class="prop-select" onchange="SketchMod._updateConcatAxis(this)">
+                <option value="-1" ${this.axis === -1 ? "selected" : ""}>Last dimension</option>
+                <option value="0" ${this.axis === 0 ? "selected" : ""}>Batch (dim 0)</option>
+                <option value="1" ${this.axis === 1 ? "selected" : ""}>Dimension 1</option>
+                <option value="2" ${this.axis === 2 ? "selected" : ""}>Dimension 2</option>
+                <option value="3" ${this.axis === 3 ? "selected" : ""}>Dimension 3</option>
+            </select></div>
+            <p class="prop-hint">Joins multiple tensors along the specified axis. All other dimensions must match.</p>`
+        );
+    }
+}
 // ========== PORT ==========
 
 class Port {
@@ -3834,6 +3910,16 @@ SketchMod.registerNode({
         <rect x="10" y="3" width="4" height="18" rx="1"/>
         <rect x="17" y="3" width="4" height="18" rx="1"/>
         <rect x="4" y="8" width="2" height="6" fill="currentColor" opacity="0.3"/></svg>`,
+});
+SketchMod.registerNode({
+    type: "concat",
+    label: "Concatenate",
+    category: "data",
+    class: ConcatenateNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="6" width="8" height="4" rx="1"/>
+        <rect x="3" y="14" width="8" height="4" rx="1"/>
+        <rect x="13" y="6" width="8" height="12" rx="1"/></svg>`,
 });
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
