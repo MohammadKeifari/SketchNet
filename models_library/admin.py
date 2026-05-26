@@ -55,6 +55,12 @@ class SketchModelAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Engagement",
+            {
+                "fields": ("liked_by",),
+            },
+        ),
+        (
             "Stats",
             {
                 "fields": ("views", "downloads", "forks_count"),
