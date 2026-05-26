@@ -1981,12 +1981,12 @@ const SketchMod = {
         this._propagateShapes();
         this._render();
     },
-    _updateConcatAxis(select) {
+    _updateConcatAxis(input) {
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
         if (!(node instanceof ConcatenateNode)) return;
         this._saveUndoState();
-        node.axis = parseInt(select.value);
+        node.axis = parseInt(input.value) || -1;
         this._saveToSession();
         this._propagateShapes();
         this._render();
@@ -3560,14 +3560,10 @@ class ConcatenateNode extends RectNode {
         return (
             this._getShapeSummaryHTML() +
             `<div class="prop-group"><label>Concatenate Axis</label>
-            <select id="prop-concat-axis" class="prop-select" onchange="SketchMod._updateConcatAxis(this)">
-                <option value="-1" ${this.axis === -1 ? "selected" : ""}>Last dimension</option>
-                <option value="0" ${this.axis === 0 ? "selected" : ""}>Batch (dim 0)</option>
-                <option value="1" ${this.axis === 1 ? "selected" : ""}>Dimension 1</option>
-                <option value="2" ${this.axis === 2 ? "selected" : ""}>Dimension 2</option>
-                <option value="3" ${this.axis === 3 ? "selected" : ""}>Dimension 3</option>
-            </select></div>
-            <p class="prop-hint">Joins multiple tensors along the specified axis. All other dimensions must match.</p>`
+        <input type="number" id="prop-concat-axis" class="prop-input" value="${this.axis}" 
+               onchange="SketchMod._updateConcatAxis(this)">
+        <p class="prop-hint">-1 = last dimension, 0 = batch, 1 = first feature dim, etc.</p></div>
+        <p class="prop-hint">Joins multiple tensors along the specified axis. All other dimensions must match.</p>`
         );
     }
 }
