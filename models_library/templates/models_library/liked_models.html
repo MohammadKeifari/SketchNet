@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}
+    Liked Models - SketchNet
+{% endblock title %}
+{% block current_page %}
+    models
+{% endblock current_page %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'data_manager/css/data.css' %}">
+{% endblock extra_css %}
+{% block content %}
+    <div class="expanded-container">
+        <div class="section-header">
+            <div>
+                <h1>Liked Models</h1>
+                <p style="color: var(--text-secondary);
+                          font-size: 0.9rem;
+                          margin-top: 4px">Models you've liked</p>
+            </div>
+        </div>
+        <div class="dataset-table-wrapper">
+            <table class="dataset-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Name</th>
+                        <th>ID</th>
+                        <th>Owner</th>
+                        <th>Views</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for model in models %}
+                        <tr>
+                            <td class="td-cover">
+                                <a href="{% url 'models:view' model.model_id %}">
+                                    {% if model.cover_image %}
+                                        <img src="{{ model.cover_image.url }}" alt="Cover" class="cover-thumb">
+                                    {% else %}
+                                        <div class="cover-placeholder-small">
+                                            <svg width="20"
+                                                 height="20"
+                                                 viewBox="0 0 24 24"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="1.5"
+                                                 opacity="0.3">
+                                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                                <polyline points="21 15 16 10 5 21" />
+                                            </svg>
+                                        </div>
+                                    {% endif %}
+                                </a>
+                            </td>
+                            <td>
+                                <a href="{% url 'models:view' model.model_id %}"
+                                   class="dataset-name-link">{{ model.name }}</a>
+                            </td>
+                            <td>
+                                <span class="dataset-id"
+                                      onclick="copyToClipboard('{{ model.model_id }}')"
+                                      title="Click to copy">{{ model.model_id }}</span>
+                            </td>
+                            <td>{{ model.owner.username }}</td>
+                            <td>{{ model.views }}</td>
+                            <td class="td-actions">
+                                <a href="{% url 'models:view' model.model_id %}"
+                                   class="icon-btn"
+                                   title="View">
+                                    <svg width="15"
+                                         height="15"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                </a>
+                                <button class="icon-btn like-btn"
+                                        data-id="{{ model.model_id }}"
+                                        title="Unlike">
+                                    <svg width="15"
+                                         height="15"
+                                         viewBox="0 0 24 24"
+                                         fill="currentColor"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+                                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="empty-text">No liked models yet.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock content %}
+{% block extra_js %}
+    <script>
+function getCSRF() {
+    const cookie = document.cookie.split("; ").find(row => row.startsWith("csrftoken="));
+    return cookie ? cookie.split("=")[1] : "";
+}
+document.querySelectorAll(".like-btn").forEach(btn => {
+    btn.addEventListener("click", function () {
+        const modelId = this.dataset.id;
+        fetch(`/models/${modelId}/like/`, {
+            method: "POST",
+            headers: { "X-CSRFToken": getCSRF() },
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.liked !== undefined) {
+                    location.reload();
+                }
+            });
+    });
+});
+    </script>
+{% endblock extra_js %}
