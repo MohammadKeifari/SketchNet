@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}
+    Models - SketchNet
+{% endblock title %}
+{% block current_page %}
+    models
+{% endblock current_page %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'data_manager/css/data.css' %}">
+{% endblock extra_css %}
+{% block content %}
+    <div class="data-container">
+        <div class="data-header">
+            <h1>Models</h1>
+        </div>
+        <!-- My Models -->
+        <section class="data-section">
+            <div class="section-header">
+                <h2>My Models</h2>
+                {% if user.is_authenticated %}
+                    <a href="{% url 'models:my' %}" class="section-link">View All →</a>
+                {% endif %}
+            </div>
+            <div class="dataset-grid">
+                {% for model in my_models %}
+                    <div class="dataset-card">
+                        <a href="{% url 'models:view' model.model_id %}" class="card-cover-link">
+                            {% if model.cover_image %}
+                                <img src="{{ model.cover_image.url }}" alt="Cover" class="card-cover">
+                            {% else %}
+                                <div class="card-cover-placeholder">
+                                    <svg width="32"
+                                         height="32"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="1.5"
+                                         opacity="0.3">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                                        <circle cx="8.5" cy="8.5" r="1.5" />
+                                        <polyline points="21 15 16 10 5 21" />
+                                    </svg>
+                                </div>
+                            {% endif %}
+                        </a>
+                        <div class="card-body">
+                            <h3 class="card-title">
+                                <a href="{% url 'models:view' model.model_id %}">{{ model.name }}</a>
+                            </h3>
+                            <p class="card-id"
+                               onclick="copyToClipboard('{{ model.model_id }}')"
+                               title="Click to copy">{{ model.model_id }}</p>
+                            <div class="card-actions">
+                                <a href="{% url 'models:view' model.model_id %}"
+                                   class="icon-btn"
+                                   title="View">
+                                    <svg width="15"
+                                         height="15"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                </a>
+                                <a href="{% url 'models:download' model.model_id %}"
+                                   class="icon-btn"
+                                   title="Download">
+                                    <svg width="15"
+                                         height="15"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                        <polyline points="7 10 12 15 17 10" />
+                                        <line x1="12" y1="15" x2="12" y2="3" />
+                                    </svg>
+                                </a>
+                                <a href="{% url 'models:delete' model.model_id %}"
+                                   class="icon-btn icon-btn-danger"
+                                   title="Delete">
+                                    <svg width="15"
+                                         height="15"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6" />
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                    </svg>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="empty-text">No models yet. Create one in SketchMod!</p>
+                {% endfor %}
+            </div>
+        </section>
+        <!-- Liked Models -->
+        <section class="data-section">
+            <div class="section-header">
+                <h2>Liked Models</h2>
+                {% if user.is_authenticated %}
+                    <a href="{% url 'models:liked' %}" class="section-link">View All →</a>
+                {% endif %}
+            </div>
+            <div class="dataset-grid">
+                {% for model in liked_models %}
+                    <div class="dataset-card">
+                        <a href="{% url 'models:view' model.model_id %}" class="card-cover-link">
+                            {% if model.cover_image %}
+                                <img src="{{ model.cover_image.url }}" alt="Cover" class="card-cover">
+                            {% else %}
+                                <div class="card-cover-placeholder">
+                                    <svg width="32"
+                                         height="32"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="1.5"
+                                         opacity="0.3">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                                        <circle cx="8.5" cy="8.5" r="1.5" />
+                                        <polyline points="21 15 16 10 5 21" />
+                                    </svg>
+                                </div>
+                            {% endif %}
+                        </a>
+                        <div class="card-body">
+                            <h3 class="card-title">
+                                <a href="{% url 'models:view' model.model_id %}">{{ model.name }}</a>
+                            </h3>
+                            <p class="card-id">{{ model.owner.username }}</p>
+                            <div class="card-actions">
+                                <a href="{% url 'models:view' model.model_id %}"
+                                   class="icon-btn"
+                                   title="View">
+                                    <svg width="15"
+                                         height="15"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                </a>
+                                <button class="icon-btn like-btn" data-id="{{ model.model_id }}" title="Like">
+                                    {% if user in model.liked_by.all %}
+                                        <svg width="15"
+                                             height="15"
+                                             viewBox="0 0 24 24"
+                                             fill="currentColor"
+                                             stroke="currentColor"
+                                             stroke-width="2">
+                                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                        </svg>
+                                    {% else %}
+                                        <svg width="15"
+                                             height="15"
+                                             viewBox="0 0 24 24"
+                                             fill="none"
+                                             stroke="currentColor"
+                                             stroke-width="2">
+                                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                        </svg>
+                                    {% endif %}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="empty-text">No liked models yet.</p>
+                {% endfor %}
+            </div>
+        </section>
+        <!-- All Models -->
+        <section class="data-section">
+            <div class="section-header">
+                <h2>All Models</h2>
+                <a href="{% url 'models:all' %}" class="section-link">View All →</a>
+            </div>
+            <div class="dataset-table-wrapper">
+                <table class="dataset-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Name</th>
+                            <th>ID</th>
+                            <th>Owner</th>
+                            <th>Stats</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for model in all_models %}
+                            <tr>
+                                <td class="td-cover">
+                                    <a href="{% url 'models:view' model.model_id %}">
+                                        {% if model.cover_image %}
+                                            <img src="{{ model.cover_image.url }}" alt="Cover" class="cover-thumb">
+                                        {% else %}
+                                            <div class="cover-placeholder-small">
+                                                <svg width="20"
+                                                     height="20"
+                                                     viewBox="0 0 24 24"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="1.5"
+                                                     opacity="0.3">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                                                    <circle cx="8.5" cy="8.5" r="1.5" />
+                                                    <polyline points="21 15 16 10 5 21" />
+                                                </svg>
+                                            </div>
+                                        {% endif %}
+                                    </a>
+                                </td>
+                                <td>
+                                    <a href="{% url 'models:view' model.model_id %}"
+                                       class="dataset-name-link">{{ model.name }}</a>
+                                </td>
+                                <td>
+                                    <span class="dataset-id"
+                                          onclick="copyToClipboard('{{ model.model_id }}')"
+                                          title="Click to copy">{{ model.model_id }}</span>
+                                </td>
+                                <td>{{ model.owner.username }}</td>
+                                <td class="td-stats">
+                                    <svg width="13"
+                                         height="13"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                    {{ model.views }}
+                                </td>
+                                <td class="td-actions">
+                                    <a href="{% url 'models:view' model.model_id %}"
+                                       class="icon-btn"
+                                       title="View">
+                                        <svg width="15"
+                                             height="15"
+                                             viewBox="0 0 24 24"
+                                             fill="none"
+                                             stroke="currentColor"
+                                             stroke-width="2">
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                            <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                    </a>
+                                    {% if user.is_authenticated %}
+                                        <button class="icon-btn like-btn" data-id="{{ model.model_id }}" title="Like">
+                                            {% if user in model.liked_by.all %}
+                                                <svg width="15"
+                                                     height="15"
+                                                     viewBox="0 0 24 24"
+                                                     fill="currentColor"
+                                                     stroke="currentColor"
+                                                     stroke-width="2">
+                                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                                </svg>
+                                            {% else %}
+                                                <svg width="15"
+                                                     height="15"
+                                                     viewBox="0 0 24 24"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="2">
+                                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                                </svg>
+                                            {% endif %}
+                                        </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="empty-text">No models available.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+{% endblock content %}
