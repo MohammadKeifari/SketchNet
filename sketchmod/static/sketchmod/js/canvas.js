@@ -3299,6 +3299,49 @@ class Conv2DNode extends RectNode {
         );
     }
 }
+// ========== FLATTEN NODE ==========
+class FlattenNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "flatten", 90, 50);
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+        this.addInput();
+        this.addOutput();
+    }
+
+    drawLabel(ctx) {
+        ctx.font = "bold 12px Inter, sans-serif";
+        ctx.fillText("Flatten", this.x, this.y);
+    }
+
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        // Keep batch dim, flatten the rest
+        const flattened = s.shape.slice(1).reduce((a, b) => {
+            if (typeof a === "number" && typeof b === "number") return a * b;
+            return `${a}*${b}`;
+        }, 1);
+        const shape = [s.shape[0], flattened];
+        return this._makeShapes(shape, s.symbolic, true);
+    }
+
+    toJSON() {
+        return super.toJSON();
+    }
+    fromJSON(d) {
+        super.fromJSON(d);
+    }
+
+    getPropertiesHTML() {
+        return (
+            this._getShapeSummaryHTML() +
+            "<p class='prop-hint'>Flattens all dimensions except batch into a single feature vector.</p>"
+        );
+    }
+}
 // ========== PORT ==========
 
 class Port {
@@ -3605,6 +3648,16 @@ SketchMod.registerNode({
         <rect x="3" y="3" width="18" height="18" rx="2"/>
         <rect x="6" y="6" width="12" height="12" rx="1"/>
         <circle cx="12" cy="12" r="3"/></svg>`,
+});
+SketchMod.registerNode({
+    type: "flatten",
+    label: "Flatten",
+    category: "models",
+    class: FlattenNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <line x1="8" y1="12" x2="16" y2="12"/>
+        <line x1="12" y1="8" x2="12" y2="16"/></svg>`,
 });
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
