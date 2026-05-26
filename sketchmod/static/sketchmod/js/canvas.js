@@ -1979,6 +1979,9 @@ class BaseNode {
         this.minOutputs = 0;
         this.allowedInputTypes = null; // null = any, ["features"] = only features
         this.allowedOutputTypes = null; // null = any, ["train", "test"] = only train or test
+
+        this.bias = 0;
+        this.hasBias = false;
     }
 
     computeOutputShapes() {
@@ -2082,6 +2085,8 @@ class BaseNode {
             numOutputs: this.outputs.length,
             activation: this.activation,
             numNeurons: this.numNeurons,
+            bias: this.bias,
+            hasBias: this.hasBias,
         };
     }
 
@@ -2120,6 +2125,8 @@ class BaseNode {
         }
         if (data.activation) this.activation = data.activation;
         if (data.numNeurons) this.numNeurons = data.numNeurons;
+        if (data.bias !== undefined) this.bias = data.bias;
+        if (data.hasBias !== undefined) this.hasBias = data.hasBias;
         this.updatePorts();
     }
 
@@ -2190,6 +2197,15 @@ class BaseNode {
         }
 
         return html;
+    }
+
+    _updateNodeBias(input) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!node.hasBias) return;
+        this._saveUndoState();
+        node.bias = parseFloat(input.value) || 0;
+        this._saveToSession();
     }
 }
 
@@ -2341,6 +2357,8 @@ class NeuronNode extends CircleNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
+        this.hasBias = true;
+        this.bias = 0;
     }
     drawLabel(ctx) {
         ctx.fillText("N", this.x, this.y);
@@ -2351,7 +2369,16 @@ class NeuronNode extends CircleNode {
         return this._makeShapes([s.shape[0], 1], s.symbolic);
     }
     getPropertiesHTML() {
-        return this._getShapeSummaryHTML() + this._activationSelect();
+        return (
+            this._getShapeSummaryHTML() +
+            this._activationSelect() +
+            `<div class="prop-group">
+            <label>Bias</label>
+            <input type="number" id="prop-bias" class="prop-input" value="${this.bias}" step="0.01"
+                   onchange="SketchMod._updateNodeBias(this)">
+            <p class="prop-hint">Bias value (scalar)</p>
+        </div>`
+        );
     }
     _activationSelect() {
         return `<div class="prop-group"><label>Activation</label><select id="prop-activation" class="prop-select">
@@ -2374,6 +2401,8 @@ class LayerNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
+        this.hasBias = true;
+        this.bias = 0;
     }
     drawLabel(ctx) {
         ctx.fillText(this.numNeurons + "", this.x, this.y - 9);
@@ -2388,9 +2417,15 @@ class LayerNode extends RectNode {
     getPropertiesHTML() {
         return (
             this._getShapeSummaryHTML() +
-            `
+            `${this._activationSelect()}
             <div class="prop-group"><label>Neurons</label><input type="number" id="prop-size" class="prop-input" value="${this.numNeurons}" min="1" max="4096"></div>
-            ${this._activationSelect()}`
+        <div class="prop-group">
+            <label>Bias Initializer</label>
+            <input type="number" id="prop-bias" class="prop-input" value="${this.bias}" step="0.01"
+                   onchange="SketchMod._updateNodeBias(this)">
+            <p class="prop-hint">Initial value for bias vector (${this.numNeurons},)</p>
+        </div>
+        `
         );
     }
     _activationSelect() {
@@ -3180,7 +3215,6 @@ class Port {
 
         // Shape information
         this.shape = null; // { shape: [1000, 28, 28], dtype: "float32", known: true }
-        this.bias = 0;
     }
 
     setShape(shapeArray, dtype, known, symbolic) {
