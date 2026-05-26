@@ -6,6 +6,8 @@ from django.db.models import Q, Count
 from django.contrib.auth import get_user_model
 from .models import SketchModel, ModelAccess
 
+import json
+
 User = get_user_model()
 
 
