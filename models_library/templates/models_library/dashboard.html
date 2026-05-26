@@ -66,6 +66,22 @@
                                     </svg>
                                 </a>
                                 {% if user == model.owner %}
+                                    <a href="{% url 'sketchmod:canvas' %}?load={{ model.model_id }}"
+                                       class="icon-btn"
+                                       title="Edit Graph">
+                                        <svg width="15"
+                                             height="15"
+                                             viewBox="0 0 24 24"
+                                             fill="none"
+                                             stroke="currentColor"
+                                             stroke-width="2">
+                                            <polyline points="16 18 22 12 16 6" />
+                                            <polyline points="8 6 2 12 8 18" />
+                                            <line x1="12" y1="2" x2="12" y2="22" />
+                                        </svg>
+                                    </a>
+                                {% endif %}
+                                {% if user == model.owner %}
                                     <a href="{% url 'sketchmod:canvas' %}" class="icon-btn" title="Edit">
                                         <svg width="15"
                                              height="15"
@@ -372,6 +388,22 @@
                                             <circle cx="12" cy="12" r="3" />
                                         </svg>
                                     </a>
+                                    {% if user == model.owner %}
+                                        <a href="{% url 'sketchmod:canvas' %}?load={{ model.model_id }}"
+                                           class="icon-btn"
+                                           title="Edit Graph">
+                                            <svg width="15"
+                                                 height="15"
+                                                 viewBox="0 0 24 24"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="2">
+                                                <polyline points="16 18 22 12 16 6" />
+                                                <polyline points="8 6 2 12 8 18" />
+                                                <line x1="12" y1="2" x2="12" y2="22" />
+                                            </svg>
+                                        </a>
+                                    {% endif %}
                                     {% if model.fork_access == "public" or user == model.owner %}
                                         <a href="{% url 'models:fork' model.model_id %}"
                                            class="icon-btn"
