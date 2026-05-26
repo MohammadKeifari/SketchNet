@@ -1981,6 +1981,16 @@ const SketchMod = {
         this._propagateShapes();
         this._render();
     },
+    _updateConcatAxis(select) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof ConcatenateNode)) return;
+        this._saveUndoState();
+        node.axis = parseInt(select.value);
+        this._saveToSession();
+        this._propagateShapes();
+        this._render();
+    },
 };
 
 // ========== NODE CLASSES ==========
@@ -3561,6 +3571,45 @@ class ConcatenateNode extends RectNode {
         );
     }
 }
+// ========== ADD NODE (SKIP CONNECTION) ==========
+class AddNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "add", 80, 50);
+        this.maxInputs = Infinity;
+        this.minInputs = 2;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+        this.addInput();
+        this.addInput();
+        this.addOutput();
+    }
+
+    drawLabel(ctx) {
+        ctx.font = "bold 14px Inter, sans-serif";
+        ctx.fillText("+", this.x, this.y);
+    }
+
+    computeOutputShapes() {
+        // Returns the shape of the first input (all inputs must match)
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        return this._makeShapes([...s.shape], s.symbolic, true);
+    }
+
+    toJSON() {
+        return super.toJSON();
+    }
+    fromJSON(d) {
+        super.fromJSON(d);
+    }
+
+    getPropertiesHTML() {
+        return (
+            this._getShapeSummaryHTML() +
+            "<p class='prop-hint'>Element-wise addition of all inputs. All inputs must have the same shape. Used for skip/residual connections.</p>"
+        );
+    }
+}
 // ========== PORT ==========
 
 class Port {
@@ -3920,6 +3969,16 @@ SketchMod.registerNode({
         <rect x="3" y="6" width="8" height="4" rx="1"/>
         <rect x="3" y="14" width="8" height="4" rx="1"/>
         <rect x="13" y="6" width="8" height="12" rx="1"/></svg>`,
+});
+SketchMod.registerNode({
+    type: "add",
+    label: "Add (Skip)",
+    category: "models",
+    class: AddNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="16"/>
+        <line x1="8" y1="12" x2="16" y2="12"/></svg>`,
 });
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
