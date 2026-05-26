@@ -167,16 +167,20 @@ class SketchModelTests(TestCase):
         self.assertFalse(model.can_delete(self.other))
 
     def test_fork_increments_counter(self):
-        """Forking via the view increments forks_count"""
-
         original = SketchModel.objects.create(
             name="Original",
             graph_data={},
             owner=self.user,
             fork_access="public",
         )
-        self.client.login(username="other", password="pass")
-        self.client.get(reverse("models:fork", kwargs={"model_id": original.model_id}))
+
+        logged_in = self.client.login(username="otheruser", password="testpass123")
+        self.assertTrue(logged_in, "Login failed")
+
+        url = reverse("models:fork", kwargs={"model_id": original.model_id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+
         original.refresh_from_db()
         self.assertEqual(original.forks_count, 1)
 

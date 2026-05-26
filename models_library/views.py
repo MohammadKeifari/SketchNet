@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.db.models import Q, Count
 from django.contrib.auth import get_user_model
 from .models import SketchModel, ModelAccess
-
+from django.db.models import F
 import json
 
 User = get_user_model()
@@ -157,8 +157,10 @@ def fork_model(request, model_id):
         forked_from=original,
     )
 
-    original.forks_count += 1
+    original.forks_count = F("forks_count") + 1
     original.save(update_fields=["forks_count"])
+    original.refresh_from_db()
+    print(f"VIEW DEBUG after save: forks_count = {original.forks_count}")
 
     messages.success(request, f"Model forked successfully as '{forked.name}'.")
     return redirect("models:view", model_id=forked.model_id)
