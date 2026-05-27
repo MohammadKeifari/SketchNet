@@ -249,6 +249,38 @@ const SketchMod = {
                         node.updatePorts();
                     }
                 }
+                if (action === "add-param-input") {
+                    this._saveUndoState();
+                    const port = node.addParamInput();
+                    if (port) this.ports = this._collectPorts();
+                }
+                if (action === "add-param-output") {
+                    this._saveUndoState();
+                    const port = node.addParamOutput();
+                    if (port) this.ports = this._collectPorts();
+                }
+                if (action === "remove-param-input") {
+                    this._saveUndoState();
+                    const port = node.removeParamInput();
+                    if (port) {
+                        this.links = this.links.filter(
+                            (l) => l.from !== port && l.to !== port,
+                        );
+                        this.ports = this._collectPorts();
+                        node.updatePorts();
+                    }
+                }
+                if (action === "remove-param-output") {
+                    this._saveUndoState();
+                    const port = node.removeParamOutput();
+                    if (port) {
+                        this.links = this.links.filter(
+                            (l) => l.from !== port && l.to !== port,
+                        );
+                        this.ports = this._collectPorts();
+                        node.updatePorts();
+                    }
+                }
                 if (action === "delete-node") {
                     this._saveUndoState();
                     this._deleteNode(node);
@@ -862,7 +894,12 @@ const SketchMod = {
     _collectPorts() {
         const all = [];
         for (const node of this.nodes) {
-            all.push(...node.inputs, ...node.outputs);
+            all.push(
+                ...node.inputs,
+                ...node.outputs,
+                ...node.paramInputs,
+                ...node.paramOutputs,
+            );
         }
         return all;
     },
@@ -1080,12 +1117,34 @@ const SketchMod = {
         const removeOutput = menu.querySelector(
             '[data-action="remove-output"]',
         );
+        const addParamInput = menu.querySelector(
+            '[data-action="add-param-input"]',
+        );
+        const addParamOutput = menu.querySelector(
+            '[data-action="add-param-output"]',
+        );
+        const removeParamInput = menu.querySelector(
+            '[data-action="remove-param-input"]',
+        );
+        const removeParamOutput = menu.querySelector(
+            '[data-action="remove-param-output"]',
+        );
         const deleteItem = menu.querySelector('[data-action="delete-node"]');
 
         addInput.style.display = node.canAddInput() ? "flex" : "none";
         addOutput.style.display = node.canAddOutput() ? "flex" : "none";
         removeInput.style.display = node.canRemoveInput() ? "flex" : "none";
         removeOutput.style.display = node.canRemoveOutput() ? "flex" : "none";
+        addParamInput.style.display = node.canAddParamInput() ? "flex" : "none";
+        addParamOutput.style.display = node.canAddParamOutput()
+            ? "flex"
+            : "none";
+        removeParamInput.style.display = node.canRemoveParamInput()
+            ? "flex"
+            : "none";
+        removeParamOutput.style.display = node.canRemoveParamOutput()
+            ? "flex"
+            : "none";
 
         // Can't delete input/output nodes
         if (node instanceof InputDataNode || node instanceof OutputNode) {
@@ -1554,7 +1613,7 @@ const SketchMod = {
             data.links.length,
             "links",
         );
-        // TODO: POST to API
+        // TODO: POST to API*
     },
 
     _translate() {
@@ -2311,6 +2370,9 @@ class BaseNode {
         this.type = type;
         this.inputs = [];
         this.outputs = [];
+        this.paramInputs = [];
+        this.paramOutputs = [];
+        this.fitted = false;
 
         // Constraints — override in subclasses
         this.maxInputs = Infinity;
@@ -2319,7 +2381,10 @@ class BaseNode {
         this.minOutputs = 0;
         this.allowedInputTypes = null; // null = any, ["features"] = only features
         this.allowedOutputTypes = null; // null = any, ["train", "test"] = only train or test
-
+        this.maxParamInputs = 0;
+        this.minParamInputs = 0;
+        this.maxParamOutputs = 0;
+        this.minParamOutputs = 0;
         this.bias = 0;
         this.hasBias = false;
     }
@@ -2358,6 +2423,59 @@ class BaseNode {
             return false;
         return true;
     }
+    addParamInput() {
+        if (this.paramInputs.length >= this.maxParamInputs) return null;
+        const p = new Port(
+            this,
+            "input",
+            this.paramInputs.length,
+            null,
+            "param",
+        );
+        this.paramInputs.push(p);
+        this.updatePorts();
+        return p;
+    }
+
+    addParamOutput() {
+        if (this.paramOutputs.length >= this.maxParamOutputs) return null;
+        const p = new Port(
+            this,
+            "output",
+            this.paramOutputs.length,
+            null,
+            "param",
+        );
+        this.paramOutputs.push(p);
+        this.updatePorts();
+        return p;
+    }
+    removeParamInput() {
+        if (!this.canRemoveParamInput()) return null;
+        const port = this.paramInputs.pop();
+        return port;
+    }
+
+    removeParamOutput() {
+        if (!this.canRemoveParamOutput()) return null;
+        const port = this.paramOutputs.pop();
+        return port;
+    }
+    canAddParamInput() {
+        return this.paramInputs.length < this.maxParamInputs;
+    }
+
+    canAddParamOutput() {
+        return this.paramOutputs.length < this.maxParamOutputs;
+    }
+
+    canRemoveParamInput() {
+        return this.paramInputs.length > this.minParamInputs;
+    }
+
+    canRemoveParamOutput() {
+        return this.paramOutputs.length > this.minParamOutputs;
+    }
 
     canRemoveInput() {
         return this.inputs.length > this.minInputs;
@@ -2369,7 +2487,13 @@ class BaseNode {
 
     addInput(subType) {
         if (!this.canAddInput(subType)) return null;
-        const p = new Port(this, "input", this.inputs.length, subType || null);
+        const p = new Port(
+            this,
+            "input",
+            this.inputs.length,
+            subType || null,
+            "data",
+        );
         this.inputs.push(p);
         this.updatePorts();
         return p;
@@ -2382,6 +2506,7 @@ class BaseNode {
             "output",
             this.outputs.length,
             subType || null,
+            "data",
         );
         this.outputs.push(p);
         this.updatePorts();
@@ -2400,7 +2525,12 @@ class BaseNode {
         return port;
     }
     getPorts() {
-        return [...this.inputs, ...this.outputs];
+        return [
+            ...this.inputs,
+            ...this.outputs,
+            ...this.paramInputs,
+            ...this.paramOutputs,
+        ];
     }
 
     updatePorts() {}
@@ -2427,12 +2557,24 @@ class BaseNode {
             numNeurons: this.numNeurons,
             bias: this.bias,
             hasBias: this.hasBias,
+            paramInputs: this.paramInputs.map((p) => ({
+                id: p.id,
+                index: p.index,
+            })),
+            paramOutputs: this.paramOutputs.map((p) => ({
+                id: p.id,
+                index: p.index,
+            })),
+            numParamInputs: this.paramInputs.length,
+            numParamOutputs: this.paramOutputs.length,
         };
     }
 
     fromJSON(data) {
         this.inputs = [];
         this.outputs = [];
+        this.paramInputs = [];
+        this.paramOutputs = [];
         // Restore inputs with their subTypes
         if (data.inputPorts) {
             for (const p of data.inputPorts) {
@@ -2462,6 +2604,30 @@ class BaseNode {
             }
         } else {
             for (let i = 0; i < (data.numOutputs || 0); i++) this.addOutput();
+        }
+
+        // Restore param input ports
+        if (data.paramInputs) {
+            for (const p of data.paramInputs) {
+                const port = new Port(this, "input", p.index, null, "param");
+                port.id = p.id;
+                this.paramInputs.push(port);
+            }
+        } else {
+            for (let i = 0; i < (data.numParamInputs || 0); i++)
+                this.addParamInput();
+        }
+
+        // Restore param output ports
+        if (data.paramOutputs) {
+            for (const p of data.paramOutputs) {
+                const port = new Port(this, "output", p.index, null, "param");
+                port.id = p.id;
+                this.paramOutputs.push(port);
+            }
+        } else {
+            for (let i = 0; i < (data.numParamOutputs || 0); i++)
+                this.addParamOutput();
         }
         if (data.activation) this.activation = data.activation;
         if (data.numNeurons) this.numNeurons = data.numNeurons;
@@ -2569,6 +2735,9 @@ class RectNode extends BaseNode {
 
     updatePorts() {
         const hw = this.width / 2 + 8;
+        const vh = this.height / 2 + 8;
+
+        // Data input ports on left
         this.inputs.forEach((p, i) => {
             p.x = this.x - hw;
             p.y =
@@ -2576,12 +2745,32 @@ class RectNode extends BaseNode {
                 this.height / 2 +
                 (this.height / (this.inputs.length + 1)) * (i + 1);
         });
+
+        // Data output ports on right
         this.outputs.forEach((p, i) => {
             p.x = this.x + hw;
             p.y =
                 this.y -
                 this.height / 2 +
                 (this.height / (this.outputs.length + 1)) * (i + 1);
+        });
+
+        // Param output ports on top
+        this.paramOutputs.forEach((p, i) => {
+            p.x =
+                this.x -
+                this.width / 2 +
+                (this.width / (this.paramOutputs.length + 1)) * (i + 1);
+            p.y = this.y - vh;
+        });
+
+        // Param input ports on bottom
+        this.paramInputs.forEach((p, i) => {
+            p.x =
+                this.x -
+                this.width / 2 +
+                (this.width / (this.paramInputs.length + 1)) * (i + 1);
+            p.y = this.y + vh;
         });
     }
 
@@ -2640,6 +2829,8 @@ class CircleNode extends BaseNode {
 
     updatePorts() {
         const r = this.radius + 8;
+
+        // Data input ports on left
         this.inputs.forEach((p, i) => {
             const a =
                 this.inputs.length === 1
@@ -2648,11 +2839,37 @@ class CircleNode extends BaseNode {
             p.x = this.x + Math.cos(a) * r;
             p.y = this.y + Math.sin(a) * r;
         });
+
+        // Data output ports on right
         this.outputs.forEach((p, i) => {
             const a =
                 this.outputs.length === 1
                     ? 0
                     : -0.6 + (i / (this.outputs.length - 1)) * 1.2;
+            p.x = this.x + Math.cos(a) * r;
+            p.y = this.y + Math.sin(a) * r;
+        });
+
+        // Param output ports on top
+        this.paramOutputs.forEach((p, i) => {
+            const a =
+                this.paramOutputs.length === 1
+                    ? -Math.PI / 2
+                    : -Math.PI / 2 -
+                      0.4 +
+                      (i / (this.paramOutputs.length - 1)) * 0.8;
+            p.x = this.x + Math.cos(a) * r;
+            p.y = this.y + Math.sin(a) * r;
+        });
+
+        // Param input ports on bottom
+        this.paramInputs.forEach((p, i) => {
+            const a =
+                this.paramInputs.length === 1
+                    ? Math.PI / 2
+                    : Math.PI / 2 -
+                      0.4 +
+                      (i / (this.paramInputs.length - 1)) * 0.8;
             p.x = this.x + Math.cos(a) * r;
             p.y = this.y + Math.sin(a) * r;
         });
@@ -2691,9 +2908,9 @@ class NeuronNode extends CircleNode {
     constructor(id, x, y) {
         super(id, x, y, "neuron", 28);
         this.activation = "relu";
-        this.maxInputs = Infinity;
+        this.maxInputs = 1;
         this.minInputs = 1;
-        this.maxOutputs = Infinity;
+        this.maxOutputs = 1;
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
@@ -2782,7 +2999,7 @@ class InputDataNode extends RectNode {
         this.dataShape = null;
         this.maxInputs = 0;
         this.minInputs = 0;
-        this.maxOutputs = 2;
+        this.maxOutputs = 1;
         this.minOutputs = 1;
         this.allowedOutputTypes = ["features", "labels"];
         this.addOutput();
@@ -2885,7 +3102,7 @@ class InputDataNode extends RectNode {
 class OutputNode extends RectNode {
     constructor(id, x, y) {
         super(id, x, y, "output", 100, 55);
-        this.maxInputs = Infinity;
+        this.maxInputs = 1;
         this.minInputs = 1;
         this.maxOutputs = 0;
         this.minOutputs = 0;
@@ -3504,6 +3721,10 @@ class NormalizeNode extends RectNode {
         this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
+        this.maxParamInputs = 1;
+        this.minParamInputs = 0;
+        this.maxParamOutputs = 1;
+        this.minParamOutputs = 0;
         this.addInput();
         this.addOutput();
     }
@@ -3916,11 +4137,12 @@ class AddNode extends RectNode {
 // ========== PORT ==========
 
 class Port {
-    constructor(node, type, index, subType) {
+    constructor(node, type, index, subType, portCategory) {
         this.node = node;
         this.type = type;
         this.index = index;
         this.subType = subType || null;
+        this.portCategory = portCategory || "data";
         this.x = node.x;
         this.y = node.y;
         this.radius = 5;
@@ -3956,16 +4178,29 @@ class Port {
     }
 
     draw(ctx) {
-        // Fill
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this._getColor();
-        ctx.fill();
-
-        // Border
-        ctx.strokeStyle = "#1a1d2e";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        if (this.portCategory === "param") {
+            // Draw diamond shape for param ports
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y - this.radius);
+            ctx.lineTo(this.x + this.radius, this.y);
+            ctx.lineTo(this.x, this.y + this.radius);
+            ctx.lineTo(this.x - this.radius, this.y);
+            ctx.closePath();
+            ctx.fillStyle = this._getColor();
+            ctx.fill();
+            ctx.strokeStyle = "#1a1d2e";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        } else {
+            // Draw circle for data ports (existing)
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this._getColor();
+            ctx.fill();
+            ctx.strokeStyle = "#1a1d2e";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        }
     }
 
     drawHighlight(ctx) {
@@ -3980,12 +4215,16 @@ class Port {
     }
 
     _getColor() {
+        if (this.portCategory === "param") {
+            if (this.type === "input") return "#ef4444";
+            if (this.type === "output") return "#60a5fa";
+        }
         if (this.subType === "train") return "#f59e0b";
         if (this.subType === "test") return "#4ade80";
         if (this.subType === "features") return "#ff00b7";
         if (this.subType === "labels") return "#a78bfa";
-        if (this.subType === "main") return "#660135";
-        if (this.subType === "skip") return "#8a6f04";
+        if (this.subType === "main") return "#9e396f";
+        if (this.subType === "skip") return "#ffcc00";
         if (this.type === "input") return "#ef4444";
         if (this.type === "output") return "#60a5fa";
         return "#94a3b8";
@@ -4008,6 +4247,7 @@ class Port {
             type: this.type,
             index: this.index,
             subType: this.subType,
+            portCategory: this.portCategory,
             shape: this.shape,
             bias: this.bias,
         };
