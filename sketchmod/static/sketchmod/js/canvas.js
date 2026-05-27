@@ -100,16 +100,13 @@ const SketchMod = {
                 const sessionData = JSON.parse(hasSession);
                 if (sessionData.modelId === loadModelId) {
                     // Session has the latest — use it
-                    console.log("Loading from session (model matches)");
                     this._loadFromSession();
                 } else {
                     // Different model — load from server
-                    console.log("Loading from server (different model)");
                     this._loadModelFromServer(loadModelId);
                 }
             } else {
                 // No session — load from server
-                console.log("Loading from server (no session)");
                 this._loadModelFromServer(loadModelId);
             }
         } else {
@@ -1476,12 +1473,6 @@ const SketchMod = {
 
     // ========== SESSION ==========
     _saveToSession() {
-        console.log(
-            "_saveToSession called! Ports count:",
-            this.ports.length,
-            "Nodes:",
-            this.nodes.length,
-        );
         const data = {
             nodes: this.nodes.map((n) => n.toJSON()),
             links: this.links.map((l) => l.toJSON()),
@@ -1551,10 +1542,6 @@ const SketchMod = {
         }
         this._updateModelInfo();
         this._propagateShapes();
-        const port = this.ports.find((p) => p.id === "n3_output_0");
-        if (port) {
-            console.log("After propagation - subType:", port.subType);
-        }
     },
 
     // ========== SERVER ==========
