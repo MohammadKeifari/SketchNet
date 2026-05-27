@@ -845,3 +845,21 @@
 .sidebar-model-id:hover {
     text-decoration: underline;
 }
+
+.port-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.port-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+}
+
+.port-legend-item svg {
+    flex-shrink: 0;
+}
