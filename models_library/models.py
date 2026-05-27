@@ -13,6 +13,12 @@ def generate_model_id():
             return code
 
 
+def cover_upload_path(instance, filename):
+    """Upload to models/covers/{model_id}.{ext}"""
+    ext = filename.split(".")[-1]
+    return f"models/covers/{instance.model_id}.{ext}"
+
+
 class SketchModel(models.Model):
     VIEW_CHOICES = [
         ("public", "Public"),
@@ -32,7 +38,7 @@ class SketchModel(models.Model):
     graph_data = models.JSONField(default=dict)
 
     # Cover image
-    cover_image = models.ImageField(upload_to="models/covers/", blank=True, null=True)
+    cover_image = models.ImageField(upload_to=cover_upload_path, blank=True, null=True)
 
     # Owner
     owner = models.ForeignKey(
