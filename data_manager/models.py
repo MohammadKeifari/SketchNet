@@ -24,6 +24,18 @@ def default_cover_svg():
     )
 
 
+def dataset_upload_path(instance, filename):
+    """Upload to datasets/{dataset_id}/{filename}"""
+    ext = filename.split(".")[-1]
+    return f"datasets/{instance.dataset_id}/{instance.dataset_id}.{ext}"
+
+
+def cover_upload_path(instance, filename):
+    """Upload to datasets/covers/{dataset_id}.{ext}"""
+    ext = filename.split(".")[-1]
+    return f"datasets/covers/{instance.dataset_id}.{ext}"
+
+
 class Dataset(models.Model):
     FORMAT_CHOICES = [
         ("csv", "CSV"),
@@ -60,8 +72,8 @@ class Dataset(models.Model):
     format = models.CharField(max_length=10, choices=FORMAT_CHOICES)
 
     # Files
-    file = models.FileField(upload_to="datasets/")
-    cover_image = models.ImageField(upload_to="datasets/covers/", blank=True, null=True)
+    file = models.FileField(upload_to=dataset_upload_path)
+    cover_image = models.ImageField(upload_to=cover_upload_path, blank=True, null=True)
 
     # Ownership & Visibility
     owner = models.ForeignKey(
@@ -112,6 +124,14 @@ class Dataset(models.Model):
             self.dataset_id = generate_dataset_id()
         self.resolve_shape()
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        # Delete the actual files
+        if self.file:
+            self.file.delete(save=False)
+        if self.cover_image:
+            self.cover_image.delete(save=False)
+        super().delete(*args, **kwargs)
 
     @property
     def likes_count(self):
