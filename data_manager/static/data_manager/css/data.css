@@ -966,3 +966,24 @@
     line-height: 1.6;
     overflow-x: auto;
 }
+
+/* ===== current image cover ===== */
+.current-cover {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.current-cover img {
+    width: 60px;
+    height: 45px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+}
+
+.current-cover span {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}

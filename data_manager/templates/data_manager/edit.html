@@ -87,14 +87,14 @@
                             <strong style="color: var(--text-primary);">Image Set Format</strong>
                             <p style="margin: 4px 0 0;">Organize your images in class folders:</p>
                             <code>
-dataset.zip
-├── class_0/
-│   ├── img_001.jpg
-│   └── img_002.jpg
-├── class_1/
-│   ├── img_001.jpg
-│   └── img_002.jpg
-└── ...
+                                dataset.zip
+                                ├── class_0/
+                                │   ├── img_001.jpg
+                                │   └── img_002.jpg
+                                ├── class_1/
+                                │   ├── img_001.jpg
+                                │   └── img_002.jpg
+                                └── ...
                             </code>
                             <p style="margin: 8px 0 0; font-size: 0.75rem;">
                                 Resulting shape: <span style="color: var(--accent); font-family: monospace;">(num_images, H, W, C)</span>
@@ -120,6 +120,12 @@ dataset.zip
                 <!-- Cover Image -->
                 <div class="form-group">
                     <label>Cover Image (optional)</label>
+                    {% if dataset.cover_image %}
+                        <div class="current-cover">
+                            <img src="{{ dataset.cover_image.url }}" alt="Current cover">
+                            <span>Current cover</span>
+                        </div>
+                    {% endif %}
                     <div class="cover-upload-wrapper">
                         <label class="cover-upload-label" for="id_cover_image">
                             <svg width="20"
