@@ -93,8 +93,25 @@ const SketchMod = {
         const urlParams = new URLSearchParams(window.location.search);
         const loadModelId = urlParams.get("load");
 
+        const hasSession = sessionStorage.getItem("sketchmod-graph");
         if (loadModelId) {
-            this._loadModelFromServer(loadModelId);
+            // Check if session has THIS model
+            if (hasSession) {
+                const sessionData = JSON.parse(hasSession);
+                if (sessionData.modelId === loadModelId) {
+                    // Session has the latest — use it
+                    console.log("Loading from session (model matches)");
+                    this._loadFromSession();
+                } else {
+                    // Different model — load from server
+                    console.log("Loading from server (different model)");
+                    this._loadModelFromServer(loadModelId);
+                }
+            } else {
+                // No session — load from server
+                console.log("Loading from server (no session)");
+                this._loadModelFromServer(loadModelId);
+            }
         } else {
             this._loadFromSession();
         }
@@ -158,6 +175,9 @@ const SketchMod = {
                 const name = e.target.files[0]?.name || "No file chosen";
                 const display = document.getElementById("saveCoverFileName");
                 if (display) display.textContent = name;
+            }
+            if (e.target.id === "prop-port-subtype") {
+                SketchMod._updatePortSubType(e.target);
             }
         });
         // Sidebar buttons
@@ -1220,7 +1240,7 @@ const SketchMod = {
                 ? `
         <div class="prop-group">
             <label>Output Type</label>
-            <select id="prop-port-subtype" class="prop-select" onchange="SketchMod._updatePortSubType(this)">
+            <select id="prop-port-subtype" class="prop-select" >
                 ${subTypeOptions
                     .map(
                         (o) => `
@@ -1245,6 +1265,13 @@ const SketchMod = {
     `;
 
         this._currentPortForProps = port;
+        // Bind the select change event
+        const select = document.getElementById("prop-port-subtype");
+        if (select) {
+            select.addEventListener("change", () => {
+                this._updatePortSubType(select);
+            });
+        }
     },
     _updatePortBias(input) {
         if (!this._currentPortForProps) return;
@@ -1255,7 +1282,6 @@ const SketchMod = {
     _updatePortSubType(select) {
         if (!this._currentPortForProps) return;
         this._saveUndoState();
-
         this._currentPortForProps.subType = select.value || null;
         this._saveToSession();
         this._render();
@@ -1450,6 +1476,12 @@ const SketchMod = {
 
     // ========== SESSION ==========
     _saveToSession() {
+        console.log(
+            "_saveToSession called! Ports count:",
+            this.ports.length,
+            "Nodes:",
+            this.nodes.length,
+        );
         const data = {
             nodes: this.nodes.map((n) => n.toJSON()),
             links: this.links.map((l) => l.toJSON()),
@@ -1519,6 +1551,10 @@ const SketchMod = {
         }
         this._updateModelInfo();
         this._propagateShapes();
+        const port = this.ports.find((p) => p.id === "n3_output_0");
+        if (port) {
+            console.log("After propagation - subType:", port.subType);
+        }
     },
 
     // ========== SERVER ==========
@@ -2047,7 +2083,7 @@ const SketchMod = {
                 ?.value || "private";
         const coverFile = document.getElementById("saveCoverInput")?.files[0];
         const graphData = JSON.stringify(SketchMod._getGraphData());
-
+        console.log("Saving graph data:", graphData); // ADD THIS
         const formData = new FormData();
         formData.append("name", name);
         formData.append("description", description);
