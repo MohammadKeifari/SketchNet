@@ -207,7 +207,50 @@
                     </div>
                 </div>
             </div>
+            <div class="settings-card">
+                <h2>Canvas Layout</h2>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <span class="setting-label">Collapse Left Toolbar</span>
+                        <span class="setting-desc">Hide the node palette by default on the canvas</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox"
+                               id="collapse-left-sidebar"
+                               {% if settings.collapse_left_sidebar %}checked{% endif %}
+                               onchange="updateSidebarPreference('collapse_left_sidebar', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <span class="setting-label">Collapse Right Sidebar</span>
+                        <span class="setting-desc">Hide the properties panel by default on the canvas</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox"
+                               id="collapse-right-sidebar"
+                               {% if settings.collapse_right_sidebar %}checked{% endif %}
+                               onchange="updateSidebarPreference('collapse_right_sidebar', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
             <button type="submit" class="btn-submit">Save Settings</button>
         </form>
     </div>
 {% endblock content %}
+{% block extra_js %}
+    <script>
+    function updateSidebarPreference(field, value) {
+        fetch("{% url 'setting:update_sidebar' %}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,
+            },
+            body: JSON.stringify({ [field]: value }),
+        });
+    }
+    </script>
+{% endblock extra_js %}
