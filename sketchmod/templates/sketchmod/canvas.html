@@ -138,6 +138,33 @@
                         </div>
                     </div>
                 </div>
+                <!-- Check Button -->
+                <button class="sidebar-btn" id="btnCheck" title="Validate model">
+                    <svg width="16"
+                         height="16"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                    <span>Check</span>
+                </button>
+                <!-- Validation Panel -->
+                <div class="sidebar-section"
+                     id="validationPanel"
+                     style="display: none;
+                            border-top: 1px solid var(--border);
+                            padding-top: 12px">
+                    <div class="sidebar-section-title">Validation</div>
+                    <div id="validationContent"></div>
+                    <button class="prop-btn"
+                            style="margin-top: 8px;
+                                   background: var(--bg-hover);
+                                   color: var(--text-primary)"
+                            onclick="SketchMod._clearValidation()">Dismiss</button>
+                </div>
                 <button class="sidebar-btn" id="btnSave" title="Save to database">
                     <svg width="16"
                          height="16"
