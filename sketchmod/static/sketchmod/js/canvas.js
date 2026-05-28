@@ -139,10 +139,11 @@ const SketchMod = {
             if (e.code === "ShiftLeft" || e.code === "ShiftRight")
                 this.shiftPressed = false;
         });
-        document.addEventListener("click", () => this._hideContextMenu());
-        // Dataset picker events (delegated)
         document.addEventListener("click", (e) => {
-            // Close picker when clicking outside
+            // Close context menu on any click
+            this._hideContextMenu();
+
+            // Close dataset picker when clicking outside
             const picker = document.getElementById("datasetPicker");
             const display = document.getElementById("datasetSelectDisplay");
             if (
@@ -154,7 +155,7 @@ const SketchMod = {
                 picker.style.display = "none";
             }
 
-            // Tab clicks
+            // Dataset tab clicks
             if (e.target.classList.contains("dataset-tab")) {
                 document
                     .querySelectorAll(".dataset-tab")
@@ -165,10 +166,46 @@ const SketchMod = {
                     document.getElementById("datasetSearch")?.value || "",
                 );
             }
-        });
-        document.addEventListener("click", (e) => {
+
+            // Close save modal on overlay click
             if (e.target.id === "saveModal") {
                 this.closeSaveModal();
+            }
+
+            // Close validation modal on overlay click
+            if (e.target.id === "validationModal") {
+                this._clearValidation();
+            }
+
+            // Close export menu when clicking outside
+            const exportMenu = document.getElementById("exportMenu");
+            const exportBtn = document.getElementById("btnExport");
+            if (
+                exportMenu &&
+                exportMenu.classList.contains("open") &&
+                exportBtn &&
+                !exportBtn.contains(e.target) &&
+                !exportMenu.contains(e.target)
+            ) {
+                exportMenu.classList.remove("open");
+                document
+                    .getElementById("exportDropdown")
+                    ?.classList.remove("open");
+            }
+
+            // Export menu item clicks
+            const exportItem = e.target.closest(".export-menu-item");
+            if (
+                exportItem &&
+                exportMenu &&
+                exportMenu.classList.contains("open")
+            ) {
+                const type = exportItem.dataset.export;
+                this._handleExport(type);
+                exportMenu.classList.remove("open");
+                document
+                    .getElementById("exportDropdown")
+                    ?.classList.remove("open");
             }
         });
         // Dataset search input
@@ -2765,7 +2802,7 @@ const SketchMod = {
         this.errorNodes = [];
         this.warningLinks = [];
         this.warningNodes = [];
-        document.getElementById("validationPanel").style.display = "none";
+        document.getElementById("validationModal").style.display = "none";
         this._render();
     },
 
@@ -3096,58 +3133,68 @@ const SketchMod = {
     },
 
     _showValidationPanel(result) {
-        const panel = document.getElementById("validationPanel");
+        const modal = document.getElementById("validationModal");
         const content = document.getElementById("validationContent");
-        if (!panel || !content) return;
+        const title = document.getElementById("validationModalTitle");
+        if (!modal || !content) return;
 
         const { errors, warnings } = result;
 
         if (errors.length === 0 && warnings.length === 0) {
+            title.textContent = "✓ All Clear";
             content.innerHTML = `
-            <div class="validation-error" style="color: #4ade80; background: rgba(74,222,128,0.1); border-color: rgba(74,222,128,0.25);">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <div class="validation-result success">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                All checks passed!
+                <span>All checks passed! Your model is ready to export.</span>
             </div>`;
-            panel.style.display = "block";
-            return;
-        }
+        } else {
+            const errorCount = errors.length;
+            const warnCount = warnings.length;
+            const parts = [];
+            if (errorCount)
+                parts.push(`${errorCount} error${errorCount > 1 ? "s" : ""}`);
+            if (warnCount)
+                parts.push(`${warnCount} warning${warnCount > 1 ? "s" : ""}`);
+            title.textContent = `Validation: ${parts.join(", ")}`;
 
-        let html = "";
+            let html = "";
 
-        if (errors.length > 0) {
-            html += `<div class="validation-section-label" style="color: #ef4444;">Errors (${errors.length})</div>`;
-            for (const e of errors) {
-                html += `
-            <div class="validation-error error">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="15" y1="9" x2="9" y2="15"/>
-                    <line x1="9" y1="9" x2="15" y2="15"/>
-                </svg>
-                <span>${e.message}</span>
-            </div>`;
+            if (errors.length > 0) {
+                html += `<div class="validation-section-label" style="color: #ef4444;">Errors</div>`;
+                for (const e of errors) {
+                    html += `
+                <div class="validation-result error">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="15" y1="9" x2="9" y2="15"/>
+                        <line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                    <span>${e.message}</span>
+                </div>`;
+                }
             }
-        }
 
-        if (warnings.length > 0) {
-            html += `<div class="validation-section-label" style="color: #f59e0b;">Warnings (${warnings.length})</div>`;
-            for (const w of warnings) {
-                html += `
-            <div class="validation-error warning">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                    <line x1="12" y1="9" x2="12" y2="13"/>
-                    <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-                <span>${w.message}</span>
-            </div>`;
+            if (warnings.length > 0) {
+                html += `<div class="validation-section-label" style="color: #f59e0b;">Warnings</div>`;
+                for (const w of warnings) {
+                    html += `
+                <div class="validation-result warning">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span>${w.message}</span>
+                </div>`;
+                }
             }
+
+            content.innerHTML = html;
         }
 
-        content.innerHTML = html;
-        panel.style.display = "block";
+        modal.style.display = "flex";
     },
 };
 

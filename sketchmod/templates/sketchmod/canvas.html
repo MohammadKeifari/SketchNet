@@ -151,19 +151,28 @@
                     </svg>
                     <span>Check</span>
                 </button>
-                <!-- Validation Panel -->
-                <div class="sidebar-section"
-                     id="validationPanel"
-                     style="display: none;
-                            border-top: 1px solid var(--border);
-                            padding-top: 12px">
-                    <div class="sidebar-section-title">Validation</div>
-                    <div id="validationContent"></div>
-                    <button class="prop-btn"
-                            style="margin-top: 8px;
-                                   background: var(--bg-hover);
-                                   color: var(--text-primary)"
-                            onclick="SketchMod._clearValidation()">Dismiss</button>
+                <!-- Validation Modal -->
+                <div class="modal-overlay" id="validationModal" style="display: none;">
+                    <div class="modal validation-modal">
+                        <div class="modal-header">
+                            <h2 id="validationModalTitle">Validation Results</h2>
+                            <button class="modal-close" onclick="SketchMod._clearValidation()">
+                                <svg width="18"
+                                     height="18"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="modal-body" id="validationContent"></div>
+                        <div class="modal-actions">
+                            <button class="btn btn-ghost" onclick="SketchMod._clearValidation()">Dismiss</button>
+                        </div>
+                    </div>
                 </div>
                 <button class="sidebar-btn" id="btnSave" title="Save to database">
                     <svg width="16"
