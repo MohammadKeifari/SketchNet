@@ -216,9 +216,8 @@
                     </div>
                     <label class="toggle-switch">
                         <input type="checkbox"
-                               id="collapse-left-sidebar"
-                               {% if settings.collapse_left_sidebar %}checked{% endif %}
-                               onchange="updateSidebarPreference('collapse_left_sidebar', this.checked)">
+                               name="collapse_left_sidebar"
+                               {% if settings.collapse_left_sidebar %}checked{% endif %}>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
@@ -229,9 +228,8 @@
                     </div>
                     <label class="toggle-switch">
                         <input type="checkbox"
-                               id="collapse-right-sidebar"
-                               {% if settings.collapse_right_sidebar %}checked{% endif %}
-                               onchange="updateSidebarPreference('collapse_right_sidebar', this.checked)">
+                               name="collapse_right_sidebar"
+                               {% if settings.collapse_right_sidebar %}checked{% endif %}>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
