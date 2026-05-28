@@ -1090,11 +1090,6 @@
 .validation-section-label:first-child {
     margin-top: 0;
 }
-.modal-actions .btn-ghost {
-    margin-right: 10px;
-    margin-bottom: 10px ;
-}
-
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1024px) {
     .toolbar {

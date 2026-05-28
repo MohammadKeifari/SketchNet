@@ -174,7 +174,7 @@ const SketchMod = {
 
             // Close validation modal on overlay click
             if (e.target.id === "validationModal") {
-                this._clearValidation();
+                this._closeValidationModal();
             }
 
             // Close export menu when clicking outside
@@ -294,6 +294,9 @@ const SketchMod = {
         document
             .getElementById("btnNewModel")
             ?.addEventListener("click", () => this._newModel());
+        document
+            .getElementById("btnClearValidation")
+            ?.addEventListener("click", () => this._clearValidation());
         // Toolbar
         this._buildToolbar();
 
@@ -2795,19 +2798,95 @@ const SketchMod = {
 
     _runCheck() {
         const result = this._validateGraph();
-        this._showValidationPanel(result);
+        this._showValidationModal(result);
         this._render();
     },
-
+    _closeValidationModal() {
+        document.getElementById("validationModal").style.display = "none";
+    },
     _clearValidation() {
         this.errorLinks = [];
         this.errorNodes = [];
         this.warningLinks = [];
         this.warningNodes = [];
-        document.getElementById("validationModal").style.display = "none";
+
+        // Hide the clear button
+        const btn = document.getElementById("btnClearValidation");
+        if (btn) btn.style.display = "none";
+
         this._render();
     },
+    _showValidationModal(result) {
+        const modal = document.getElementById("validationModal");
+        const content = document.getElementById("validationContent");
+        const title = document.getElementById("validationModalTitle");
+        const clearBtn = document.getElementById("btnClearValidation");
 
+        if (!modal || !content) return;
+
+        const { errors, warnings } = result;
+
+        if (errors.length === 0 && warnings.length === 0) {
+            title.textContent = "✓ All Clear";
+            content.innerHTML = `
+            <div class="validation-result success">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>All checks passed! Your model is ready to export.</span>
+            </div>`;
+            // Hide clear button — nothing to clear
+            if (clearBtn) clearBtn.style.display = "none";
+        } else {
+            const errorCount = errors.length;
+            const warnCount = warnings.length;
+            const parts = [];
+            if (errorCount)
+                parts.push(`${errorCount} error${errorCount > 1 ? "s" : ""}`);
+            if (warnCount)
+                parts.push(`${warnCount} warning${warnCount > 1 ? "s" : ""}`);
+            title.textContent = `Validation: ${parts.join(", ")}`;
+
+            let html = "";
+
+            if (errors.length > 0) {
+                html += `<div class="validation-section-label" style="color: #ef4444;">Errors</div>`;
+                for (const e of errors) {
+                    html += `
+                <div class="validation-result error">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="15" y1="9" x2="9" y2="15"/>
+                        <line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                    <span>${e.message}</span>
+                </div>`;
+                }
+            }
+
+            if (warnings.length > 0) {
+                html += `<div class="validation-section-label" style="color: #f59e0b;">Warnings</div>`;
+                for (const w of warnings) {
+                    html += `
+                <div class="validation-result warning">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span>${w.message}</span>
+                </div>`;
+                }
+            }
+
+            content.innerHTML = html;
+
+            // Show clear button
+            if (clearBtn) clearBtn.style.display = "flex";
+        }
+
+        modal.style.display = "flex";
+    },
     _validateGraph() {
         this._propagateShapes();
 
