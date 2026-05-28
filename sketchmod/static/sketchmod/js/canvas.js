@@ -3191,19 +3191,19 @@ class OutputNode extends RectNode {
                 <div class="port-legend">
                     <span class="port-legend-item">
                         <svg width="10" height="10" viewBox="0 0 10 10">
-                            <circle cx="5" cy="5" r="4" fill="#eaea1e" stroke="#1a1d2e" stroke-width="1"/>
+                            <circle cx="5" cy="5" r="4" fill="#53BF9D" stroke="#1a1d2e" stroke-width="1"/>
                         </svg>
                         Loss
                     </span>
                     <span class="port-legend-item">
                         <svg width="10" height="10" viewBox="0 0 10 10">
-                            <circle cx="5" cy="5" r="4" fill="#4ade80" stroke="#1a1d2e" stroke-width="1"/>
+                            <circle cx="5" cy="5" r="4" fill="#BD4291" stroke="#1a1d2e" stroke-width="1"/>
                         </svg>
                         Prediction
                     </span>
                     <span class="port-legend-item">
                         <svg width="10" height="10" viewBox="0 0 10 10">
-                            <circle cx="5" cy="5" r="4" fill="#60a5fa" stroke="#1a1d2e" stroke-width="1"/>
+                            <circle cx="5" cy="5" r="4" fill="#FFC54D" stroke="#1a1d2e" stroke-width="1"/>
                         </svg>
                         Evaluation
                     </span>
@@ -4274,7 +4274,7 @@ class Port {
     }
 
     draw(ctx) {
-        if (this.portCategory === "param") {
+        if (this.portCategory === "param" || this.role) {
             // Diamond for param ports
             ctx.beginPath();
             ctx.moveTo(this.x, this.y - this.radius);
@@ -4313,9 +4313,9 @@ class Port {
         }
 
         // Data ports — role takes priority over subType
-        if (this.role === "loss") return "#eaea1e";
-        if (this.role === "prediction") return "#4ade80";
-        if (this.role === "evaluation") return "#60a5fa";
+        if (this.role === "loss") return "#53BF9D";
+        if (this.role === "prediction") return "#BD4291";
+        if (this.role === "evaluation") return "#FFC54D";
 
         // Fall back to subType colors
         if (this.subType === "train") return "#f59e0b";
@@ -4326,7 +4326,7 @@ class Port {
         if (this.subType === "skip") return "#ffcc00";
 
         // Default by port type
-        if (this.type === "input") return "#ef4444";
+        if (this.type === "input") return "#F94C66";
         if (this.type === "output") return "#60a5fa";
         return "#94a3b8";
     }
