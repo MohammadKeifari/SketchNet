@@ -1667,17 +1667,6 @@ const SketchMod = {
     },
 
     // ========== SERVER ==========
-    _saveToServer() {
-        const data = this._getGraphData();
-        console.log(
-            "Saving to server:",
-            data.nodes.length,
-            "nodes,",
-            data.links.length,
-            "links",
-        );
-        // TODO: POST to API*
-    },
 
     _translate() {
         const code = this._compileToPython();
