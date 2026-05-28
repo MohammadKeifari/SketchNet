@@ -2602,7 +2602,6 @@ const SketchMod = {
     },
 
     _exportImage(format) {
-        // Temporarily fit view, capture, then restore
         const prevScale = this.scale;
         const prevX = this.offsetX;
         const prevY = this.offsetY;
@@ -2610,9 +2609,74 @@ const SketchMod = {
         this._zoomFit();
         this._render();
 
-        // Small delay to ensure render completes
         setTimeout(() => {
-            const dataUrl = this.canvas.toDataURL(`image/${format}`, 0.95);
+            // Create an offscreen canvas with background
+            const exportCanvas = document.createElement("canvas");
+            exportCanvas.width = this.canvas.width;
+            exportCanvas.height = this.canvas.height;
+            const exportCtx = exportCanvas.getContext("2d");
+
+            // Get the canvas wrapper's computed background styles
+            const wrapper = document.getElementById("canvasWrapper");
+            const wrapperStyle = getComputedStyle(wrapper);
+            const bgColor = wrapperStyle.backgroundColor;
+
+            // Parse CSS custom properties for grid colors
+            const canvasBg = getComputedStyle(document.documentElement)
+                .getPropertyValue("--canvas-bg")
+                .trim();
+            const gridSmall = getComputedStyle(document.documentElement)
+                .getPropertyValue("--canvas-grid-small")
+                .trim();
+            const gridLarge = getComputedStyle(document.documentElement)
+                .getPropertyValue("--canvas-grid-large")
+                .trim();
+
+            // Fill background color
+            exportCtx.fillStyle = canvasBg || bgColor || "#0f1119";
+            exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+            // Draw grid
+            const gridSmallColor = gridSmall || "rgba(255,255,255,0.03)";
+            const gridLargeColor = gridLarge || "rgba(255,255,255,0.06)";
+
+            // Small grid (20px)
+            exportCtx.strokeStyle = gridSmallColor;
+            exportCtx.lineWidth = 0.5;
+            for (let x = 0; x <= exportCanvas.width; x += 20) {
+                exportCtx.beginPath();
+                exportCtx.moveTo(x, 0);
+                exportCtx.lineTo(x, exportCanvas.height);
+                exportCtx.stroke();
+            }
+            for (let y = 0; y <= exportCanvas.height; y += 20) {
+                exportCtx.beginPath();
+                exportCtx.moveTo(0, y);
+                exportCtx.lineTo(exportCanvas.width, y);
+                exportCtx.stroke();
+            }
+
+            // Large grid (100px)
+            exportCtx.strokeStyle = gridLargeColor;
+            exportCtx.lineWidth = 1;
+            for (let x = 0; x <= exportCanvas.width; x += 100) {
+                exportCtx.beginPath();
+                exportCtx.moveTo(x, 0);
+                exportCtx.lineTo(x, exportCanvas.height);
+                exportCtx.stroke();
+            }
+            for (let y = 0; y <= exportCanvas.height; y += 100) {
+                exportCtx.beginPath();
+                exportCtx.moveTo(0, y);
+                exportCtx.lineTo(exportCanvas.width, y);
+                exportCtx.stroke();
+            }
+
+            // Copy the main canvas content on top
+            exportCtx.drawImage(this.canvas, 0, 0);
+
+            // Export
+            const dataUrl = exportCanvas.toDataURL(`image/${format}`, 0.95);
             const a = document.createElement("a");
             a.href = dataUrl;
             a.download = `model.${format}`;
