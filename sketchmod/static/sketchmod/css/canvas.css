@@ -184,92 +184,6 @@
     margin: 4px 0;
 }
 
-/* ===== RESPONSIVE ===== */
-@media (max-width: 1024px) {
-    .toolbar {
-        width: 56px;
-    }
-    .tool-label {
-        display: none;
-    }
-    .tool-btn {
-        justify-content: center;
-        padding: 10px;
-    }
-    .sidebar {
-        width: 56px;
-    }
-    .sidebar-btn span {
-        display: none;
-    }
-    .sidebar-btn {
-        justify-content: center;
-        padding: 10px;
-    }
-    .toolbar-section-title,
-    .sidebar-section-title {
-        display: none;
-    }
-
-    /* Export button matches other sidebar buttons */
-    .export-dropdown .sidebar-btn span {
-        display: none;
-    }
-    .export-dropdown .sidebar-btn {
-        justify-content: center;
-        padding: 10px;
-    }
-    .export-chevron {
-        display: none;
-    }
-
-    .export-menu {
-        position: fixed;
-        margin: 0;
-        min-width: 180px;
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
-        z-index: 200;
-    }
-}
-
-@media (max-width: 600px) {
-    .toolbar {
-        display: none;
-    }
-    .sidebar {
-        width: 48px;
-    }
-
-    /* Match export button to other sidebar buttons */
-    .export-dropdown {
-        width: 100%;
-    }
-    .export-dropdown .sidebar-btn {
-        width: 100%;
-        padding: 10px;
-        justify-content: center;
-        gap: 0;
-    }
-    .export-dropdown .sidebar-btn span {
-        display: none;
-    }
-    .export-dropdown .sidebar-btn svg:first-child {
-        width: 16px;
-        height: 16px;
-    }
-    .export-chevron {
-        display: none;
-    }
-    .export-menu {
-        min-width: 160px;
-    }
-    .export-menu-item {
-        font-size: 0.75rem;
-        padding: 7px 10px;
-        gap: 8px;
-    }
-}
-
 /* ===== PROPERTIES PANEL ===== */
 #propertiesPanel {
     border-top: 1px solid var(--border);
@@ -1121,4 +1035,90 @@
     min-width: 180px;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
     z-index: 200;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1024px) {
+    .toolbar {
+        width: 56px;
+    }
+    .tool-label {
+        display: none;
+    }
+    .tool-btn {
+        justify-content: center;
+        padding: 10px;
+    }
+    .sidebar {
+        width: 56px;
+    }
+    .sidebar-btn span {
+        display: none;
+    }
+    .sidebar-btn {
+        justify-content: center;
+        padding: 10px;
+    }
+    .toolbar-section-title,
+    .sidebar-section-title {
+        display: none;
+    }
+
+    /* Export button matches other sidebar buttons */
+    .export-dropdown .sidebar-btn span {
+        display: none;
+    }
+    .export-dropdown .sidebar-btn {
+        justify-content: center;
+        padding: 10px;
+    }
+    .export-chevron {
+        display: none;
+    }
+
+    .export-menu {
+        position: fixed;
+        margin: 0;
+        min-width: 180px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+        z-index: 200;
+    }
+}
+
+@media (max-width: 600px) {
+    .toolbar {
+        display: none;
+    }
+    .sidebar {
+        width: 48px;
+    }
+
+    /* Match export button to other sidebar buttons */
+    .export-dropdown {
+        width: 100%;
+    }
+    .export-dropdown .sidebar-btn {
+        width: 100%;
+        padding: 10px;
+        justify-content: center;
+        gap: 0;
+    }
+    .export-dropdown .sidebar-btn span {
+        display: none;
+    }
+    .export-dropdown .sidebar-btn svg:first-child {
+        width: 16px;
+        height: 16px;
+    }
+    .export-chevron {
+        display: none;
+    }
+    .export-menu {
+        min-width: 160px;
+    }
+    .export-menu-item {
+        font-size: 0.75rem;
+        padding: 7px 10px;
+        gap: 8px;
+    }
 }
