@@ -30,6 +30,15 @@ class UserSettings(models.Model):
         help_text="Select your preferred color theme",
     )
 
+    collapse_left_sidebar = models.BooleanField(
+        default=False,
+        help_text="Collapse the left toolbar by default",
+    )
+    collapse_right_sidebar = models.BooleanField(
+        default=False,
+        help_text="Collapse the right sidebar by default",
+    )
+
     # Future fields - just comments for now:
     # editor_font_size = models.IntegerField(default=14)
     # auto_save_interval = models.IntegerField(default=60)
