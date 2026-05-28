@@ -5004,6 +5004,8 @@ class VisualizationNode extends RectNode {
             colorPalette: this.colorPalette,
             continuousMinColor: this.continuousMinColor,
             continuousMaxColor: this.continuousMaxColor,
+            hasColorInput: this._hasColorInput(),
+            colorInputId: this._colorPort()?.id || null,
         };
     }
 
