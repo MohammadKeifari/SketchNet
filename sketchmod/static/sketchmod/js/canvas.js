@@ -181,9 +181,42 @@ const SketchMod = {
         document
             .getElementById("btnSave")
             ?.addEventListener("click", () => this.openSaveModal());
-        document
-            .getElementById("btnTranslate")
-            ?.addEventListener("click", () => this._translate());
+        // Export button
+        document.getElementById("btnExport")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this._toggleExportMenu();
+        });
+
+        // Close export menu when clicking outside
+        document.addEventListener("click", (e) => {
+            const menu = document.getElementById("exportMenu");
+            const btn = document.getElementById("btnExport");
+            if (
+                menu &&
+                menu.classList.contains("open") &&
+                btn &&
+                !btn.contains(e.target) &&
+                !menu.contains(e.target)
+            ) {
+                menu.classList.remove("open");
+                document
+                    .getElementById("exportDropdown")
+                    ?.classList.remove("open");
+            }
+        });
+
+        // Export menu item clicks
+        document.addEventListener("click", (e) => {
+            const item = e.target.closest(".export-menu-item");
+            if (!item) return;
+            const menu = document.getElementById("exportMenu");
+            if (!menu || !menu.classList.contains("open")) return;
+
+            const type = item.dataset.export;
+            this._handleExport(type);
+            menu.classList.remove("open");
+            document.getElementById("exportDropdown")?.classList.remove("open");
+        });
         // Undo and redo button
         document
             .getElementById("btnUndo")
@@ -2509,6 +2542,115 @@ const SketchMod = {
         } else {
             infoDiv.style.display = "none";
         }
+    },
+
+    // ========== EXPORT METHODS ==========
+    _toggleExportMenu() {
+        const menu = document.getElementById("exportMenu");
+        const dropdown = document.getElementById("exportDropdown");
+        if (!menu || !dropdown) return;
+
+        const isOpen = menu.classList.contains("open");
+        if (isOpen) {
+            menu.classList.remove("open");
+            dropdown.classList.remove("open");
+        } else {
+            menu.classList.add("open");
+            dropdown.classList.add("open");
+        }
+    },
+
+    _handleExport(type) {
+        switch (type) {
+            case "pytorch-zip":
+                this._exportPyTorchZip();
+                break;
+            case "pytorch-py":
+                this._exportPyTorchPy();
+                break;
+            case "image-png":
+                this._exportImage("png");
+                break;
+            case "image-jpeg":
+                this._exportImage("jpeg");
+                break;
+            case "python-clipboard":
+                this._exportPythonClipboard();
+                break;
+            case "json-clipboard":
+                this._exportJsonClipboard();
+                break;
+        }
+    },
+
+    _exportPyTorchZip() {
+        const code = this._compileToPython();
+        this._showToast("PyTorch .zip export — coming soon");
+        // TODO: Generate zip with model.py + dataset if available
+    },
+
+    _exportPyTorchPy() {
+        const code = this._compileToPython();
+        const blob = new Blob([code], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "model.py";
+        a.click();
+        URL.revokeObjectURL(url);
+        this._showToast("Downloaded model.py");
+    },
+
+    _exportImage(format) {
+        // Temporarily fit view, capture, then restore
+        const prevScale = this.scale;
+        const prevX = this.offsetX;
+        const prevY = this.offsetY;
+
+        this._zoomFit();
+        this._render();
+
+        // Small delay to ensure render completes
+        setTimeout(() => {
+            const dataUrl = this.canvas.toDataURL(`image/${format}`, 0.95);
+            const a = document.createElement("a");
+            a.href = dataUrl;
+            a.download = `model.${format}`;
+            a.click();
+
+            // Restore view
+            this.scale = prevScale;
+            this.offsetX = prevX;
+            this.offsetY = prevY;
+            this._render();
+            this._showToast(`Exported model.${format}`);
+        }, 100);
+    },
+
+    _exportPythonClipboard() {
+        const code = this._compileToPython();
+        navigator.clipboard
+            .writeText(code)
+            .then(() => {
+                this._showToast("Python code copied!");
+            })
+            .catch(() => {
+                alert("Failed to copy. Check console for the code.");
+                console.log(code);
+            });
+    },
+
+    _exportJsonClipboard() {
+        const data = JSON.stringify(this._getGraphData(), null, 2);
+        navigator.clipboard
+            .writeText(data)
+            .then(() => {
+                this._showToast("JSON copied!");
+            })
+            .catch(() => {
+                alert("Failed to copy. Check console for the JSON.");
+                console.log(data);
+            });
     },
 };
 
