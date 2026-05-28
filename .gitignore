@@ -8,3 +8,4 @@ db.sqlite3
 .vscode/
 *.code-workspace
 media/
+todo.txt
