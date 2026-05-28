@@ -1001,6 +1001,7 @@ const SketchMod = {
             },
             data: { title: "Data", items: [] },
             models: { title: "Models", items: [] },
+            training: { title: "Training", items: [] },
         };
 
         // Group registered nodes by category
@@ -2045,7 +2046,45 @@ const SketchMod = {
         this._propagateShapes();
         this._render();
     },
+    _updateOptimizerProp(prop, value) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof OptimizerNode)) return;
 
+        this._saveUndoState();
+
+        // Handle numeric values
+        const numericProps = [
+            "learningRate",
+            "adamBeta1",
+            "adamBeta2",
+            "adamEpsilon",
+            "sgdMomentum",
+            "weightDecay",
+            "epochs",
+            "batchSize",
+            "gradientClip",
+        ];
+        const boolProps = ["shuffle", "nesterov"];
+
+        if (numericProps.includes(prop)) {
+            node[prop] =
+                value === "" || value === null ? null : parseFloat(value);
+            if (isNaN(node[prop])) node[prop] = null;
+        } else if (boolProps.includes(prop)) {
+            node[prop] = value === true || value === "true";
+        } else {
+            node[prop] = value;
+        }
+
+        // If optimizer type changed, refresh properties to show/hide specific fields
+        if (prop === "optimizerType") {
+            this._showProperties(node);
+        }
+
+        this._saveToSession();
+        this._render();
+    },
     _addDimRow() {
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
@@ -4227,6 +4266,253 @@ class AddNode extends RectNode {
         );
     }
 }
+// ========== OPTIMIZER NODE ==========
+class OptimizerNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "optimizer", 120, 85);
+
+        // Loss config
+        this.lossType = "cross_entropy"; // cross_entropy, mse, bce, nll, l1, huber
+        this.lossOptions = [
+            { value: "cross_entropy", label: "Cross Entropy" },
+            { value: "mse", label: "MSE" },
+            { value: "bce", label: "BCE" },
+            { value: "nll", label: "NLL" },
+            { value: "l1", label: "L1" },
+            { value: "huber", label: "Huber" },
+        ];
+
+        // Optimizer config
+        this.optimizerType = "adam"; // adam, sgd, adamw
+        this.optimizerOptions = [
+            { value: "adam", label: "Adam" },
+            { value: "sgd", label: "SGD" },
+            { value: "adamw", label: "AdamW" },
+        ];
+        this.learningRate = 0.001;
+        this.adamBeta1 = 0.9;
+        this.adamBeta2 = 0.999;
+        this.adamEpsilon = 1e-8;
+        this.sgdMomentum = 0.9;
+        this.weightDecay = 0;
+        this.nesterov = false;
+
+        // Training loop config
+        this.epochs = 10;
+        this.batchSize = 32;
+        this.shuffle = true;
+        this.gradientClip = null; // null = no clipping
+
+        // Ports: 2 inputs, 0 outputs
+        this.maxInputs = 2;
+        this.minInputs = 2;
+        this.maxOutputs = 0;
+        this.minOutputs = 0;
+
+        this.addInput("loss");
+        this.addInput("labels");
+        this.updatePorts();
+    }
+
+    updatePorts() {
+        const hw = this.width / 2 + 8;
+        const total = this.inputs.length;
+
+        this.inputs.forEach((p, i) => {
+            p.x = this.x - hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (total + 1)) * (i + 1);
+        });
+    }
+
+    drawLabel(ctx) {
+        ctx.font = "bold 11px Inter, sans-serif";
+        const lossLabel =
+            this.lossOptions.find((o) => o.value === this.lossType)?.label ||
+            "Loss";
+        ctx.fillText(lossLabel, this.x, this.y - 10);
+        ctx.font = "9px Inter, sans-serif";
+        const optLabel =
+            this.optimizerOptions.find((o) => o.value === this.optimizerType)
+                ?.label || "Adam";
+        ctx.fillText(optLabel + " · " + this.epochs + "ep", this.x, this.y + 6);
+        ctx.fillText(
+            "bs=" + this.batchSize + " lr=" + this.learningRate,
+            this.x,
+            this.y + 18,
+        );
+    }
+
+    computeOutputShapes() {
+        return [];
+    }
+
+    toJSON() {
+        return {
+            ...super.toJSON(),
+            lossType: this.lossType,
+            optimizerType: this.optimizerType,
+            learningRate: this.learningRate,
+            adamBeta1: this.adamBeta1,
+            adamBeta2: this.adamBeta2,
+            adamEpsilon: this.adamEpsilon,
+            sgdMomentum: this.sgdMomentum,
+            weightDecay: this.weightDecay,
+            nesterov: this.nesterov,
+            epochs: this.epochs,
+            batchSize: this.batchSize,
+            shuffle: this.shuffle,
+            gradientClip: this.gradientClip,
+        };
+    }
+
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.lossType) this.lossType = d.lossType;
+        if (d.optimizerType) this.optimizerType = d.optimizerType;
+        if (d.learningRate !== undefined) this.learningRate = d.learningRate;
+        if (d.adamBeta1 !== undefined) this.adamBeta1 = d.adamBeta1;
+        if (d.adamBeta2 !== undefined) this.adamBeta2 = d.adamBeta2;
+        if (d.adamEpsilon !== undefined) this.adamEpsilon = d.adamEpsilon;
+        if (d.sgdMomentum !== undefined) this.sgdMomentum = d.sgdMomentum;
+        if (d.weightDecay !== undefined) this.weightDecay = d.weightDecay;
+        if (d.nesterov !== undefined) this.nesterov = d.nesterov;
+        if (d.epochs) this.epochs = d.epochs;
+        if (d.batchSize) this.batchSize = d.batchSize;
+        if (d.shuffle !== undefined) this.shuffle = d.shuffle;
+        if (d.gradientClip !== undefined) this.gradientClip = d.gradientClip;
+    }
+
+    getPropertiesHTML() {
+        const lossOptionsHTML = this.lossOptions
+            .map(
+                (o) =>
+                    `<option value="${o.value}" ${this.lossType === o.value ? "selected" : ""}>${o.label}</option>`,
+            )
+            .join("");
+
+        const optOptionsHTML = this.optimizerOptions
+            .map(
+                (o) =>
+                    `<option value="${o.value}" ${this.optimizerType === o.value ? "selected" : ""}>${o.label}</option>`,
+            )
+            .join("");
+
+        // Optimizer-specific fields
+        let optimizerSpecificHTML = "";
+        if (this.optimizerType === "adam" || this.optimizerType === "adamw") {
+            optimizerSpecificHTML += `
+            <div class="prop-group">
+                <label>Beta1</label>
+                <input type="number" id="prop-adam-beta1" class="prop-input" value="${this.adamBeta1}" step="0.01" min="0" max="1"
+                       onchange="SketchMod._updateOptimizerProp('adamBeta1', this.value)">
+            </div>
+            <div class="prop-group">
+                <label>Beta2</label>
+                <input type="number" id="prop-adam-beta2" class="prop-input" value="${this.adamBeta2}" step="0.001" min="0" max="1"
+                       onchange="SketchMod._updateOptimizerProp('adamBeta2', this.value)">
+            </div>
+            <div class="prop-group">
+                <label>Epsilon</label>
+                <input type="number" id="prop-adam-epsilon" class="prop-input" value="${this.adamEpsilon}" step="0.00000001" min="0"
+                       onchange="SketchMod._updateOptimizerProp('adamEpsilon', this.value)">
+            </div>`;
+        }
+        if (this.optimizerType === "sgd") {
+            optimizerSpecificHTML += `
+            <div class="prop-group">
+                <label>Momentum</label>
+                <input type="number" id="prop-sgd-momentum" class="prop-input" value="${this.sgdMomentum}" step="0.01" min="0" max="1"
+                       onchange="SketchMod._updateOptimizerProp('sgdMomentum', this.value)">
+            </div>
+            <div class="prop-group">
+                <label>
+                    <input type="checkbox" id="prop-nesterov" ${this.nesterov ? "checked" : ""}
+                           onchange="SketchMod._updateOptimizerProp('nesterov', this.checked)">
+                    Nesterov
+                </label>
+            </div>`;
+        }
+        if (this.optimizerType === "adamw" || this.optimizerType === "sgd") {
+            optimizerSpecificHTML += `
+            <div class="prop-group">
+                <label>Weight Decay</label>
+                <input type="number" id="prop-weight-decay" class="prop-input" value="${this.weightDecay}" step="0.0001" min="0"
+                       onchange="SketchMod._updateOptimizerProp('weightDecay', this.value)">
+            </div>`;
+        }
+
+        return `
+            ${this._getShapeSummaryHTML()}
+            <div class="prop-group">
+            <label>Input Ports</label>
+            <div class="port-legend">
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <circle cx="5" cy="5" r="4" fill="#2cbde9" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Loss — from OutputNode
+                </span>
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <circle cx="5" cy="5" r="4" fill="#a78bfa" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Labels — from data pipeline
+                </span>
+            </div>
+        </div>
+        <div class="prop-group">
+            <label>Loss Function</label>
+            <select id="prop-loss-type" class="prop-select" onchange="SketchMod._updateOptimizerProp('lossType', this.value)">
+                ${lossOptionsHTML}
+            </select>
+        </div>
+            <div class="prop-group">
+                <label>Loss Function</label>
+                <select id="prop-loss-type" class="prop-select" onchange="SketchMod._updateOptimizerProp('lossType', this.value)">
+                    ${lossOptionsHTML}
+                </select>
+            </div>
+            <div class="prop-group">
+                <label>Optimizer</label>
+                <select id="prop-optimizer-type" class="prop-select" onchange="SketchMod._updateOptimizerProp('optimizerType', this.value)">
+                    ${optOptionsHTML}
+                </select>
+            </div>
+            <div class="prop-group">
+                <label>Learning Rate</label>
+                <input type="number" id="prop-lr" class="prop-input" value="${this.learningRate}" step="0.0001" min="0"
+                       onchange="SketchMod._updateOptimizerProp('learningRate', this.value)">
+            </div>
+            ${optimizerSpecificHTML}
+            <div class="prop-group">
+                <label>Epochs</label>
+                <input type="number" id="prop-epochs" class="prop-input" value="${this.epochs}" min="1" max="10000"
+                       onchange="SketchMod._updateOptimizerProp('epochs', this.value)">
+            </div>
+            <div class="prop-group">
+                <label>Batch Size</label>
+                <input type="number" id="prop-batch-size" class="prop-input" value="${this.batchSize}" min="1" max="4096"
+                       onchange="SketchMod._updateOptimizerProp('batchSize', this.value)">
+            </div>
+            <div class="prop-group">
+                <label>
+                    <input type="checkbox" id="prop-shuffle" ${this.shuffle ? "checked" : ""}
+                           onchange="SketchMod._updateOptimizerProp('shuffle', this.checked)">
+                    Shuffle
+                </label>
+            </div>
+            <div class="prop-group">
+                <label>Gradient Clip (optional)</label>
+                <input type="number" id="prop-grad-clip" class="prop-input" value="${this.gradientClip || ""}" step="0.1" min="0"
+                       placeholder="None"
+                       onchange="SketchMod._updateOptimizerProp('gradientClip', this.value || null)">
+            </div>
+        `;
+    }
+}
 // ========== PORT ==========
 
 class Port {
@@ -4321,6 +4607,7 @@ class Port {
         if (this.subType === "train") return "#f59e0b";
         if (this.subType === "test") return "#4ade80";
         if (this.subType === "features") return "#ff00b7";
+        if (this.subType === "loss") return "#2cbde9";
         if (this.subType === "labels") return "#a78bfa";
         if (this.subType === "main") return "#9e396f";
         if (this.subType === "skip") return "#ffcc00";
@@ -4626,6 +4913,19 @@ SketchMod.registerNode({
         <circle cx="12" cy="12" r="10"/>
         <line x1="12" y1="8" x2="12" y2="16"/>
         <line x1="8" y1="12" x2="16" y2="12"/></svg>`,
+});
+SketchMod.registerNode({
+    type: "optimizer",
+    label: "Optimizer",
+    category: "training",
+    class: OptimizerNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 1v4"/><path d="M12 19v4"/>
+        <path d="M4.22 4.22l2.83 2.83"/><path d="M16.95 16.95l2.83 2.83"/>
+        <path d="M1 12h4"/><path d="M19 12h4"/>
+        <path d="M4.22 19.78l2.83-2.83"/><path d="M16.95 7.05l2.83-2.83"/>
+    </svg>`,
 });
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
