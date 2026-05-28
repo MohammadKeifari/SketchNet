@@ -1015,3 +1015,71 @@
         gap: 8px;
     }
 }
+
+/* ===== COLLAPSED SIDEBARS ===== */
+.toolbar-left.collapsed {
+    width: 48px;
+}
+
+.toolbar-left.collapsed .tool-label,
+.toolbar-left.collapsed .toolbar-section-title {
+    display: none;
+}
+
+.toolbar-left.collapsed .tool-btn {
+    justify-content: center;
+    padding: 10px;
+}
+
+.sidebar-right.collapsed {
+    width: 48px;
+}
+
+.sidebar-right.collapsed .sidebar-btn span,
+.sidebar-right.collapsed .sidebar-section-title,
+.sidebar-right.collapsed .zoom-indicator,
+.sidebar-right.collapsed #propertiesPanel,
+.sidebar-right.collapsed .sidebar-model-info {
+    display: none;
+}
+
+.sidebar-right.collapsed .sidebar-btn {
+    justify-content: center;
+    padding: 10px;
+}
+
+/* Collapse toggle buttons */
+.sidebar-collapse-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 32px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    color: var(--text-secondary);
+    transition: var(--transition);
+    padding: 0;
+}
+
+.sidebar-collapse-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.sidebar-collapse-left {
+    right: -16px;
+    border-left: none;
+    border-radius: 0 6px 6px 0;
+}
+
+.sidebar-collapse-right {
+    left: -16px;
+    border-right: none;
+    border-radius: 6px 0 0 6px;
+}

@@ -10,7 +10,9 @@
     <link rel="stylesheet" href="{% static 'sketchmod/css/canvas.css' %}">
 {% endblock extra_css %}
 {% block content %}
-    <div class="sketchmod-container">
+    <div class="sketchmod-container"
+         data-collapse-left="{{ collapse_left_sidebar|lower }}"
+         data-collapse-right="{{ collapse_right_sidebar|lower }}">
         <!-- Left Toolbar -->
         <div class="toolbar toolbar-left" id="leftToolbar">
             <!--filled using the js-->

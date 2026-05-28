@@ -7,7 +7,16 @@ from data_manager.models import Dataset
 
 @login_required
 def canvas(request):
-    return render(request, "sketchmod/canvas.html")
+    context = {}
+    if request.user.is_authenticated:
+        user_settings = request.user.settings
+        context["collapse_left_sidebar"] = user_settings.collapse_left_sidebar
+        context["collapse_right_sidebar"] = user_settings.collapse_right_sidebar
+    else:
+        context["collapse_left_sidebar"] = False
+        context["collapse_right_sidebar"] = False
+    return render(request, "sketchmod/canvas.html", context)
+    
 
 
 def api_dataset_columns(request, dataset_id):

@@ -112,6 +112,19 @@ const SketchMod = {
         } else {
             this._loadFromSession();
         }
+        // Apply sidebar collapse preferences
+        const container = document.querySelector(".sketchmod-container");
+        const collapseLeft = container?.dataset.collapseLeft === "true";
+        const collapseRight = container?.dataset.collapseRight === "true";
+
+        if (collapseLeft) {
+            document.querySelector(".toolbar-left")?.classList.add("collapsed");
+        }
+        if (collapseRight) {
+            document
+                .querySelector(".sidebar-right")
+                ?.classList.add("collapsed");
+        }
 
         this.resize();
         window.addEventListener("resize", () => this.resize());
