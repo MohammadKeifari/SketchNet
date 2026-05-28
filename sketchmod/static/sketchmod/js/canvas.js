@@ -1482,7 +1482,6 @@ const SketchMod = {
             <label>Link</label>
             <p class="prop-hint">${link.from.node.type} → ${link.to.node.type}</p>
         </div>
-        ${shapeHTML}
         ${weightHTML}
         <div class="prop-group">
             <button class="prop-btn prop-btn-danger" onclick="SketchMod._deleteLink(SketchMod.selectedLinks[0])">
