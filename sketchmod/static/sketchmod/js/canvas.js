@@ -3108,6 +3108,21 @@ const SketchMod = {
             });
         }
 
+        // === 10. Check per-node connection rules ===
+        for (const node of this.nodes) {
+            const incomingLinks = this.links.filter((l) => l.to.node === node);
+            const connectionCount = incomingLinks.length;
+
+            const nodeErrors = node.validateConnections(connectionCount);
+            for (const msg of nodeErrors) {
+                errors.push({
+                    type: "error",
+                    node: node,
+                    message: msg,
+                });
+            }
+        }
+
         // Store for visual highlighting
         this.errorLinks = [];
         this.errorNodes = [];
@@ -3796,6 +3811,13 @@ class NeuronNode extends CircleNode {
     drawLabel(ctx) {
         ctx.fillText("N", this.x, this.y);
     }
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount < 1) {
+            errors.push(`${this.type}: requires at least 1 input connection`);
+        }
+        return errors;
+    }
     computeOutputShapes() {
         const allShapes = this._getAllInputShapeObjs();
         if (allShapes.length === 0) return this._emptyShapes();
@@ -3854,6 +3876,13 @@ class LayerNode extends RectNode {
         ctx.fillText(this.numNeurons + "", this.x, this.y - 9);
         ctx.font = "11px Inter, sans-serif";
         ctx.fillText("Layer", this.x, this.y + 12);
+    }
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount < 1) {
+            errors.push(`${this.type}: requires at least 1 input connection`);
+        }
+        return errors;
     }
     computeOutputShapes() {
         const allShapes = this._getAllInputShapeObjs();
@@ -4047,7 +4076,15 @@ class OutputNode extends RectNode {
     drawLabel(ctx) {
         ctx.fillText("Output", this.x, this.y);
     }
-
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount > 1) {
+            errors.push(
+                `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
+            );
+        }
+        return errors;
+    }
     computeOutputShapes() {
         return [];
     }
@@ -4118,7 +4155,15 @@ class ColumnSelectNode extends RectNode {
                 : "Columns";
         ctx.fillText(label, this.x, this.y);
     }
-
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount > 1) {
+            errors.push(
+                `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
+            );
+        }
+        return errors;
+    }
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
@@ -4235,7 +4280,15 @@ class RowSelectNode extends RectNode {
         const label = this.rowCount > 0 ? this.rowCount + " rows" : "Rows";
         ctx.fillText(label, this.x, this.y);
     }
-
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount > 1) {
+            errors.push(
+                `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
+            );
+        }
+        return errors;
+    }
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
@@ -4395,6 +4448,15 @@ class DimSelectNode extends RectNode {
             this.x,
             this.y + 12,
         );
+    }
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount > 1) {
+            errors.push(
+                `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
+            );
+        }
+        return errors;
     }
 
     computeOutputShapes() {
@@ -4620,7 +4682,15 @@ class TrainTestSplitNode extends RectNode {
             this.y + 10,
         );
     }
-
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount > 1) {
+            errors.push(
+                `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
+            );
+        }
+        return errors;
+    }
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
@@ -4712,6 +4782,15 @@ class NormalizeNode extends RectNode {
         ctx.font = "10px Inter, sans-serif";
         ctx.fillText("Normalize", this.x, this.y + 12);
     }
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount > 1) {
+            errors.push(
+                `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
+            );
+        }
+        return errors;
+    }
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
@@ -4764,6 +4843,15 @@ class Conv2DNode extends RectNode {
             this.x,
             this.y + 14,
         );
+    }
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount > 1) {
+            errors.push(
+                `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
+            );
+        }
+        return errors;
     }
 
     computeOutputShapes() {
@@ -4841,6 +4929,15 @@ class FlattenNode extends RectNode {
         ctx.font = "bold 12px Inter, sans-serif";
         ctx.fillText("Flatten", this.x, this.y);
     }
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount > 1) {
+            errors.push(
+                `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
+            );
+        }
+        return errors;
+    }
 
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
@@ -4888,7 +4985,15 @@ class DropoutNode extends RectNode {
         ctx.font = "10px Inter, sans-serif";
         ctx.fillText(Math.round(this.rate * 100) + "%", this.x, this.y + 10);
     }
-
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount > 1) {
+            errors.push(
+                `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
+            );
+        }
+        return errors;
+    }
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
@@ -4930,6 +5035,15 @@ class BatchNormNode extends RectNode {
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
         ctx.fillText("BatchNorm", this.x, this.y);
+    }
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount > 1) {
+            errors.push(
+                `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
+            );
+        }
+        return errors;
     }
 
     computeOutputShapes() {
@@ -4975,7 +5089,15 @@ class OneHotEncodeNode extends RectNode {
         ctx.font = "9px Inter, sans-serif";
         ctx.fillText(this.numClasses + " classes", this.x, this.y + 10);
     }
-
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount > 1) {
+            errors.push(
+                `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
+            );
+        }
+        return errors;
+    }
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
@@ -5019,6 +5141,15 @@ class ConcatenateNode extends RectNode {
         ctx.font = "9px Inter, sans-serif";
         const axisLabel = this.axis === -1 ? "last" : this.axis;
         ctx.fillText("axis: " + axisLabel, this.x, this.y + 10);
+    }
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount < 2) {
+            errors.push(
+                `Concat: requires at least 2 input connections, has ${incomingCount}`,
+            );
+        }
+        return errors;
     }
 
     computeOutputShapes() {
@@ -5094,7 +5225,15 @@ class AddNode extends RectNode {
         ctx.font = "bold 14px Inter, sans-serif";
         ctx.fillText("+", this.x, this.y);
     }
-
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount !== 2) {
+            errors.push(
+                `Add: requires exactly 2 input connections, has ${incomingCount}`,
+            );
+        }
+        return errors;
+    }
     computeOutputShapes() {
         if (this.inputs.length < 2) return this._emptyShapes();
 
@@ -5208,7 +5347,15 @@ class OptimizerNode extends RectNode {
             this.y + 18,
         );
     }
-
+    validateConnections(incomingCount) {
+        const errors = [];
+        if (incomingCount !== 2) {
+            errors.push(
+                `Optimizer: requires 2 input connections (loss + labels), has ${incomingCount}`,
+            );
+        }
+        return errors;
+    }
     computeOutputShapes() {
         return [];
     }
@@ -5521,6 +5668,14 @@ class VisualizationNode extends RectNode {
                   ? "Continuous"
                   : "No Color";
         ctx.fillText(modeLabel, this.x, this.y + 10);
+    }
+    validateConnections(incomingCount) {
+        const errors = [];
+        // At least 1 coord input, up to 4 total
+        if (incomingCount < 1) {
+            errors.push(`Visualization: requires at least 1 input connection`);
+        }
+        return errors;
     }
 
     computeOutputShapes() {
