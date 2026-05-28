@@ -863,3 +863,54 @@
 .port-legend-item svg {
     flex-shrink: 0;
 }
+.color-palette-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.color-palette-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.color-palette-index {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-family: monospace;
+    min-width: 18px;
+}
+
+.color-palette-picker {
+    width: 32px;
+    height: 24px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 0;
+    background: none;
+}
+
+.color-palette-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.color-palette-remove:hover:not(:disabled) {
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.1);
+}
+
+.color-palette-remove:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}

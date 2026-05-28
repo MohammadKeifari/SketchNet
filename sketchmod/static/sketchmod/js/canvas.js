@@ -281,7 +281,22 @@ const SketchMod = {
                         node.updatePorts();
                     }
                 }
-
+                if (action === "add-color-input") {
+                    this._saveUndoState();
+                    const port = node.addInput("color");
+                    if (port) this.ports = this._collectPorts();
+                }
+                if (action === "remove-color-input") {
+                    this._saveUndoState();
+                    const port = node.removeInput(); // removes color port first (per removeInput logic)
+                    if (port) {
+                        this.links = this.links.filter(
+                            (l) => l.from !== port && l.to !== port,
+                        );
+                        this.ports = this._collectPorts();
+                        node.updatePorts();
+                    }
+                }
                 if (action === "delete-node") {
                     this._saveUndoState();
                     this._deleteNode(node);
@@ -1134,26 +1149,66 @@ const SketchMod = {
         );
         const deleteItem = menu.querySelector('[data-action="delete-node"]');
 
-        addInput.style.display = node.canAddInput() ? "flex" : "none";
-        addOutput.style.display = node.canAddOutput() ? "flex" : "none";
-        removeInput.style.display = node.canRemoveInput() ? "flex" : "none";
-        removeOutput.style.display = node.canRemoveOutput() ? "flex" : "none";
-        addParamInput.style.display = node.canAddParamInput() ? "flex" : "none";
-        addParamOutput.style.display = node.canAddParamOutput()
-            ? "flex"
-            : "none";
-        removeParamInput.style.display = node.canRemoveParamInput()
-            ? "flex"
-            : "none";
-        removeParamOutput.style.display = node.canRemoveParamOutput()
-            ? "flex"
-            : "none";
+        // Visualization-specific items
+        const addColorInput = menu.querySelector(
+            '[data-action="add-color-input"]',
+        );
+        const removeColorInput = menu.querySelector(
+            '[data-action="remove-color-input"]',
+        );
 
-        // Can't delete input/output nodes
-        if (node instanceof InputDataNode || node instanceof OutputNode) {
-            deleteItem.style.display = "none";
-        } else {
+        // Hide all optional items first
+        if (addColorInput) addColorInput.style.display = "none";
+        if (removeColorInput) removeColorInput.style.display = "none";
+
+        if (node instanceof VisualizationNode) {
+            // Show visualization-specific options
+            addInput.style.display = node._canAddCoordInput() ? "flex" : "none";
+            addOutput.style.display = "none";
+            removeInput.style.display = node._canRemoveCoordInput()
+                ? "flex"
+                : "none";
+            removeOutput.style.display = "none";
+            addParamInput.style.display = "none";
+            addParamOutput.style.display = "none";
+            removeParamInput.style.display = "none";
+            removeParamOutput.style.display = "none";
             deleteItem.style.display = "flex";
+
+            if (addColorInput)
+                addColorInput.style.display = node._canAddColorInput()
+                    ? "flex"
+                    : "none";
+            if (removeColorInput)
+                removeColorInput.style.display = node._canRemoveColorInput()
+                    ? "flex"
+                    : "none";
+        } else {
+            // Standard behavior for other nodes
+            addInput.style.display = node.canAddInput() ? "flex" : "none";
+            addOutput.style.display = node.canAddOutput() ? "flex" : "none";
+            removeInput.style.display = node.canRemoveInput() ? "flex" : "none";
+            removeOutput.style.display = node.canRemoveOutput()
+                ? "flex"
+                : "none";
+            addParamInput.style.display = node.canAddParamInput()
+                ? "flex"
+                : "none";
+            addParamOutput.style.display = node.canAddParamOutput()
+                ? "flex"
+                : "none";
+            removeParamInput.style.display = node.canRemoveParamInput()
+                ? "flex"
+                : "none";
+            removeParamOutput.style.display = node.canRemoveParamOutput()
+                ? "flex"
+                : "none";
+
+            if (node instanceof InputDataNode || node instanceof OutputNode) {
+                deleteItem.style.display = "none";
+            } else {
+                deleteItem.style.display = "flex";
+            }
         }
     },
 
@@ -2084,6 +2139,68 @@ const SketchMod = {
 
         this._saveToSession();
         this._render();
+    },
+    _updateVizProp(prop, value) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof VisualizationNode)) return;
+
+        this._saveUndoState();
+        node[prop] = value;
+
+        // If switching modes, refresh properties
+        if (prop === "colorMode") {
+            // Auto-add color input when switching to discrete/continuous
+            if (
+                (value === "discrete" || value === "continuous") &&
+                !node._hasColorInput
+            ) {
+                const port = node._addColorInput();
+                if (port) this.ports = this._collectPorts();
+            }
+            // Auto-remove color input when switching to none
+            if (value === "none" && node._hasColorInput) {
+                const port = node._removeColorInput();
+                if (port) this.ports = this._collectPorts();
+            }
+            this._showProperties(node);
+        }
+
+        this._saveToSession();
+        this._render();
+    },
+
+    _updateVizPaletteColor(index, value) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof VisualizationNode)) return;
+
+        this._saveUndoState();
+        node.colorPalette[index] = value;
+        this._saveToSession();
+    },
+
+    _addVizPaletteColor() {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof VisualizationNode)) return;
+
+        this._saveUndoState();
+        node.colorPalette.push("#6c5ce7"); // default new color
+        this._showProperties(node); // refresh to show new row
+        this._saveToSession();
+    },
+
+    _removeVizPaletteColor(index) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof VisualizationNode)) return;
+        if (node.colorPalette.length <= 2) return;
+
+        this._saveUndoState();
+        node.colorPalette.splice(index, 1);
+        this._showProperties(node); // refresh to re-render indices
+        this._saveToSession();
     },
     _addDimRow() {
         if (this.selectedNodes.length !== 1) return;
@@ -4513,6 +4630,298 @@ class OptimizerNode extends RectNode {
         `;
     }
 }
+// ========== VISUALIZATION NODE ==========
+class VisualizationNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "visualization", 120, 75);
+
+        // Coordinate inputs: min 1, max 3
+        this.maxInputs = 4; // 3 coords + 1 color
+        this.minInputs = 1; // at least 1 coord
+        this.maxOutputs = 0;
+        this.minOutputs = 0;
+
+        // Color input constraints
+        this.maxColorInputs = 1;
+        this.minColorInputs = 0;
+
+        // Color mode
+        this.colorMode = "none"; // "none", "discrete", "continuous"
+        this.colorPalette = [
+            "#ef4444",
+            "#4ade80",
+            "#60a5fa",
+            "#f59e0b",
+            "#a78bfa",
+        ];
+        this.continuousMinColor = "#3b82f6";
+        this.continuousMaxColor = "#ef4444";
+
+        // Start with 2 coordinate inputs
+        this.addInput("coord");
+        this.addInput("coord");
+        this.updatePorts();
+    }
+
+    // ---- Helpers ----
+    _coordPorts() {
+        return this.inputs.filter((p) => !p.isColorPort);
+    }
+
+    _colorPort() {
+        return this.inputs.find((p) => p.isColorPort) || null;
+    }
+
+    _hasColorInput() {
+        return this._colorPort() !== null;
+    }
+
+    _canAddCoordInput() {
+        return this._coordPorts().length < 3;
+    }
+
+    _canRemoveCoordInput() {
+        return this._coordPorts().length > this.minInputs;
+    }
+
+    _canAddColorInput() {
+        return !this._hasColorInput();
+    }
+
+    _canRemoveColorInput() {
+        return this._hasColorInput();
+    }
+
+    // ---- Override BaseNode ----
+    canAddInput(subType) {
+        if (subType === "color") return this._canAddColorInput();
+        return this._canAddCoordInput();
+    }
+
+    canRemoveInput() {
+        return this._canRemoveColorInput() || this._canRemoveCoordInput();
+    }
+
+    addInput(subType) {
+        if (subType === "color") {
+            if (!this._canAddColorInput()) return null;
+            const p = new Port(
+                this,
+                "input",
+                this.inputs.length,
+                "color",
+                "data",
+            );
+            p.isColorPort = true;
+            this.inputs.push(p);
+            this.updatePorts();
+            return p;
+        }
+        if (!this._canAddCoordInput()) return null;
+        const p = new Port(this, "input", this.inputs.length, "coord", "data");
+        this.inputs.push(p);
+        this.updatePorts();
+        return p;
+    }
+
+    removeInput() {
+        // Prefer removing color port first
+        if (this._canRemoveColorInput()) {
+            const port = this._colorPort();
+            this.inputs = this.inputs.filter((p) => p !== port);
+            this._renumberPorts();
+            this.updatePorts();
+            return port;
+        }
+        if (!this._canRemoveCoordInput()) return null;
+        const ports = this._coordPorts();
+        const port = ports[ports.length - 1];
+        this.inputs = this.inputs.filter((p) => p !== port);
+        this._renumberPorts();
+        this.updatePorts();
+        return port;
+    }
+
+    _renumberPorts() {
+        this.inputs.forEach((p, i) => {
+            p.index = i;
+            p.id = `${this.id}_input_${i}`;
+        });
+    }
+
+    updatePorts() {
+        const hw = this.width / 2 + 8;
+        const total = this.inputs.length;
+
+        this.inputs.forEach((p, i) => {
+            p.x = this.x - hw;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (total + 1)) * (i + 1);
+        });
+    }
+
+    drawLabel(ctx) {
+        const coordCount = this._coordPorts().length;
+        ctx.font = "bold 12px Inter, sans-serif";
+        ctx.fillText(`${coordCount}D Viz`, this.x, this.y - 6);
+        ctx.font = "9px Inter, sans-serif";
+        const modeLabel =
+            this.colorMode === "discrete"
+                ? "Discrete"
+                : this.colorMode === "continuous"
+                  ? "Continuous"
+                  : "No Color";
+        ctx.fillText(modeLabel, this.x, this.y + 10);
+    }
+
+    computeOutputShapes() {
+        return [];
+    }
+
+    toJSON() {
+        return {
+            ...super.toJSON(),
+            colorMode: this.colorMode,
+            colorPalette: this.colorPalette,
+            continuousMinColor: this.continuousMinColor,
+            continuousMaxColor: this.continuousMaxColor,
+        };
+    }
+
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.colorMode) this.colorMode = d.colorMode;
+        if (d.colorPalette) this.colorPalette = d.colorPalette;
+        if (d.continuousMinColor)
+            this.continuousMinColor = d.continuousMinColor;
+        if (d.continuousMaxColor)
+            this.continuousMaxColor = d.continuousMaxColor;
+        // Re-mark color port after ports are rebuilt by super.fromJSON
+        const cp = this.inputs.find((p) => p.subType === "color");
+        if (cp) cp.isColorPort = true;
+    }
+
+    getPropertiesHTML() {
+        const coordPorts = this._coordPorts();
+        const coordCount = coordPorts.length;
+
+        // Port legend
+        let portLegendHTML = `
+        <div class="prop-group">
+            <label>Input Ports</label>
+            <div class="port-legend">
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <circle cx="5" cy="5" r="4" fill="#60a5fa" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Coordinates (${coordCount}/3)
+                </span>`;
+        if (this._hasColorInput()) {
+            portLegendHTML += `
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <circle cx="5" cy="5" r="4" fill="#ff00b7" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Color mapping
+                </span>`;
+        }
+        portLegendHTML += `</div></div>`;
+
+        // Color mode radio
+        let modeHTML = `
+        <div class="prop-group">
+            <label>Color Mode</label>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="viz-color-mode" value="none"
+                           ${this.colorMode === "none" ? "checked" : ""}
+                           onchange="SketchMod._updateVizProp('colorMode', 'none')">
+                    None
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="viz-color-mode" value="discrete"
+                           ${this.colorMode === "discrete" ? "checked" : ""}
+                           onchange="SketchMod._updateVizProp('colorMode', 'discrete')">
+                    Discrete
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="viz-color-mode" value="continuous"
+                           ${this.colorMode === "continuous" ? "checked" : ""}
+                           onchange="SketchMod._updateVizProp('colorMode', 'continuous')">
+                    Continuous
+                </label>
+            </div>
+        </div>`;
+
+        // Discrete palette
+        let discreteHTML = "";
+        if (this.colorMode === "discrete") {
+            discreteHTML = `
+            <div class="prop-group">
+                <label>Color Palette</label>
+                <div class="color-palette-list" id="vizPaletteList">
+                    ${this.colorPalette
+                        .map(
+                            (color, i) => `
+                        <div class="color-palette-row">
+                            <span class="color-palette-index">${i}</span>
+                            <input type="color" class="color-palette-picker"
+                                   value="${color}"
+                                   onchange="SketchMod._updateVizPaletteColor(${i}, this.value)">
+                            <button class="color-palette-remove"
+                                    onclick="SketchMod._removeVizPaletteColor(${i})"
+                                    ${this.colorPalette.length <= 2 ? "disabled" : ""}
+                                    title="Remove color">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"/>
+                                    <line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
+                        </div>
+                    `,
+                        )
+                        .join("")}
+                </div>
+                <button class="prop-btn prop-btn-add" onclick="SketchMod._addVizPaletteColor()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Add Color
+                </button>
+                <p class="prop-hint">Classes beyond the last color use the last color.</p>
+            </div>`;
+        }
+
+        // Continuous
+        let continuousHTML = "";
+        if (this.colorMode === "continuous") {
+            continuousHTML = `
+            <div class="prop-group">
+                <label>Min Color (value 0.0)</label>
+                <input type="color" class="prop-input" style="height: 36px; padding: 4px;"
+                       value="${this.continuousMinColor}"
+                       onchange="SketchMod._updateVizProp('continuousMinColor', this.value)">
+            </div>
+            <div class="prop-group">
+                <label>Max Color (value 1.0)</label>
+                <input type="color" class="prop-input" style="height: 36px; padding: 4px;"
+                       value="${this.continuousMaxColor}"
+                       onchange="SketchMod._updateVizProp('continuousMaxColor', this.value)">
+            </div>
+            <p class="prop-hint">Expects normalized values [0,1]. Out-of-range values are clamped.</p>`;
+        }
+
+        return `
+            ${portLegendHTML}
+            ${modeHTML}
+            ${discreteHTML}
+            ${continuousHTML}
+        `;
+    }
+}
 // ========== PORT ==========
 
 class Port {
@@ -4533,6 +4942,9 @@ class Port {
 
         this.role = role || null; // "loss", "prediction", "evaluation", null
         this.bias = 0;
+
+        // Visualization-specific
+        this.isColorPort = false;
     }
 
     setShape(shapeArray, dtype, known, symbolic) {
@@ -4597,13 +5009,14 @@ class Port {
             if (this.type === "input") return "#ef4444";
             if (this.type === "output") return "#60a5fa";
         }
-
         // Data ports — role takes priority over subType
         if (this.role === "loss") return "#53BF9D";
         if (this.role === "prediction") return "#BD4291";
         if (this.role === "evaluation") return "#FFC54D";
 
         // Fall back to subType colors
+        if (this.subType === "color") return "#ff00b7";
+        if (this.subType === "coord") return "#60a5fa";
         if (this.subType === "train") return "#f59e0b";
         if (this.subType === "test") return "#4ade80";
         if (this.subType === "features") return "#ff00b7";
@@ -4639,6 +5052,7 @@ class Port {
             shape: this.shape,
             bias: this.bias,
             role: this.role,
+            isColorPort: this.isColorPort,
         };
     }
 }
@@ -4925,6 +5339,19 @@ SketchMod.registerNode({
         <path d="M4.22 4.22l2.83 2.83"/><path d="M16.95 16.95l2.83 2.83"/>
         <path d="M1 12h4"/><path d="M19 12h4"/>
         <path d="M4.22 19.78l2.83-2.83"/><path d="M16.95 7.05l2.83-2.83"/>
+    </svg>`,
+});
+SketchMod.registerNode({
+    type: "visualization",
+    label: "Visualization",
+    category: "data",
+    class: VisualizationNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/>
+        <circle cx="12" cy="14" r="2"/><circle cx="6" cy="18" r="2"/>
+        <circle cx="18" cy="18" r="2"/>
+        <line x1="6" y1="8" x2="6" y2="16"/><line x1="18" y1="8" x2="18" y2="16"/>
+        <line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="18" x2="16" y2="18"/>
     </svg>`,
 });
 // ========== STARTUP ==========
