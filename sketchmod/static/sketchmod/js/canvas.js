@@ -3797,9 +3797,22 @@ class NeuronNode extends CircleNode {
         ctx.fillText("N", this.x, this.y);
     }
     computeOutputShapes() {
-        const s = this._getFirstInputShapeObj();
-        if (!s) return this._emptyShapes();
-        return this._makeShapes([s.shape[0], 1], s.symbolic);
+        const allShapes = this._getAllInputShapeObjs();
+        if (allShapes.length === 0) return this._emptyShapes();
+
+        const batchDim = allShapes[0].shape[0];
+        let symbolic = allShapes[0].symbolic;
+        let known = allShapes[0].known;
+
+        for (const s of allShapes) {
+            if (s.shape[0] !== batchDim) {
+                return this._emptyShapes();
+            }
+            if (s.symbolic) symbolic = true;
+            if (!s.known) known = false;
+        }
+
+        return this._makeShapes([batchDim, 1], symbolic, known);
     }
     getPropertiesHTML() {
         return (
