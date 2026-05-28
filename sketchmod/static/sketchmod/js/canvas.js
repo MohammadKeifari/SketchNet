@@ -5132,8 +5132,19 @@ class Link {
         ctx.beginPath();
         ctx.moveTo(this.from.x, this.from.y);
         ctx.lineTo(this.to.x, this.to.y);
-        ctx.strokeStyle = selected ? "var(--accent)" : "var(--text-secondary)";
-        ctx.lineWidth = selected ? 3 : 2;
+
+        if (selected) {
+            ctx.strokeStyle = "var(--accent)";
+            ctx.lineWidth = 3;
+        } else if (this.hasWeight) {
+            // Weighted connection — more prominent
+            ctx.strokeStyle = "var(--text-primary)";
+            ctx.lineWidth = 2.5;
+        } else {
+            // Data-passing connection — lighter
+            ctx.strokeStyle = "var(--text-secondary)";
+            ctx.lineWidth = 1.5;
+        }
         ctx.stroke();
 
         // Arrow head
@@ -5153,7 +5164,11 @@ class Link {
             this.to.y - size * Math.sin(angle + 0.5),
         );
         ctx.closePath();
-        ctx.fillStyle = selected ? "var(--accent)" : "var(--text-secondary)";
+        ctx.fillStyle = selected
+            ? "var(--accent)"
+            : this.hasWeight
+              ? "var(--text-primary)"
+              : "var(--text-secondary)";
         ctx.fill();
     }
 
