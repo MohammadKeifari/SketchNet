@@ -240,17 +240,3 @@
         </form>
     </div>
 {% endblock content %}
-{% block extra_js %}
-    <script>
-    function updateSidebarPreference(field, value) {
-        fetch("{% url 'setting:update_sidebar' %}", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,
-            },
-            body: JSON.stringify({ [field]: value }),
-        });
-    }
-    </script>
-{% endblock extra_js %}
