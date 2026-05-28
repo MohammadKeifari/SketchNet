@@ -5360,18 +5360,43 @@ class Link {
             this.to.y - this.from.y,
             this.to.x - this.from.x,
         );
+
+        // Calculate the actual end point considering distanceFromPortCenter
+        const dx = this.to.x - this.from.x;
+        const dy = this.to.y - this.from.y;
+        const totalDistance = Math.hypot(dx, dy);
+
+        // If distanceFromPortCenter is defined, adjust the arrow start position
+        let arrowTipX = this.to.x;
+        let arrowTipY = this.to.y;
+
+        const distanceFromPortCenter = 3;
+
+        if (
+            distanceFromPortCenter !== undefined &&
+            totalDistance > distanceFromPortCenter
+        ) {
+            // Move arrow tip back from the port center by distanceFromPortCenter
+            const ratio =
+                (totalDistance - distanceFromPortCenter) / totalDistance;
+            arrowTipX = this.from.x + dx * ratio;
+            arrowTipY = this.from.y + dy * ratio;
+        }
+
         const size = 8;
+        // Draw arrow head at the adjusted position
         ctx.beginPath();
-        ctx.moveTo(this.to.x, this.to.y);
+        ctx.moveTo(arrowTipX, arrowTipY);
         ctx.lineTo(
-            this.to.x - size * Math.cos(angle - 0.5),
-            this.to.y - size * Math.sin(angle - 0.5),
+            arrowTipX - size * Math.cos(angle - 0.5),
+            arrowTipY - size * Math.sin(angle - 0.5),
         );
         ctx.lineTo(
-            this.to.x - size * Math.cos(angle + 0.5),
-            this.to.y - size * Math.sin(angle + 0.5),
+            arrowTipX - size * Math.cos(angle + 0.5),
+            arrowTipY - size * Math.sin(angle + 0.5),
         );
         ctx.closePath();
+
         ctx.fillStyle = selected
             ? "var(--accent)"
             : this.hasWeight
