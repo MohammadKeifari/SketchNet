@@ -3856,9 +3856,24 @@ class LayerNode extends RectNode {
         ctx.fillText("Layer", this.x, this.y + 12);
     }
     computeOutputShapes() {
-        const s = this._getFirstInputShapeObj();
-        if (!s) return this._emptyShapes();
-        return this._makeShapes([s.shape[0], this.numNeurons], s.symbolic);
+        const allShapes = this._getAllInputShapeObjs();
+        if (allShapes.length === 0) return this._emptyShapes();
+
+        // Check all inputs have the same batch dimension
+        const batchDim = allShapes[0].shape[0];
+        let symbolic = allShapes[0].symbolic;
+        let known = allShapes[0].known;
+
+        for (const s of allShapes) {
+            if (s.shape[0] !== batchDim) {
+                // Batch dimension mismatch
+                return this._emptyShapes();
+            }
+            if (s.symbolic) symbolic = true;
+            if (!s.known) known = false;
+        }
+
+        return this._makeShapes([batchDim, this.numNeurons], symbolic, known);
     }
     getPropertiesHTML() {
         return (
