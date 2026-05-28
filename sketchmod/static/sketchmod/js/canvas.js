@@ -1876,6 +1876,7 @@ const SketchMod = {
         const w = this.canvas.width;
         const h = this.canvas.height;
         ctx.clearRect(0, 0, w, h);
+
         ctx.save();
         ctx.translate(this.offsetX, this.offsetY);
         ctx.scale(this.scale, this.scale);
@@ -1885,7 +1886,7 @@ const SketchMod = {
             link.draw(ctx, this.selectedLinks.includes(link));
         }
 
-        // Temp link line while dragging from port
+        // Temp link line
         if (this.linking.active && this.linking.sourcePort) {
             const from = this.linking.sourcePort;
             let toX, toY;
@@ -1929,8 +1930,10 @@ const SketchMod = {
 
         ctx.restore();
 
-        // Draw selection box (in screen space, after restore)
+        // Selection box (in screen space)
         if (this.isSelecting && this.selectionBox) {
+            ctx.save();
+            ctx.globalAlpha = 1;
             const box = this.selectionBox;
             const x = Math.min(box.startX, box.endX);
             const y = Math.min(box.startY, box.endY);
@@ -1943,6 +1946,7 @@ const SketchMod = {
             ctx.setLineDash([4, 4]);
             ctx.strokeRect(x, y, bw, bh);
             ctx.setLineDash([]);
+            ctx.restore();
         }
     },
 
@@ -5345,58 +5349,48 @@ class Link {
             ctx.strokeStyle = "var(--accent)";
             ctx.lineWidth = 3;
         } else if (this.hasWeight) {
-            // Weighted connection — more prominent
             ctx.strokeStyle = "var(--text-primary)";
             ctx.lineWidth = 2.5;
         } else {
-            // Data-passing connection — lighter
             ctx.strokeStyle = "var(--text-secondary)";
             ctx.lineWidth = 1.5;
         }
         ctx.stroke();
 
         // Arrow head
-        const angle = Math.atan2(
-            this.to.y - this.from.y,
-            this.to.x - this.from.x,
-        );
-
-        // Calculate the actual end point considering distanceFromPortCenter
         const dx = this.to.x - this.from.x;
         const dy = this.to.y - this.from.y;
         const totalDistance = Math.hypot(dx, dy);
 
-        // If distanceFromPortCenter is defined, adjust the arrow start position
-        let arrowTipX = this.to.x;
-        let arrowTipY = this.to.y;
+        // Guard against zero-length links
+        if (totalDistance < 0.001) return;
 
-        const distanceFromPortCenter = 3;
+        // Calculate arrow tip position (pulled back from port center)
+        const portOffset = 5; // distance from port center to arrow tip
+        let tipX = this.to.x;
+        let tipY = this.to.y;
 
-        if (
-            distanceFromPortCenter !== undefined &&
-            totalDistance > distanceFromPortCenter
-        ) {
-            // Move arrow tip back from the port center by distanceFromPortCenter
-            const ratio =
-                (totalDistance - distanceFromPortCenter) / totalDistance;
-            arrowTipX = this.from.x + dx * ratio;
-            arrowTipY = this.from.y + dy * ratio;
+        if (totalDistance > portOffset) {
+            const ratio = (totalDistance - portOffset) / totalDistance;
+            tipX = this.from.x + dx * ratio;
+            tipY = this.from.y + dy * ratio;
         }
 
+        // Recalculate angle from adjusted tip position
+        const angle = Math.atan2(tipY - this.from.y, tipX - this.from.x);
         const size = 8;
-        // Draw arrow head at the adjusted position
         ctx.beginPath();
-        ctx.moveTo(arrowTipX, arrowTipY);
+        ctx.moveTo(tipX, tipY);
         ctx.lineTo(
-            arrowTipX - size * Math.cos(angle - 0.5),
-            arrowTipY - size * Math.sin(angle - 0.5),
+            tipX - size * Math.cos(angle - 0.5),
+            tipY - size * Math.sin(angle - 0.5),
         );
         ctx.lineTo(
-            arrowTipX - size * Math.cos(angle + 0.5),
-            arrowTipY - size * Math.sin(angle + 0.5),
+            tipX - size * Math.cos(angle + 0.5),
+            tipY - size * Math.sin(angle + 0.5),
         );
+        ctx.lineTo(tipX, tipY);
         ctx.closePath();
-
         ctx.fillStyle = selected
             ? "var(--accent)"
             : this.hasWeight
