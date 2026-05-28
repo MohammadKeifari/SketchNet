@@ -2345,12 +2345,14 @@ const SketchMod = {
         this._propagateShapes();
         this._render();
     },
+
     _updateConcatAxis(input) {
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
         if (!(node instanceof ConcatenateNode)) return;
         this._saveUndoState();
-        node.axis = parseInt(input.value) || -1;
+        const val = parseInt(input.value);
+        node.axis = isNaN(val) ? -1 : val;
         this._saveToSession();
         this._propagateShapes();
         this._render();
@@ -2807,6 +2809,8 @@ const SketchMod = {
     },
 
     _validateGraph() {
+        this._propagateShapes();
+
         const errors = [];
         const warnings = [];
 
@@ -3514,6 +3518,17 @@ class BaseNode {
             symbolic: !!symbolic,
         }));
     }
+    _getAllInputShapeObjs() {
+        const shapes = [];
+        for (const port of this.inputs) {
+            const link = SketchMod.links.find((l) => l.to === port);
+            if (link && link.from.shape && link.from.shape.shape) {
+                shapes.push(link.from.shape);
+            }
+        }
+        return shapes;
+    }
+
     _getFirstInputShapeObj() {
         for (const port of this.inputs) {
             const link = SketchMod.links.find((l) => l.to === port);
@@ -4978,32 +4993,38 @@ class ConcatenateNode extends RectNode {
     computeOutputShapes() {
         if (this.inputs.length < 2) return this._emptyShapes();
 
+        const allShapes = this._getAllInputShapeObjs();
+        if (allShapes.length < 2) return this._emptyShapes();
+
+        const baseShape = [...allShapes[0].shape];
+        const rank = baseShape.length;
+        const axis = this.axis === -1 ? rank - 1 : this.axis;
+
+        // Validate axis is in range
+        if (axis < 0 || axis >= rank) return this._emptyShapes();
+
         let totalConcatDim = 0;
-        let baseShape = null;
         let symbolic = false;
         let known = true;
 
-        for (const port of this.inputs) {
-            const link = SketchMod.links.find((l) => l.to === port);
-            if (!link || !link.from.shape || !link.from.shape.shape) {
-                known = false;
-                continue;
-            }
-            const shape = link.from.shape.shape;
-            if (link.from.shape.symbolic) symbolic = true;
+        for (const s of allShapes) {
+            if (s.shape.length !== rank) return this._emptyShapes();
+            if (s.symbolic) symbolic = true;
+            if (!s.known) known = false;
 
-            if (!baseShape) {
-                baseShape = [...shape];
+            // Check non-concat dimensions match
+            for (let d = 0; d < rank; d++) {
+                if (d !== axis && s.shape[d] !== baseShape[d]) {
+                    return this._emptyShapes();
+                }
             }
 
-            const axis = this.axis === -1 ? shape.length - 1 : this.axis;
-            totalConcatDim += shape[axis];
+            totalConcatDim += s.shape[axis]; // ← FIXED: was s.shape[d]
         }
 
-        if (!baseShape) return this._emptyShapes();
-        const axis = this.axis === -1 ? baseShape.length - 1 : this.axis;
-        baseShape[axis] = totalConcatDim;
-        return this._makeShapes(baseShape, symbolic, known);
+        const outputShape = [...baseShape];
+        outputShape[axis] = totalConcatDim;
+        return this._makeShapes(outputShape, symbolic, known);
     }
 
     toJSON() {
@@ -5044,9 +5065,24 @@ class AddNode extends RectNode {
     }
 
     computeOutputShapes() {
-        const s = this._getFirstInputShapeObj();
-        if (!s) return this._emptyShapes();
-        return this._makeShapes([...s.shape], s.symbolic, true);
+        if (this.inputs.length < 2) return this._emptyShapes();
+
+        const allShapes = this._getAllInputShapeObjs();
+        if (allShapes.length < 2) return this._emptyShapes();
+
+        // Check all shapes are identical
+        const base = allShapes[0];
+        for (let i = 1; i < allShapes.length; i++) {
+            if (
+                JSON.stringify(allShapes[i].shape) !==
+                JSON.stringify(base.shape)
+            ) {
+                return this._emptyShapes();
+            }
+        }
+
+        const symbolic = allShapes.some((s) => s.symbolic);
+        return this._makeShapes([...base.shape], symbolic, base.known);
     }
 
     toJSON() {
