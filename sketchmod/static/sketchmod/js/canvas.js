@@ -3501,6 +3501,9 @@ class BaseNode {
     getPropertiesHTML() {
         return "";
     }
+    validateConnections(incomingCount) {
+        return [];
+    }
     _emptyShapes() {
         return this.outputs.map(() => ({
             shape: null,
