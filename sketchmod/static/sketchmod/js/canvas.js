@@ -304,6 +304,12 @@ const SketchMod = {
 
                 this._hideContextMenu();
                 this._saveToSession();
+                if (
+                    this.selectedNodes.length === 1 &&
+                    this.selectedNodes[0] === node
+                ) {
+                    this._showProperties(node);
+                }
                 this._render();
             });
         });
