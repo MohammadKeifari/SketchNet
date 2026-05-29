@@ -2650,52 +2650,101 @@ const SketchMod = {
     _handleExport(type) {
         // Validate first
         const result = this._validateGraph();
-        this._showValidationPanel(result);
+        this._showValidationModal(result);
         this._render();
-
         if (!result.isValid) {
             this._showToast("Fix errors before exporting");
             return;
         }
 
-        switch (type) {
-            case "pytorch-zip":
-                this._exportPyTorchZip();
-                break;
-            case "pytorch-py":
-                this._exportPyTorchPy();
-                break;
-            case "image-png":
-                this._exportImage("png");
-                break;
-            case "image-jpeg":
-                this._exportImage("jpeg");
-                break;
-            case "python-clipboard":
-                this._exportPythonClipboard();
-                break;
-            case "json-clipboard":
-                this._exportJsonClipboard();
-                break;
+        // Image exports stay in JS
+        if (type === "image-png" || type === "image-jpeg") {
+            this._exportImage(type.replace("image-", ""));
+            return;
         }
+
+        // JSON clipboard stays in JS
+        if (type === "json-clipboard") {
+            const data = JSON.stringify(this._getGraphData(), null, 2);
+            navigator.clipboard.writeText(data).then(() => {
+                this._showToast("JSON copied!");
+            });
+            return;
+        }
+
+        // Zip export — generate .py + bundle dataset
+        if (type === "pytorch-zip") {
+            this._exportPyTorchZip();
+            return;
+        }
+
+        // All other Python exports go through API
+        const graphData = JSON.stringify(this._getGraphData());
+        fetch("/sketchmod/api/export/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": this._getCsrfToken(),
+            },
+            body: JSON.stringify({ graph: graphData, format: type }),
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.success) {
+                    if (type === "python-clipboard") {
+                        navigator.clipboard.writeText(data.code).then(() => {
+                            this._showToast("Python code copied!");
+                        });
+                    } else {
+                        const blob = new Blob([data.code], {
+                            type: "text/plain",
+                        });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = data.filename;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        this._showToast(`Downloaded ${data.filename}`);
+                    }
+                } else {
+                    this._showToast(
+                        "Export failed: " + (data.error || "Unknown error"),
+                    );
+                }
+            })
+            .catch((err) => {
+                console.error("Export failed:", err);
+                this._showToast("Export failed. Check console.");
+            });
     },
 
     _exportPyTorchZip() {
-        const code = this._compileToPython();
-        this._showToast("PyTorch .zip export — coming soon");
-        // TODO: Generate zip with model.py + dataset if available
-    },
+        const graphData = JSON.stringify(this._getGraphData());
 
-    _exportPyTorchPy() {
-        const code = this._compileToPython();
-        const blob = new Blob([code], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "model.py";
-        a.click();
-        URL.revokeObjectURL(url);
-        this._showToast("Downloaded model.py");
+        // Get the .py code from API
+        fetch("/sketchmod/api/export/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": this._getCsrfToken(),
+            },
+            body: JSON.stringify({ graph: graphData, format: "pytorch-zip" }),
+        })
+            .then((res) => res.blob()) // Expect a zip blob
+            .then((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "model.zip";
+                a.click();
+                URL.revokeObjectURL(url);
+                this._showToast("Downloaded model.zip");
+            })
+            .catch((err) => {
+                console.error("Zip export failed:", err);
+                this._showToast("Zip export failed. Check console.");
+            });
     },
 
     _exportImage(format) {
@@ -2786,19 +2835,6 @@ const SketchMod = {
             this._render();
             this._showToast(`Exported model.${format}`);
         }, 100);
-    },
-
-    _exportPythonClipboard() {
-        const code = this._compileToPython();
-        navigator.clipboard
-            .writeText(code)
-            .then(() => {
-                this._showToast("Python code copied!");
-            })
-            .catch(() => {
-                alert("Failed to copy. Check console for the code.");
-                console.log(code);
-            });
     },
 
     _exportJsonClipboard() {
@@ -6408,7 +6444,7 @@ class Link {
         if (totalDistance < 0.001) return;
 
         // Calculate arrow tip position (pulled back from port center)
-        const portOffset = 5; // distance from port center to arrow tip
+        const portOffset = 4; // distance from port center to arrow tip
         let tipX = this.to.x;
         let tipY = this.to.y;
 
