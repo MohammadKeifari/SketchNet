@@ -2836,9 +2836,51 @@ const SketchMod = {
     warningPortIds: new Set(),
 
     _runCheck() {
-        const result = this._validateGraph();
-        this._showValidationModal(result);
-        this._render();
+        const graphData = JSON.stringify(this._getGraphData());
+
+        fetch("/sketchmod/api/validate/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": this._getCsrfToken(),
+            },
+            body: JSON.stringify({ graph: graphData }),
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.success) {
+                    this._applyValidationResults(data);
+                    this._showValidationModal({
+                        errors: data.errors,
+                        warnings: data.warnings,
+                        isValid: data.isValid,
+                    });
+                    this._render();
+                }
+            })
+            .catch((err) => {
+                console.error("Validation failed:", err);
+                this._showToast("Validation failed. Check console.");
+            });
+    },
+    _applyValidationResults(data) {
+        this.errorLinkIds = new Set();
+        this.errorNodeIds = new Set();
+        this.errorPortIds = new Set();
+        this.warningLinkIds = new Set();
+        this.warningNodeIds = new Set();
+        this.warningPortIds = new Set();
+
+        for (const e of data.errors) {
+            if (e.nodeId) this.errorNodeIds.add(e.nodeId);
+            if (e.portId) this.errorPortIds.add(e.portId);
+            if (e.linkKey) this.errorLinkIds.add(e.linkKey);
+        }
+        for (const w of data.warnings) {
+            if (w.nodeId) this.warningNodeIds.add(w.nodeId);
+            if (w.portId) this.warningPortIds.add(w.portId);
+            if (w.linkKey) this.warningLinkIds.add(w.linkKey);
+        }
     },
     _closeValidationModal() {
         document.getElementById("validationModal").style.display = "none";
@@ -2875,20 +2917,20 @@ const SketchMod = {
                 </svg>
                 <span>All checks passed! Your model is ready to export.</span>
             </div>`;
-            // Hide clear button — nothing to clear
             if (clearBtn) clearBtn.style.display = "none";
         } else {
-            const errorCount = errors.length;
-            const warnCount = warnings.length;
             const parts = [];
-            if (errorCount)
-                parts.push(`${errorCount} error${errorCount > 1 ? "s" : ""}`);
-            if (warnCount)
-                parts.push(`${warnCount} warning${warnCount > 1 ? "s" : ""}`);
+            if (errors.length)
+                parts.push(
+                    `${errors.length} error${errors.length > 1 ? "s" : ""}`,
+                );
+            if (warnings.length)
+                parts.push(
+                    `${warnings.length} warning${warnings.length > 1 ? "s" : ""}`,
+                );
             title.textContent = `Validation: ${parts.join(", ")}`;
 
             let html = "";
-
             if (errors.length > 0) {
                 html += `<div class="validation-section-label" style="color: #ef4444;">Errors</div>`;
                 for (const e of errors) {
@@ -2903,7 +2945,6 @@ const SketchMod = {
                 </div>`;
                 }
             }
-
             if (warnings.length > 0) {
                 html += `<div class="validation-section-label" style="color: #f59e0b;">Warnings</div>`;
                 for (const w of warnings) {
@@ -2918,13 +2959,9 @@ const SketchMod = {
                 </div>`;
                 }
             }
-
             content.innerHTML = html;
-
-            // Show clear button
             if (clearBtn) clearBtn.style.display = "flex";
         }
-
         modal.style.display = "flex";
     },
     _validateGraph() {
