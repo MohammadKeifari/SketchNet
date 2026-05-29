@@ -3784,34 +3784,30 @@ class ParamPort extends Port {
 class ShapeExpr {
     constructor(value) {
         if (value instanceof ShapeExpr) {
-            this.type = value.type;
-            this.value = value.value;
-            this.symbols = new Set(value.symbols);
+            this.terms = new Map(value.terms);
             this.isSymbolic = value.isSymbolic;
         } else if (typeof value === "number") {
-            this.type = "number";
-            this.value = value;
-            this.symbols = new Set();
+            this.terms = new Map();
+            if (value !== 0) {
+                this.terms.set("", value); // "" key = constant term
+            }
             this.isSymbolic = false;
         } else if (typeof value === "string") {
             const trimmed = value.trim();
-            // Check if it's actually a number
             const num = Number(trimmed);
             if (!isNaN(num) && String(num) === trimmed) {
-                this.type = "number";
-                this.value = num;
-                this.symbols = new Set();
+                this.terms = new Map();
+                if (num !== 0) {
+                    this.terms.set("", num);
+                }
                 this.isSymbolic = false;
             } else {
-                this.type = "symbol";
-                this.value = trimmed;
-                this.symbols = new Set([trimmed]);
-                this.isSymbolic = true;
+                // Parse the string into terms
+                this.terms = ShapeExpr._parse(trimmed);
+                this.isSymbolic = this._hasSymbols();
             }
         } else {
-            this.type = "number";
-            this.value = 0;
-            this.symbols = new Set();
+            this.terms = new Map();
             this.isSymbolic = false;
         }
     }
@@ -3821,75 +3817,181 @@ class ShapeExpr {
         return new ShapeExpr(value);
     }
 
+    // ========== PARSING ==========
+    static _parse(expr) {
+        const terms = new Map();
+        if (!expr || expr.trim() === "") return terms;
+
+        // Split by + and - (handling negative terms)
+        // Replace " - " with " + -" for splitting
+        let normalized = expr.replace(/\s*-\s*/g, " + -");
+        // Split by +
+        const parts = normalized.split(/\s*\+\s*/);
+
+        for (const part of parts) {
+            const trimmed = part.trim();
+            if (!trimmed) continue;
+
+            // Match patterns: "3 * x", "x", "-2 * y", "5", "-3"
+            const match = trimmed.match(/^(-?\d*\.?\d*)\s*\*?\s*(.*)$/);
+            if (!match) continue;
+
+            let coeffStr = match[1];
+            let symbol = match[2].trim();
+
+            // Handle cases like "x" (coeffStr = "", symbol = "x")
+            if (coeffStr === "" || coeffStr === "-") {
+                coeffStr = coeeffStr === "-" ? "-1" : "1";
+            }
+            // Handle cases like "5" (coeffStr = "5", symbol = "")
+            if (symbol === "" && coeffStr !== "") {
+                symbol = ""; // constant term
+            }
+
+            const coeff = parseFloat(coeffStr);
+            if (isNaN(coeff)) continue;
+
+            const existing = terms.get(symbol) || 0;
+            const sum = existing + coeff;
+            if (sum === 0) {
+                terms.delete(symbol);
+            } else {
+                terms.set(symbol, sum);
+            }
+        }
+
+        return terms;
+    }
+
+    _hasSymbols() {
+        for (const [key, _] of this.terms) {
+            if (key !== "") return true;
+        }
+        return false;
+    }
+
+    // ========== OPERATIONS ==========
     add(other) {
         other = ShapeExpr.from(other);
-        if (!this.isSymbolic && !other.isSymbolic) {
-            return new ShapeExpr(this.value + other.value);
-        }
-        const result = new ShapeExpr(
-            `${this.toString()} + ${other.toString()}`,
-        );
-        result.type = "expr";
-        result.symbols = new Set([...this.symbols, ...other.symbols]);
-        result.isSymbolic = true;
-        return result;
-    }
+        const result = new ShapeExpr(0);
+        result.terms = new Map(this.terms);
 
-    multiply(other) {
-        other = ShapeExpr.from(other);
-        if (!this.isSymbolic && !other.isSymbolic) {
-            return new ShapeExpr(this.value * other.value);
+        for (const [symbol, coeff] of other.terms) {
+            const existing = result.terms.get(symbol) || 0;
+            const sum = existing + coeff;
+            if (sum === 0) {
+                result.terms.delete(symbol);
+            } else {
+                result.terms.set(symbol, sum);
+            }
         }
-        // Simplify: if one is 1, return the other
-        if (!this.isSymbolic && this.value === 1) return new ShapeExpr(other);
-        if (!other.isSymbolic && other.value === 1) return new ShapeExpr(this);
-        // Simplify: if one is 0, return 0
-        if (!this.isSymbolic && this.value === 0) return new ShapeExpr(0);
-        if (!other.isSymbolic && other.value === 0) return new ShapeExpr(0);
 
-        const result = new ShapeExpr(
-            `${this.toString()} * ${other.toString()}`,
-        );
-        result.type = "expr";
-        result.symbols = new Set([...this.symbols, ...other.symbols]);
-        result.isSymbolic = true;
-        return result;
-    }
-
-    divide(other) {
-        other = ShapeExpr.from(other);
-        if (!this.isSymbolic && !other.isSymbolic) {
-            return new ShapeExpr(Math.floor(this.value / other.value));
+        result.isSymbolic = result._hasSymbols();
+        if (result.terms.size === 0) {
+            result.terms.set("", 0);
+            result.isSymbolic = false;
         }
-        const result = new ShapeExpr(
-            `${this.toString()} / ${other.toString()}`,
-        );
-        result.type = "expr";
-        result.symbols = new Set([...this.symbols, ...other.symbols]);
-        result.isSymbolic = true;
         return result;
     }
 
     subtract(other) {
         other = ShapeExpr.from(other);
-        if (!this.isSymbolic && !other.isSymbolic) {
-            return new ShapeExpr(this.value - other.value);
+        const negated = new ShapeExpr(0);
+        for (const [symbol, coeff] of other.terms) {
+            negated.terms.set(symbol, -coeff);
         }
-        const result = new ShapeExpr(
-            `${this.toString()} - ${other.toString()}`,
-        );
-        result.type = "expr";
-        result.symbols = new Set([...this.symbols, ...other.symbols]);
-        result.isSymbolic = true;
-        return result;
+        negated.isSymbolic = negated._hasSymbols();
+        return this.add(negated);
     }
 
+    multiply(other) {
+        other = ShapeExpr.from(other);
+
+        // If either is zero, return zero
+        if (this.isZero() || other.isZero()) {
+            return new ShapeExpr(0);
+        }
+
+        // If both are constants, just multiply
+        if (!this.isSymbolic && !other.isSymbolic) {
+            const a = this.terms.get("") || 0;
+            const b = other.terms.get("") || 0;
+            return new ShapeExpr(a * b);
+        }
+
+        // If one is a constant and the other is symbolic
+        if (!this.isSymbolic) {
+            const constVal = this.terms.get("") || 1;
+            const result = new ShapeExpr(0);
+            for (const [symbol, coeff] of other.terms) {
+                result.terms.set(symbol, coeff * constVal);
+            }
+            result.isSymbolic = result._hasSymbols();
+            return result;
+        }
+        if (!other.isSymbolic) {
+            return other.multiply(this);
+        }
+
+        // Both symbolic — can't simplify (would need x*y terms)
+        // Fall back to string representation
+        return new ShapeExpr(`${this.toString()} * ${other.toString()}`);
+    }
+
+    divide(other) {
+        other = ShapeExpr.from(other);
+
+        if (other.isZero()) return new ShapeExpr(0);
+
+        // If both are constants
+        if (!this.isSymbolic && !other.isSymbolic) {
+            const a = this.terms.get("") || 0;
+            const b = other.terms.get("") || 1;
+            return new ShapeExpr(Math.floor(a / b));
+        }
+
+        // If dividing symbolic by constant
+        if (!other.isSymbolic) {
+            const constVal = other.terms.get("") || 1;
+            const result = new ShapeExpr(0);
+            for (const [symbol, coeff] of this.terms) {
+                result.terms.set(symbol, coeff / constVal);
+            }
+            result.isSymbolic = result._hasSymbols();
+            return result;
+        }
+
+        // Symbolic division — can't simplify
+        return new ShapeExpr(`${this.toString()} / ${other.toString()}`);
+    }
+
+    // ========== COMPARISON ==========
     equals(other) {
         other = ShapeExpr.from(other);
-        if (!this.isSymbolic && !other.isSymbolic) {
-            return this.value === other.value;
+        if (this.terms.size !== other.terms.size) return false;
+        for (const [symbol, coeff] of this.terms) {
+            if (other.terms.get(symbol) !== coeff) return false;
         }
-        return this.toString() === other.toString();
+        return true;
+    }
+
+    isZero() {
+        if (this.terms.size === 0) return true;
+        if (
+            this.terms.size === 1 &&
+            this.terms.has("") &&
+            this.terms.get("") === 0
+        )
+            return true;
+        return false;
+    }
+
+    isNumber() {
+        return !this.isSymbolic;
+    }
+
+    toNumber() {
+        return this.isSymbolic ? NaN : this.terms.get("") || 0;
     }
 
     greaterThan(other) {
@@ -3908,17 +4010,34 @@ class ShapeExpr {
         return false;
     }
 
-    isNumber() {
-        return !this.isSymbolic;
-    }
-
-    toNumber() {
-        return this.isSymbolic ? NaN : this.value;
-    }
-
+    // ========== DISPLAY ==========
     toString() {
-        if (this.type === "number") return String(this.value);
-        return this.value;
+        if (this.terms.size === 0) return "0";
+
+        const parts = [];
+        // Sort so constants come first, then symbols alphabetically
+        const sorted = [...this.terms.entries()].sort((a, b) => {
+            if (a[0] === "") return -1;
+            if (b[0] === "") return 1;
+            return a[0].localeCompare(b[0]);
+        });
+
+        for (const [symbol, coeff] of sorted) {
+            if (symbol === "") {
+                parts.push(String(coeff));
+            } else if (coeff === 1) {
+                parts.push(symbol);
+            } else if (coeff === -1) {
+                parts.push(`-${symbol}`);
+            } else {
+                parts.push(`${coeff} * ${symbol}`);
+            }
+        }
+
+        let result = parts.join(" + ");
+        // Clean up "x + -2" → "x - 2"
+        result = result.replace(/\+\s*-/g, "- ");
+        return result;
     }
 
     toJSON() {
