@@ -2791,10 +2791,10 @@ const SketchMod = {
     },
 
     // ========== VALIDATION ==========
-    errorLinks: [],
-    errorNodes: [],
-    warningLinks: [],
-    warningNodes: [],
+    errorLinkIds: new Set(),
+    errorNodeIds: new Set(),
+    warningLinkIds: new Set(),
+    warningNodeIds: new Set(),
 
     _runCheck() {
         const result = this._validateGraph();
@@ -2805,12 +2805,11 @@ const SketchMod = {
         document.getElementById("validationModal").style.display = "none";
     },
     _clearValidation() {
-        this.errorLinks = [];
-        this.errorNodes = [];
-        this.warningLinks = [];
-        this.warningNodes = [];
+        this.errorLinkIds = new Set();
+        this.errorNodeIds = new Set();
+        this.warningLinkIds = new Set();
+        this.warningNodeIds = new Set();
 
-        // Hide the clear button
         const btn = document.getElementById("btnClearValidation");
         if (btn) btn.style.display = "none";
 
@@ -2905,6 +2904,7 @@ const SketchMod = {
                         errors.push({
                             type: "error",
                             node: node,
+                            port: port,
                             message: `Optimizer: ${label} port is not connected`,
                         });
                     }
@@ -2990,6 +2990,7 @@ const SketchMod = {
                 errors.push({
                     type: "error",
                     node: node,
+                    port: port,
                     message:
                         "Output: input port is not connected — no data reaches the output",
                 });
@@ -3203,30 +3204,56 @@ const SketchMod = {
         }
 
         // Store for visual highlighting
-        this.errorLinks = [];
-        this.errorNodes = [];
-        this.warningLinks = [];
-        this.warningNodes = [];
+        this.errorLinkIds = new Set();
+        this.errorNodeIds = new Set();
+        this.warningLinkIds = new Set();
+        this.warningNodeIds = new Set();
 
         for (const e of errors) {
-            if (e.node) this.errorNodes.push(e.node);
+            if (e.node) this.errorNodeIds.add(e.node.id);
+
             if (e.port) {
+                // Find the specific link connected to this port
                 const link = this.links.find(
                     (l) => l.from === e.port || l.to === e.port,
                 );
-                if (link) this.errorLinks.push(link);
+                if (link) {
+                    this.errorLinkIds.add(link.from.id + "→" + link.to.id);
+                }
+            } else if (e.node) {
+                // Node-level error with no specific port — highlight all links to/from this node
+                const connectedLinks = this.links.filter(
+                    (l) => l.from.node === e.node || l.to.node === e.node,
+                );
+                for (const link of connectedLinks) {
+                    this.errorLinkIds.add(link.from.id + "→" + link.to.id);
+                }
             }
         }
+
         for (const w of warnings) {
-            if (w.node) this.warningNodes.push(w.node);
+            if (w.node) this.warningNodeIds.add(w.node.id);
+
             if (w.port) {
                 const link = this.links.find(
                     (l) => l.from === w.port || l.to === w.port,
                 );
-                if (link) this.warningLinks.push(link);
+                if (link) {
+                    this.warningLinkIds.add(link.from.id + "→" + link.to.id);
+                }
+            } else if (w.node) {
+                const connectedLinks = this.links.filter(
+                    (l) => l.from.node === w.node || l.to.node === w.node,
+                );
+                for (const link of connectedLinks) {
+                    this.warningLinkIds.add(link.from.id + "→" + link.to.id);
+                }
             }
         }
-
+        console.log("errorLinkIds:", [...this.errorLinkIds]);
+        console.log("errorNodeIds:", [...this.errorNodeIds]);
+        console.log("warningLinkIds:", [...this.warningLinkIds]);
+        console.log("warningNodeIds:", [...this.warningNodeIds]);
         return { errors, warnings, isValid: errors.length === 0 };
     },
 
@@ -6111,10 +6138,12 @@ class Link {
         ctx.moveTo(this.from.x, this.from.y);
         ctx.lineTo(this.to.x, this.to.y);
 
-        if (SketchMod.errorLinks.includes(this)) {
+        const linkKey = this.from.id + "→" + this.to.id;
+
+        if (SketchMod.errorLinkIds.has(linkKey)) {
             ctx.strokeStyle = "#ef4444";
             ctx.lineWidth = 3;
-        } else if (SketchMod.warningLinks.includes(this)) {
+        } else if (SketchMod.warningLinkIds.has(linkKey)) {
             ctx.strokeStyle = "#f59e0b";
             ctx.lineWidth = 2.5;
         } else if (selected) {
@@ -6164,9 +6193,9 @@ class Link {
         ctx.lineTo(tipX, tipY);
         ctx.closePath();
         let fillColor;
-        if (SketchMod.errorLinks.includes(this)) {
+        if (SketchMod.errorLinkIds.has(linkKey)) {
             fillColor = "#ef4444";
-        } else if (SketchMod.warningLinks.includes(this)) {
+        } else if (SketchMod.warningLinkIds.has(linkKey)) {
             fillColor = "#f59e0b";
         } else if (selected) {
             fillColor = "var(--accent)";
