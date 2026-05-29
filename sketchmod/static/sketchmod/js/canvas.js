@@ -479,55 +479,71 @@ const SketchMod = {
         // Clear all port shapes
         for (const port of this.ports) {
             port.clearShape();
+            if (port instanceof MultiPort) {
+                port._incomingShapes = []; // Reset incoming shapes list
+            }
         }
 
         // Start from InputData nodes
         const visited = new Set();
         const queue = [];
-
         for (const node of this.nodes) {
             if (node instanceof InputDataNode) {
                 queue.push(node);
             }
         }
 
-        // Breadth-first traversal
         while (queue.length > 0) {
             const node = queue.shift();
             if (visited.has(node.id)) continue;
             visited.add(node.id);
 
-            // Compute output shapes for this node
             const outputShapes = node.computeOutputShapes();
-
-            // Apply shapes to output ports
             for (let i = 0; i < node.outputs.length; i++) {
                 if (i < outputShapes.length && outputShapes[i].shape) {
-                    const s = outputShapes[i];
                     node.outputs[i].setShape(
-                        s.shape,
-                        s.dtype,
-                        s.known,
-                        s.symbolic,
+                        outputShapes[i].shape,
+                        outputShapes[i].dtype,
+                        outputShapes[i].known,
+                        outputShapes[i].symbolic,
                     );
                 }
             }
 
-            // Propagate to downstream nodes
             for (const outPort of node.outputs) {
                 const links = this.links.filter((l) => l.from === outPort);
                 for (const link of links) {
                     const targetPort = link.to;
                     const targetNode = targetPort.node;
 
-                    // Copy shape from output port to connected input port
                     if (outPort.shape && outPort.shape.shape) {
-                        targetPort.setShape(
-                            [...outPort.shape.shape],
-                            outPort.shape.dtype,
-                            outPort.shape.known,
-                            outPort.shape.symbolic,
-                        );
+                        if (targetPort instanceof MultiPort) {
+                            // Collect all incoming shapes
+                            if (!targetPort._incomingShapes)
+                                targetPort._incomingShapes = [];
+                            targetPort._incomingShapes.push({
+                                shape: [...outPort.shape.shape],
+                                dtype: outPort.shape.dtype,
+                                known: outPort.shape.known,
+                                symbolic: outPort.shape.symbolic,
+                            });
+                            // Set the port's primary shape to the first one (for display)
+                            if (targetPort._incomingShapes.length === 1) {
+                                targetPort.setShape(
+                                    [...outPort.shape.shape],
+                                    outPort.shape.dtype,
+                                    outPort.shape.known,
+                                    outPort.shape.symbolic,
+                                );
+                            }
+                        } else {
+                            targetPort.setShape(
+                                [...outPort.shape.shape],
+                                outPort.shape.dtype,
+                                outPort.shape.known,
+                                outPort.shape.symbolic,
+                            );
+                        }
                     }
 
                     if (!visited.has(targetNode.id)) {
@@ -536,6 +552,7 @@ const SketchMod = {
                 }
             }
         }
+
         if (this.selectedNodes.length === 1) {
             this._showProperties(this.selectedNodes[0]);
         }
@@ -3252,6 +3269,38 @@ const SketchMod = {
             });
         }
 
+        // === 11. Batch dimension compatibility ===
+        for (const node of this.nodes) {
+            for (const port of node.inputs) {
+                if (
+                    port instanceof MultiPort &&
+                    port._incomingShapes &&
+                    port._incomingShapes.length >= 2
+                ) {
+                    const batches = port._incomingShapes.map((s) => s.shape[0]);
+                    const uniqueBatches = [
+                        ...new Set(batches.map((b) => String(b))),
+                    ];
+
+                    if (uniqueBatches.length > 1) {
+                        // Check if one is smaller — data will loop
+                        const numericBatches = batches.map((b) =>
+                            typeof b === "number" ? b : Infinity,
+                        );
+                        const minBatch = Math.min(...numericBatches);
+
+                        portWarnings.push({
+                            type: "warning",
+                            node: node,
+                            port: port,
+                            message:
+                                `Batch dimensions differ (${uniqueBatches.join(", ")}). ` +
+                                `Data with smaller batch (${minBatch}) will loop to match larger batches.`,
+                        });
+                    }
+                }
+            }
+        }
         // === Populate Sets for visual highlighting ===
         this.errorLinkIds = new Set();
         this.errorNodeIds = new Set();
@@ -3557,10 +3606,10 @@ class MultiPort extends Port {
         const count = this.getConnectionCount();
         if (count > 1) {
             ctx.fillStyle = "#ffffff";
-            ctx.font = "bold 9px Inter, sans-serif";
+            ctx.font = "bold 7px Inter, sans-serif";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText(count, this.x, this.y);
+            ctx.fillText(count, this.x, this.y + 0.3);
         }
     }
 
@@ -3959,9 +4008,16 @@ class BaseNode {
     _getAllInputShapeObjs() {
         const shapes = [];
         for (const port of this.inputs) {
-            const link = SketchMod.links.find((l) => l.to === port);
-            if (link && link.from.shape && link.from.shape.shape) {
-                shapes.push(link.from.shape);
+            if (port instanceof MultiPort && port._incomingShapes) {
+                // Return all incoming shapes for MultiPort
+                for (const s of port._incomingShapes) {
+                    shapes.push(s);
+                }
+            } else {
+                const link = SketchMod.links.find((l) => l.to === port);
+                if (link && link.from.shape && link.from.shape.shape) {
+                    shapes.push(link.from.shape);
+                }
             }
         }
         return shapes;
@@ -3979,19 +4035,54 @@ class BaseNode {
     _getShapeSummaryHTML() {
         let html = "";
 
-        // Input ports
         if (this.inputs.length > 0) {
             html += '<div class="prop-group"><label>Input Shapes</label>';
             for (let i = 0; i < this.inputs.length; i++) {
                 const port = this.inputs[i];
-                const shapeText = port.shapeDisplay();
-                const color =
-                    port.hasShape() && port.shape.known
-                        ? "var(--accent)"
-                        : "var(--text-secondary)";
-                html += `<p class="prop-hint" style="font-family: monospace; color: ${color}; font-size: 0.8rem;">
-                Port ${i + 1}: ${shapeText}
-            </p>`;
+
+                if (
+                    port instanceof MultiPort &&
+                    port._incomingShapes &&
+                    port._incomingShapes.length > 0
+                ) {
+                    // Show all incoming shapes
+                    for (let j = 0; j < port._incomingShapes.length; j++) {
+                        const s = port._incomingShapes[j];
+                        const shapeStr = "(" + s.shape.join(", ") + ")";
+                        const color = s.known
+                            ? "var(--accent)"
+                            : "var(--text-secondary)";
+                        html += `<p class="prop-hint" style="font-family: monospace; color: ${color}; font-size: 0.8rem;">
+                        Port ${i + 1}.${j + 1}: ${shapeStr}${s.symbolic ? " (abstract)" : ""}
+                    </p>`;
+                    }
+                    // Check for batch dimension mismatch
+                    if (port._incomingShapes.length >= 2) {
+                        const batches = port._incomingShapes.map(
+                            (s) => s.shape[0],
+                        );
+                        const unique = new Set(batches.map((b) => String(b)));
+                        if (unique.size > 1) {
+                            html += `<p class="prop-warning" style="margin-top: 4px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                <line x1="12" y1="9" x2="12" y2="13"/>
+                                <line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                            Batch dimensions differ: ${[...unique].join(", ")}
+                        </p>`;
+                        }
+                    }
+                } else {
+                    const shapeText = port.shapeDisplay();
+                    const color =
+                        port.hasShape() && port.shape.known
+                            ? "var(--accent)"
+                            : "var(--text-secondary)";
+                    html += `<p class="prop-hint" style="font-family: monospace; color: ${color}; font-size: 0.8rem;">
+                    Port ${i + 1}: ${shapeText}
+                </p>`;
+                }
             }
             html += "</div>";
         }
@@ -4288,6 +4379,7 @@ class NeuronNode extends CircleNode {
         }
         return errors;
     }
+
     computeOutputShapes() {
         const allShapes = this._getAllInputShapeObjs();
         if (allShapes.length === 0) return this._emptyShapes();
@@ -4297,15 +4389,13 @@ class NeuronNode extends CircleNode {
         let known = allShapes[0].known;
 
         for (const s of allShapes) {
-            if (s.shape[0] !== batchDim) {
-                return this._emptyShapes();
-            }
             if (s.symbolic) symbolic = true;
             if (!s.known) known = false;
         }
 
         return this._makeShapes([batchDim, 1], symbolic, known);
     }
+
     getPropertiesHTML() {
         return (
             this._getShapeSummaryHTML() +
@@ -4367,15 +4457,14 @@ class LayerNode extends RectNode {
         const allShapes = this._getAllInputShapeObjs();
         if (allShapes.length === 0) return this._emptyShapes();
 
-        // Check all inputs have the same batch dimension
         const batchDim = allShapes[0].shape[0];
         let symbolic = allShapes[0].symbolic;
         let known = allShapes[0].known;
 
         for (const s of allShapes) {
-            if (s.shape[0] !== batchDim) {
-                // Batch dimension mismatch
-                return this._emptyShapes();
+            if (String(s.shape[0]) !== String(batchDim)) {
+                // Batch dimension mismatch — still compute output with first batch
+                // The warning is handled by validation
             }
             if (s.symbolic) symbolic = true;
             if (!s.known) known = false;
