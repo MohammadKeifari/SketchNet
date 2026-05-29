@@ -2442,6 +2442,10 @@ const SketchMod = {
         if (fileNameDisplay) {
             fileNameDisplay.textContent = "No file chosen";
         }
+        // Auto-focus the name field
+        setTimeout(() => {
+            document.getElementById("saveName")?.focus();
+        }, 100);
     },
 
     closeSaveModal() {
