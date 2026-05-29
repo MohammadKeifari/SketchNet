@@ -3763,6 +3763,156 @@ class ParamPort extends Port {
         };
     }
 }
+
+// ========== SHAPE EXPRESSION ==========
+class ShapeExpr {
+    constructor(value) {
+        if (value instanceof ShapeExpr) {
+            this.type = value.type;
+            this.value = value.value;
+            this.symbols = new Set(value.symbols);
+            this.isSymbolic = value.isSymbolic;
+        } else if (typeof value === "number") {
+            this.type = "number";
+            this.value = value;
+            this.symbols = new Set();
+            this.isSymbolic = false;
+        } else if (typeof value === "string") {
+            const trimmed = value.trim();
+            // Check if it's actually a number
+            const num = Number(trimmed);
+            if (!isNaN(num) && String(num) === trimmed) {
+                this.type = "number";
+                this.value = num;
+                this.symbols = new Set();
+                this.isSymbolic = false;
+            } else {
+                this.type = "symbol";
+                this.value = trimmed;
+                this.symbols = new Set([trimmed]);
+                this.isSymbolic = true;
+            }
+        } else {
+            this.type = "number";
+            this.value = 0;
+            this.symbols = new Set();
+            this.isSymbolic = false;
+        }
+    }
+
+    static from(value) {
+        if (value instanceof ShapeExpr) return new ShapeExpr(value);
+        return new ShapeExpr(value);
+    }
+
+    add(other) {
+        other = ShapeExpr.from(other);
+        if (!this.isSymbolic && !other.isSymbolic) {
+            return new ShapeExpr(this.value + other.value);
+        }
+        const result = new ShapeExpr(
+            `${this.toString()} + ${other.toString()}`,
+        );
+        result.type = "expr";
+        result.symbols = new Set([...this.symbols, ...other.symbols]);
+        result.isSymbolic = true;
+        return result;
+    }
+
+    multiply(other) {
+        other = ShapeExpr.from(other);
+        if (!this.isSymbolic && !other.isSymbolic) {
+            return new ShapeExpr(this.value * other.value);
+        }
+        // Simplify: if one is 1, return the other
+        if (!this.isSymbolic && this.value === 1) return new ShapeExpr(other);
+        if (!other.isSymbolic && other.value === 1) return new ShapeExpr(this);
+        // Simplify: if one is 0, return 0
+        if (!this.isSymbolic && this.value === 0) return new ShapeExpr(0);
+        if (!other.isSymbolic && other.value === 0) return new ShapeExpr(0);
+
+        const result = new ShapeExpr(
+            `${this.toString()} * ${other.toString()}`,
+        );
+        result.type = "expr";
+        result.symbols = new Set([...this.symbols, ...other.symbols]);
+        result.isSymbolic = true;
+        return result;
+    }
+
+    divide(other) {
+        other = ShapeExpr.from(other);
+        if (!this.isSymbolic && !other.isSymbolic) {
+            return new ShapeExpr(Math.floor(this.value / other.value));
+        }
+        const result = new ShapeExpr(
+            `${this.toString()} / ${other.toString()}`,
+        );
+        result.type = "expr";
+        result.symbols = new Set([...this.symbols, ...other.symbols]);
+        result.isSymbolic = true;
+        return result;
+    }
+
+    subtract(other) {
+        other = ShapeExpr.from(other);
+        if (!this.isSymbolic && !other.isSymbolic) {
+            return new ShapeExpr(this.value - other.value);
+        }
+        const result = new ShapeExpr(
+            `${this.toString()} - ${other.toString()}`,
+        );
+        result.type = "expr";
+        result.symbols = new Set([...this.symbols, ...other.symbols]);
+        result.isSymbolic = true;
+        return result;
+    }
+
+    equals(other) {
+        other = ShapeExpr.from(other);
+        if (!this.isSymbolic && !other.isSymbolic) {
+            return this.value === other.value;
+        }
+        return this.toString() === other.toString();
+    }
+
+    greaterThan(other) {
+        other = ShapeExpr.from(other);
+        if (!this.isSymbolic && !other.isSymbolic) {
+            return this.value > other.value;
+        }
+        return false; // Can't compare symbolic
+    }
+
+    lessThan(other) {
+        other = ShapeExpr.from(other);
+        if (!this.isSymbolic && !other.isSymbolic) {
+            return this.value < other.value;
+        }
+        return false;
+    }
+
+    isNumber() {
+        return !this.isSymbolic;
+    }
+
+    toNumber() {
+        return this.isSymbolic ? NaN : this.value;
+    }
+
+    toString() {
+        if (this.type === "number") return String(this.value);
+        return this.value;
+    }
+
+    toJSON() {
+        return this.toString();
+    }
+
+    static fromJSON(str) {
+        return new ShapeExpr(str);
+    }
+}
 // ========== NODE CLASSES ==========
 
 class BaseNode {
