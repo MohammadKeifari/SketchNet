@@ -3841,7 +3841,7 @@ class ShapeExpr {
 
             // Handle cases like "x" (coeffStr = "", symbol = "x")
             if (coeffStr === "" || coeffStr === "-") {
-                coeffStr = coeeffStr === "-" ? "-1" : "1";
+                coeffStr = coeffStr === "-" ? "-1" : "1";
             }
             // Handle cases like "5" (coeffStr = "5", symbol = "")
             if (symbol === "" && coeffStr !== "") {
@@ -4383,15 +4383,20 @@ class BaseNode {
                             (s) => s.shape[0],
                         );
                         const unique = new Set(batches.map((b) => String(b)));
-                        if (unique.size > 1) {
+
+                        // Only warn if this node is NOT a concatenate (concat along axis 0 is expected)
+                        if (
+                            unique.size > 1 &&
+                            !(this instanceof ConcatenateNode)
+                        ) {
                             html += `<p class="prop-warning" style="margin-top: 4px;">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                                <line x1="12" y1="9" x2="12" y2="13"/>
-                                <line x1="12" y1="17" x2="12.01" y2="17"/>
-                            </svg>
-                            Batch dimensions differ: ${[...unique].join(", ")}
-                        </p>`;
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            Batch dimensions differ: ${[...unique].join(", ")}
+        </p>`;
                         }
                     }
                 } else {
