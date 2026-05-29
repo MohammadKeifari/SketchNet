@@ -993,10 +993,25 @@ const SketchMod = {
         } else {
             return; // Same type — can't connect
         }
+
+        // Check for duplicate
         const exists = this.links.find(
             (l) => l.from === outPort && l.to === inPort,
         );
         if (exists) return;
+
+        // Check connection limit on target port
+        const currentConnections = this.links.filter(
+            (l) => l.to === inPort,
+        ).length;
+        if (currentConnections >= inPort.connectionLimit) {
+            // For single-connection ports, replace existing link
+            if (inPort.connectionLimit === 1 && currentConnections === 1) {
+                this.links = this.links.filter((l) => l.to !== inPort);
+            } else {
+                return; // MultiPort at capacity — shouldn't happen with Infinity
+            }
+        }
 
         this._saveUndoState();
         this.links.push(new Link(outPort, inPort));
@@ -1396,6 +1411,12 @@ const SketchMod = {
             (l) => l.from === port || l.to === port,
         );
 
+        // Port kind label
+        let kindLabel = "Data Port";
+        if (port instanceof MultiPort)
+            kindLabel = `Multi Port (${connectedLinks.length} connections)`;
+        if (port instanceof RolePort) kindLabel = `Role Port: ${port.role}`;
+        if (port instanceof ParamPort) kindLabel = "Param Port";
         const allSubTypes = [
             { value: "", label: "Default" },
             { value: "train", label: "Train" },
@@ -1425,7 +1446,10 @@ const SketchMod = {
         content.innerHTML = `
         <div class="prop-group">
             <label>Port</label>
-            <p class="prop-hint">${port.type === "input" ? "Input" : "Output"} #${port.index + 1} — ${port.node.type}</p>
+            <p class="prop-hint">
+                ${port.type === "input" ? "Input" : "Output"} #${port.index + 1} — ${port.node.type}
+                <br><small>${kindLabel}</small>
+            </p>
         </div>
         <div class="prop-group">
             <label>Shape</label>
@@ -3365,89 +3389,6 @@ class BaseNode {
         return px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h;
     }
 
-    canAddInput(portType) {
-        if (this.inputs.length >= this.maxInputs) return false;
-        if (
-            this.allowedInputTypes &&
-            portType &&
-            !this.allowedInputTypes.includes(portType)
-        )
-            return false;
-        return true;
-    }
-
-    canAddOutput(portType) {
-        if (this.outputs.length >= this.maxOutputs) return false;
-        if (
-            this.allowedOutputTypes &&
-            portType &&
-            !this.allowedOutputTypes.includes(portType)
-        )
-            return false;
-        return true;
-    }
-    addParamInput() {
-        if (this.paramInputs.length >= this.maxParamInputs) return null;
-        const p = new Port(
-            this,
-            "input",
-            this.paramInputs.length,
-            null,
-            "param",
-        );
-        this.paramInputs.push(p);
-        this.updatePorts();
-        return p;
-    }
-
-    addParamOutput() {
-        if (this.paramOutputs.length >= this.maxParamOutputs) return null;
-        const p = new Port(
-            this,
-            "output",
-            this.paramOutputs.length,
-            null,
-            "param",
-        );
-        this.paramOutputs.push(p);
-        this.updatePorts();
-        return p;
-    }
-    removeParamInput() {
-        if (!this.canRemoveParamInput()) return null;
-        const port = this.paramInputs.pop();
-        return port;
-    }
-
-    removeParamOutput() {
-        if (!this.canRemoveParamOutput()) return null;
-        const port = this.paramOutputs.pop();
-        return port;
-    }
-    canAddParamInput() {
-        return this.paramInputs.length < this.maxParamInputs;
-    }
-
-    canAddParamOutput() {
-        return this.paramOutputs.length < this.maxParamOutputs;
-    }
-
-    canRemoveParamInput() {
-        return this.paramInputs.length > this.minParamInputs;
-    }
-
-    canRemoveParamOutput() {
-        return this.paramOutputs.length > this.minParamOutputs;
-    }
-
-    canRemoveInput() {
-        return this.inputs.length > this.minInputs;
-    }
-
-    canRemoveOutput() {
-        return this.outputs.length > this.minOutputs;
-    }
-
     addInput(subType) {
         if (!this.canAddInput(subType)) return null;
         const p = new Port(
@@ -3487,6 +3428,89 @@ class BaseNode {
         const port = this.outputs.pop();
         return port;
     }
+    addParamInput() {
+        if (this.paramInputs.length >= this.maxParamInputs) return null;
+        const p = new Port(
+            this,
+            "input",
+            this.paramInputs.length,
+            null,
+            "param",
+        );
+        this.paramInputs.push(p);
+        this.updatePorts();
+        return p;
+    }
+
+    addParamOutput() {
+        if (this.paramOutputs.length >= this.maxParamOutputs) return null;
+        const p = new Port(
+            this,
+            "output",
+            this.paramOutputs.length,
+            null,
+            "param",
+        );
+        this.paramOutputs.push(p);
+        this.updatePorts();
+        return p;
+    }
+    removeParamInput() {
+        if (!this.canRemoveParamInput()) return null;
+        const port = this.paramInputs.pop();
+        return port;
+    }
+
+    removeParamOutput() {
+        if (!this.canRemoveParamOutput()) return null;
+        const port = this.paramOutputs.pop();
+        return port;
+    }
+    canAddInput(portType) {
+        if (this.inputs.length >= this.maxInputs) return false;
+        if (
+            this.allowedInputTypes &&
+            portType &&
+            !this.allowedInputTypes.includes(portType)
+        )
+            return false;
+        return true;
+    }
+
+    canAddOutput(portType) {
+        if (this.outputs.length >= this.maxOutputs) return false;
+        if (
+            this.allowedOutputTypes &&
+            portType &&
+            !this.allowedOutputTypes.includes(portType)
+        )
+            return false;
+        return true;
+    }
+
+    canRemoveInput() {
+        return this.inputs.length > this.minInputs;
+    }
+
+    canRemoveOutput() {
+        return this.outputs.length > this.minOutputs;
+    }
+    canAddParamInput() {
+        return this.paramInputs.length < this.maxParamInputs;
+    }
+
+    canAddParamOutput() {
+        return this.paramOutputs.length < this.maxParamOutputs;
+    }
+
+    canRemoveParamInput() {
+        return this.paramInputs.length > this.minParamInputs;
+    }
+
+    canRemoveParamOutput() {
+        return this.paramOutputs.length > this.minParamOutputs;
+    }
+
     getPorts() {
         return [
             ...this.inputs,
@@ -3504,32 +3528,16 @@ class BaseNode {
             type: this.type,
             x: this.x,
             y: this.y,
-            inputPorts: this.inputs.map((p) => ({
-                id: p.id,
-                index: p.index,
-                subType: p.subType,
-                role: p.role,
-            })),
-            outputPorts: this.outputs.map((p) => ({
-                id: p.id,
-                index: p.index,
-                subType: p.subType,
-                role: p.role,
-            })),
+            inputPorts: this.inputs.map((p) => p.toJSON()),
+            outputPorts: this.outputs.map((p) => p.toJSON()),
             numInputs: this.inputs.length,
             numOutputs: this.outputs.length,
             activation: this.activation,
             numNeurons: this.numNeurons,
             bias: this.bias,
             hasBias: this.hasBias,
-            paramInputs: this.paramInputs.map((p) => ({
-                id: p.id,
-                index: p.index,
-            })),
-            paramOutputs: this.paramOutputs.map((p) => ({
-                id: p.id,
-                index: p.index,
-            })),
+            paramInputs: this.paramInputs.map((p) => p.toJSON()),
+            paramOutputs: this.paramOutputs.map((p) => p.toJSON()),
             numParamInputs: this.paramInputs.length,
             numParamOutputs: this.paramOutputs.length,
         };
@@ -3540,52 +3548,37 @@ class BaseNode {
         this.outputs = [];
         this.paramInputs = [];
         this.paramOutputs = [];
-        // Restore inputs with their subTypes
+
+        // Restore input ports
         if (data.inputPorts) {
             for (const p of data.inputPorts) {
-                const port = new Port(
-                    this,
-                    "input",
-                    p.index,
-                    p.subType || null,
-                    "data",
-                    p.role || null,
-                );
-                port.id = p.id;
-                this.inputs.push(port);
+                const port = this._createPortFromJSON(p, "input");
+                if (port) {
+                    port.id = p.id;
+                    this.inputs.push(port);
+                }
             }
         } else {
             for (let i = 0; i < (data.numInputs || 0); i++) this.addInput();
         }
-        // Restore outputs with their subTypes
+
+        // Restore output ports
         if (data.outputPorts) {
             for (const p of data.outputPorts) {
-                const port = new Port(
-                    this,
-                    "output",
-                    p.index,
-                    p.subType || null,
-                    "data",
-                    p.role || null,
-                );
-                port.id = p.id;
-                this.outputs.push(port);
+                const port = this._createPortFromJSON(p, "output");
+                if (port) {
+                    port.id = p.id;
+                    this.outputs.push(port);
+                }
             }
         } else {
             for (let i = 0; i < (data.numOutputs || 0); i++) this.addOutput();
         }
 
-        // Restore param input ports
+        // Restore param inputs
         if (data.paramInputs) {
             for (const p of data.paramInputs) {
-                const port = new Port(
-                    this,
-                    "input",
-                    p.index,
-                    p.subType || null,
-                    "param",
-                    p.role || null,
-                );
+                const port = new ParamPort(this, "input", p.index);
                 port.id = p.id;
                 this.paramInputs.push(port);
             }
@@ -3594,17 +3587,10 @@ class BaseNode {
                 this.addParamInput();
         }
 
-        // Restore param output ports
+        // Restore param outputs
         if (data.paramOutputs) {
             for (const p of data.paramOutputs) {
-                const port = new Port(
-                    this,
-                    "output",
-                    p.index,
-                    p.subType || null,
-                    "param",
-                    p.role || null,
-                );
+                const port = new ParamPort(this, "output", p.index);
                 port.id = p.id;
                 this.paramOutputs.push(port);
             }
@@ -3612,11 +3598,26 @@ class BaseNode {
             for (let i = 0; i < (data.numParamOutputs || 0); i++)
                 this.addParamOutput();
         }
+
         if (data.activation) this.activation = data.activation;
         if (data.numNeurons) this.numNeurons = data.numNeurons;
         if (data.bias !== undefined) this.bias = data.bias;
         if (data.hasBias !== undefined) this.hasBias = data.hasBias;
         this.updatePorts();
+    }
+
+    _createPortFromJSON(p, type) {
+        const kind = p.portKind || "data";
+        switch (kind) {
+            case "multi":
+                return new MultiPort(this, type, p.index, p.subType || null);
+            case "role":
+                return new RolePort(this, type, p.index, p.role || null);
+            case "param":
+                return new ParamPort(this, type, p.index);
+            default:
+                return new DataPort(this, type, p.index, p.subType || null);
+        }
     }
 
     getPropertiesHTML() {
@@ -3909,11 +3910,21 @@ class NeuronNode extends CircleNode {
         this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
-        this.addInput();
-        this.addOutput();
         this.hasBias = true;
         this.bias = 0;
+
+        this.inputs.push(new MultiPort(this, "input", 0, null));
+        this.addOutput();
+        this.updatePorts();
     }
+
+    canAddInput() {
+        return false;
+    }
+    canRemoveInput() {
+        return false;
+    }
+
     drawLabel(ctx) {
         ctx.fillText("N", this.x, this.y);
     }
@@ -3973,10 +3984,19 @@ class LayerNode extends RectNode {
         this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
-        this.addInput();
-        this.addOutput();
         this.hasBias = true;
         this.bias = 0;
+
+        this.inputs.push(new MultiPort(this, "input", 0, null));
+        this.addOutput();
+        this.updatePorts();
+    }
+
+    canAddInput() {
+        return false;
+    }
+    canRemoveInput() {
+        return false;
     }
     drawLabel(ctx) {
         ctx.fillText(this.numNeurons + "", this.x, this.y - 9);
@@ -4146,16 +4166,10 @@ class OutputNode extends RectNode {
         this.maxOutputs = 3;
         this.minOutputs = 3;
 
-        // One regular input (receives model output)
         this.addInput();
-        // Three fixed role output ports
-        this.outputs.push(new Port(this, "output", 0, null, "data", "loss"));
-        this.outputs.push(
-            new Port(this, "output", 1, null, "data", "prediction"),
-        );
-        this.outputs.push(
-            new Port(this, "output", 2, null, "data", "evaluation"),
-        );
+        this.outputs.push(new RolePort(this, "output", 0, "loss"));
+        this.outputs.push(new RolePort(this, "output", 1, "prediction"));
+        this.outputs.push(new RolePort(this, "output", 2, "evaluation"));
         this.updatePorts();
     }
 
@@ -5231,16 +5245,23 @@ class OneHotEncodeNode extends RectNode {
 class ConcatenateNode extends RectNode {
     constructor(id, x, y) {
         super(id, x, y, "concat", 100, 65);
-        this.axis = -1; // -1 = last dimension, 0 = batch, 1 = first feature dim, etc.
-        this.maxInputs = Infinity;
-        this.minInputs = 2;
+        this.axis = -1;
+        this.maxInputs = 1;
+        this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
-        this.addInput();
-        this.addInput();
-        this.addOutput();
-    }
 
+        // Single MultiPort for all incoming connections
+        this.inputs.push(new MultiPort(this, "input", 0, null));
+        this.addOutput();
+        this.updatePorts();
+    }
+    canAddInput() {
+        return false;
+    }
+    canRemoveInput() {
+        return false;
+    }
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
         ctx.fillText("Concat", this.x, this.y - 5);
@@ -5318,13 +5339,15 @@ class ConcatenateNode extends RectNode {
 class AddNode extends RectNode {
     constructor(id, x, y) {
         super(id, x, y, "add", 90, 55);
-        this.maxInputs = 2;
-        this.minInputs = 2;
+        this.maxInputs = 1;
+        this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
-        this.addInput("main");
-        this.addInput("skip");
+
+        // Single MultiPort for all incoming connections
+        this.inputs.push(new MultiPort(this, "input", 0, "main"));
         this.addOutput();
+        this.updatePorts();
     }
 
     drawLabel(ctx) {
@@ -5360,7 +5383,12 @@ class AddNode extends RectNode {
         const symbolic = allShapes.some((s) => s.symbolic);
         return this._makeShapes([...base.shape], symbolic, base.known);
     }
-
+    canAddInput() {
+        return false;
+    }
+    canRemoveInput() {
+        return false;
+    }
     toJSON() {
         return super.toJSON();
     }
@@ -5418,8 +5446,8 @@ class OptimizerNode extends RectNode {
         this.maxOutputs = 0;
         this.minOutputs = 0;
 
-        this.addInput("loss");
-        this.addInput("labels");
+        this.inputs.push(new RolePort(this, "input", 0, "loss"));
+        this.inputs.push(new RolePort(this, "input", 1, "labels"));
         this.updatePorts();
     }
 
@@ -5658,8 +5686,11 @@ class VisualizationNode extends RectNode {
         this.continuousMaxColor = "#ef4444";
 
         // Start with 2 coordinate inputs
-        this.addInput("coord");
-        this.addInput("coord");
+        this.inputs.push(
+            new DataPort(this, "input", this.inputs.length, "coord"),
+        );
+        const p = new RolePort(this, "input", this.inputs.length, "color");
+        this.inputs.push(p);
         this.updatePorts();
     }
 
@@ -5705,20 +5736,13 @@ class VisualizationNode extends RectNode {
     addInput(subType) {
         if (subType === "color") {
             if (!this._canAddColorInput()) return null;
-            const p = new Port(
-                this,
-                "input",
-                this.inputs.length,
-                "color",
-                "data",
-            );
-            p.isColorPort = true;
+            const p = new RolePort(this, "input", this.inputs.length, "color");
             this.inputs.push(p);
             this.updatePorts();
             return p;
         }
         if (!this._canAddCoordInput()) return null;
-        const p = new Port(this, "input", this.inputs.length, "coord", "data");
+        const p = new DataPort(this, "input", this.inputs.length, "coord");
         this.inputs.push(p);
         this.updatePorts();
         return p;
@@ -5932,29 +5956,24 @@ class VisualizationNode extends RectNode {
         `;
     }
 }
-// ========== PORT ==========
-
+// ========== PORT BASE CLASS ==========
 class Port {
-    constructor(node, type, index, subType, portCategory, role) {
+    constructor(node, type, index, subType) {
         this.node = node;
-        this.type = type;
+        this.type = type; // "input" | "output"
         this.index = index;
         this.subType = subType || null;
-        this.portCategory = portCategory || "data";
         this.x = node.x;
         this.y = node.y;
         this.radius = 5;
         this.hoverRadius = 10;
         this.id = `${node.id}_${type}_${index}`;
-
-        // Shape information
-        this.shape = null; // { shape: [1000, 28, 28], dtype: "float32", known: true }
-
-        this.role = role || null; // "loss", "prediction", "evaluation", null
+        this.shape = null;
         this.bias = 0;
+    }
 
-        // Visualization-specific
-        this.isColorPort = false;
+    get connectionLimit() {
+        return 1;
     }
 
     setShape(shapeArray, dtype, known, symbolic) {
@@ -5981,20 +6000,14 @@ class Port {
         return shapeStr + (this.shape.known ? "" : " (estimated)");
     }
 
+    getConnectionCount() {
+        return SketchMod.links.filter((l) => l.from === this || l.to === this)
+            .length;
+    }
+
     draw(ctx) {
-        if (this.portCategory === "param" || this.role) {
-            // Diamond for param ports
-            ctx.beginPath();
-            ctx.moveTo(this.x, this.y - this.radius);
-            ctx.lineTo(this.x + this.radius, this.y);
-            ctx.lineTo(this.x, this.y + this.radius);
-            ctx.lineTo(this.x - this.radius, this.y);
-            ctx.closePath();
-        } else {
-            // Circle for all data ports
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        }
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = this._getColor();
         ctx.fill();
         ctx.strokeStyle = "#1a1d2e";
@@ -6003,7 +6016,6 @@ class Port {
     }
 
     drawHighlight(ctx) {
-        // Glow ring when selected
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
@@ -6014,42 +6026,18 @@ class Port {
     }
 
     _getColor() {
-        // Param ports first
-        if (this.portCategory === "param") {
-            if (this.type === "input") return "#ef4444";
-            if (this.type === "output") return "#60a5fa";
-        }
-        // Data ports — role takes priority over subType
-        if (this.role === "loss") return "#53BF9D";
-        if (this.role === "prediction") return "#BD4291";
-        if (this.role === "evaluation") return "#FFC54D";
-
-        // Fall back to subType colors
-        if (this.subType === "color") return "#ff00b7";
-        if (this.subType === "coord") return "#60a5fa";
+        if (this.subType === "loss") return "#ef4444";
+        if (this.subType === "labels") return "#f59e0b";
         if (this.subType === "train") return "#f59e0b";
         if (this.subType === "test") return "#4ade80";
         if (this.subType === "features") return "#ff00b7";
-        if (this.subType === "loss") return "#2cbde9";
-        if (this.subType === "labels") return "#a78bfa";
         if (this.subType === "main") return "#9e396f";
         if (this.subType === "skip") return "#ffcc00";
-
-        // Default by port type
-        if (this.type === "input") return "#F94C66";
+        if (this.subType === "coord") return "#60a5fa";
+        if (this.subType === "color") return "#ff00b7";
+        if (this.type === "input") return "#ef4444";
         if (this.type === "output") return "#60a5fa";
         return "#94a3b8";
-    }
-
-    containsPoint(sx, sy) {
-        const ps = {
-            x: this.x * SketchMod.scale + SketchMod.offsetX,
-            y: this.y * SketchMod.scale + SketchMod.offsetY,
-        };
-        return (
-            Math.hypot(sx - ps.x, sy - ps.y) <
-            this.hoverRadius * SketchMod.scale + 4
-        );
     }
 
     toJSON() {
@@ -6058,12 +6046,121 @@ class Port {
             type: this.type,
             index: this.index,
             subType: this.subType,
-            portCategory: this.portCategory,
             shape: this.shape,
             bias: this.bias,
-            role: this.role,
-            isColorPort: this.isColorPort,
+            portKind: this._getPortKind(),
         };
+    }
+
+    _getPortKind() {
+        if (this instanceof MultiPort) return "multi";
+        if (this instanceof RolePort) return "role";
+        if (this instanceof ParamPort) return "param";
+        return "data";
+    }
+}
+
+// ========== DATA PORT ==========
+class DataPort extends Port {
+    constructor(node, type, index, subType) {
+        super(node, type, index, subType);
+    }
+
+    get connectionLimit() {
+        return 1;
+    }
+}
+
+// ========== MULTI PORT ==========
+class MultiPort extends Port {
+    constructor(node, type, index, subType, maxConnections) {
+        super(node, type, index, subType);
+        this._maxConnections = maxConnections || Infinity;
+    }
+
+    get connectionLimit() {
+        return this._maxConnections;
+    }
+
+    draw(ctx) {
+        super.draw(ctx);
+        // Draw connection count badge
+        const count = this.getConnectionCount();
+        if (count > 1) {
+            const badgeX = this.x + this.radius + 4;
+            const badgeY = this.y - this.radius - 2;
+            ctx.fillStyle = "var(--accent)";
+            ctx.font = "bold 8px Inter, sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(count, badgeX, badgeY);
+            ctx.textAlign = "start";
+        }
+    }
+
+    _getColor() {
+        // MultiPorts are slightly distinct
+        if (this.subType === "main") return "#9e396f";
+        if (this.subType === "skip") return "#ffcc00";
+        return "#a78bfa"; // Purple-ish default for multi-ports
+    }
+}
+
+// ========== ROLE PORT ==========
+class RolePort extends Port {
+    constructor(node, type, index, role) {
+        super(node, type, index, null);
+        this.role = role || null; // "loss", "prediction", "evaluation", "labels", "color"
+    }
+
+    get connectionLimit() {
+        return 1;
+    }
+
+    _getColor() {
+        if (this.role === "loss") return "#53BF9D";
+        if (this.role === "prediction") return "#BD4291";
+        if (this.role === "evaluation") return "#FFC54D ";
+        if (this.role === "labels") return "#f59e0b";
+        if (this.role === "color") return "#ff00b7";
+        return "#94a3b8";
+    }
+
+    toJSON() {
+        return {
+            ...super.toJSON(),
+            role: this.role,
+        };
+    }
+}
+
+// ========== PARAM PORT ==========
+class ParamPort extends Port {
+    constructor(node, type, index) {
+        super(node, type, index, null);
+    }
+
+    get connectionLimit() {
+        return 1;
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y);
+        ctx.closePath();
+        ctx.fillStyle = this._getColor();
+        ctx.fill();
+        ctx.strokeStyle = "#1a1d2e";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+
+    _getColor() {
+        if (this.type === "input") return "#f59e0b";
+        if (this.type === "output") return "#fbbf24";
+        return "#f59e0b";
     }
 }
 
