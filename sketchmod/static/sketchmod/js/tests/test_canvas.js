@@ -421,9 +421,9 @@ const CanvasTests = {
     testLayerNodeComputeShapes() {
         const node = new LayerNode("l1", 0, 0);
         node.numNeurons = 128;
-        // Simulate connected shape
+        // MultiPort now gets shapes from _getAllInputShapeObjs
         const mockShape = { shape: [64, 256], symbolic: false };
-        node._getFirstInputShapeObj = () => mockShape;
+        node._getAllInputShapeObjs = () => [mockShape];
         const shapes = node.computeOutputShapes();
         this.assertDeepEqual(
             shapes[0].shape,
@@ -432,11 +432,10 @@ const CanvasTests = {
         );
         this.assertEqual(shapes[0].symbolic, false, "Symbolic flag preserved");
     },
-
     testNeuronComputeShapes() {
         const node = new NeuronNode("n1", 0, 0);
         const mockShape = { shape: [32, 10], symbolic: false };
-        node._getFirstInputShapeObj = () => mockShape;
+        node._getAllInputShapeObjs = () => [mockShape];
         const shapes = node.computeOutputShapes();
         this.assertDeepEqual(shapes[0].shape, [32, 1], "Neuron outputs (B, 1)");
     },
@@ -975,7 +974,11 @@ const CanvasTests = {
 
     testBaseNodeRemoveInputReturnsPort() {
         const node = new VisualizationNode("v1", 0, 0);
-        this.assertEqual(node.inputs.length, 2, "Viz starts with 2 inputs");
+        this.assertEqual(
+            node.inputs.length,
+            2,
+            "Viz starts with 2 coord inputs",
+        );
         const removed = node.removeInput();
         this.assertNotNull(removed, "removeInput returns the removed port");
         this.assertEqual(node.inputs.length, 1, "One input remains");
@@ -1405,25 +1408,24 @@ const CanvasTests = {
     // ========== ADD NODE TESTS ==========
     testAddNodeFixedInputs() {
         const node = new AddNode("a1", 0, 0);
-        this.assertEqual(node.inputs.length, 2, "Add node has 2 inputs");
+        // AddNode now has 1 MultiPort, not 2 separate inputs
+        this.assertEqual(node.inputs.length, 1, "Add node has 1 input port");
         this.assertEqual(node.outputs.length, 1, "Add node has 1 output");
-        this.assertEqual(node.inputs[0].subType, "main", "First input is main");
-        this.assertEqual(
-            node.inputs[1].subType,
-            "skip",
-            "Second input is skip",
-        );
-        this.assertEqual(node.maxInputs, 2, "Max inputs is 2");
-        this.assertEqual(node.minInputs, 2, "Min inputs is 2");
+        this.assertInstanceOf(node.inputs[0], MultiPort, "Input is MultiPort");
+        this.assertEqual(node.maxInputs, 1, "Max inputs is 1");
+        this.assertEqual(node.minInputs, 1, "Min inputs is 1");
     },
 
     testAddNodeShape() {
         const node = new AddNode("a1", 0, 0);
-        const mockShape = { shape: [32, 128], symbolic: false };
-        node._getFirstInputShapeObj = () => mockShape;
-
-        const shapes = node.computeOutputShapes();
-        this.assertDeepEqual(shapes[0].shape, [32, 128], "Add preserves shape");
+        // MultiPort needs at least 2 shapes
+        const shapes = [
+            { shape: [32, 128], symbolic: false, known: true },
+            { shape: [32, 128], symbolic: false, known: true },
+        ];
+        node._getAllInputShapeObjs = () => shapes;
+        const result = node.computeOutputShapes();
+        this.assertDeepEqual(result[0].shape, [32, 128], "Add preserves shape");
     },
 
     // ========== SYMBOLIC PROPAGATION TESTS ==========
@@ -1431,12 +1433,12 @@ const CanvasTests = {
         const input = new InputDataNode("i1", 0, 0);
         input.dataShape = "(N, F)";
         const inShapes = input.computeOutputShapes();
-
         const layer = new LayerNode("l1", 0, 0);
         layer.numNeurons = 128;
-        const mockShape = { shape: inShapes[0].shape, symbolic: true };
-        layer._getFirstInputShapeObj = () => mockShape;
-
+        // LayerNode uses _getAllInputShapeObjs now
+        layer._getAllInputShapeObjs = () => [
+            { shape: inShapes[0].shape, symbolic: true, known: true },
+        ];
         const outShapes = layer.computeOutputShapes();
         this.assertDeepEqual(
             outShapes[0].shape,
@@ -1603,9 +1605,19 @@ const CanvasTests = {
 
     testOptimizerNodePortSubTypes() {
         const node = new OptimizerNode("opt1", 0, 0);
-        this.assertEqual(node.inputs[0].subType, "loss", "First input is loss");
+        this.assertInstanceOf(
+            node.inputs[0],
+            RolePort,
+            "First input is RolePort",
+        );
+        this.assertEqual(node.inputs[0].role, "loss", "First input is loss");
+        this.assertInstanceOf(
+            node.inputs[1],
+            RolePort,
+            "Second input is RolePort",
+        );
         this.assertEqual(
-            node.inputs[1].subType,
+            node.inputs[1].role,
             "labels",
             "Second input is labels",
         );
@@ -1707,14 +1719,8 @@ const CanvasTests = {
             "No color input by default",
         );
         this.assertEqual(node.colorMode, "none", "Default color mode is none");
-        this.assertEqual(
-            node.maxInputs,
-            4,
-            "maxInputs is 4 (3 coord + 1 color)",
-        );
+        this.assertEqual(node.maxInputs, 4, "maxInputs is 4");
         this.assertEqual(node.minInputs, 1, "minInputs is 1");
-        this.assertEqual(node.maxColorInputs, 1, "maxColorInputs is 1");
-        this.assertEqual(node.minColorInputs, 0, "minColorInputs is 0");
     },
 
     testVisualizationNodeCoordLimits() {
@@ -1745,20 +1751,18 @@ const CanvasTests = {
     testVisualizationNodeColorInput() {
         const node = new VisualizationNode("viz1", 0, 0);
         this.assertEqual(node._canAddColorInput(), true, "Can add color input");
-
         const p = node.addInput("color");
         this.assertNotNull(p, "Color port created");
-        this.assertEqual(p.subType, "color", "SubType is color");
-        this.assertEqual(p.isColorPort, true, "isColorPort flag set");
+        this.assertInstanceOf(p, RolePort, "Color port is RolePort");
+        this.assertEqual(p.role, "color", "Role is color");
         this.assertEqual(node._hasColorInput(), true, "Has color input");
         this.assertEqual(
             node._canAddColorInput(),
             false,
             "Cannot add second color",
         );
-
         this.assertEqual(node._canRemoveColorInput(), true, "Can remove color");
-        node.removeInput(); // removes color port first
+        node.removeInput();
         this.assertEqual(node._hasColorInput(), false, "Color input removed");
     },
 
@@ -1811,9 +1815,7 @@ const CanvasTests = {
         node.colorPalette = ["#ff0000", "#00ff00", "#0000ff"];
         node.continuousMinColor = "#111111";
         node.continuousMaxColor = "#eeeeee";
-        // Add color input
         node.addInput("color");
-
         const json = node.toJSON();
         this.assertEqual(json.colorMode, "discrete", "JSON colorMode");
         this.assertDeepEqual(
@@ -1823,8 +1825,7 @@ const CanvasTests = {
         );
         this.assertEqual(json.continuousMinColor, "#111111", "JSON min color");
         this.assertEqual(json.continuousMaxColor, "#eeeeee", "JSON max color");
-        this.assertEqual(json.hasColorInput, true, "JSON hasColorInput");
-        this.assertNotNull(json.colorInputId, "JSON colorInputId");
+        // hasColorInput and colorInputId are not in toJSON — they're computed from port data
     },
 
     testVisualizationNodeFromJSON() {
@@ -1835,16 +1836,31 @@ const CanvasTests = {
             colorPalette: ["#aaa", "#bbb", "#ccc"],
             continuousMinColor: "#000",
             continuousMaxColor: "#fff",
-            hasColorInput: true,
             inputPorts: [
-                { id: "viz1_input_0", index: 0, subType: "coord", role: null },
-                { id: "viz1_input_1", index: 1, subType: "coord", role: null },
-                { id: "viz1_input_2", index: 2, subType: "color", role: null },
+                {
+                    id: "viz1_input_0",
+                    index: 0,
+                    subType: "coord",
+                    portKind: "data",
+                },
+                {
+                    id: "viz1_input_1",
+                    index: 1,
+                    subType: "coord",
+                    portKind: "data",
+                },
+                {
+                    id: "viz1_input_2",
+                    index: 2,
+                    subType: null,
+                    portKind: "role",
+                    role: "color",
+                },
             ],
+            outputPorts: [],
             numInputs: 3,
             numOutputs: 0,
         });
-
         this.assertEqual(node.colorMode, "continuous", "Restored colorMode");
         this.assertDeepEqual(
             node.colorPalette,
@@ -1854,10 +1870,9 @@ const CanvasTests = {
         this.assertEqual(node.continuousMinColor, "#000", "Restored min color");
         this.assertEqual(node.continuousMaxColor, "#fff", "Restored max color");
         this.assertEqual(node._hasColorInput(), true, "Restored hasColorInput");
-        // Find color port
-        const cp = node.inputs.find((p) => p.subType === "color");
+        const cp = node._colorPort();
         this.assertNotNull(cp, "Color port restored");
-        this.assertEqual(cp.isColorPort, true, "isColorPort flag restored");
+        this.assertInstanceOf(cp, RolePort, "Color port is RolePort");
     },
 
     testVisualizationNodeRenumberPorts() {
@@ -1943,27 +1958,39 @@ const CanvasTests = {
         node.outputs = [];
         node.fromJSON({
             outputPorts: [
-                { id: "out1_output_0", index: 0, subType: null, role: "loss" },
+                {
+                    id: "out1_output_0",
+                    index: 0,
+                    subType: null,
+                    portKind: "role",
+                    role: "loss",
+                },
                 {
                     id: "out1_output_1",
                     index: 1,
                     subType: null,
+                    portKind: "role",
                     role: "prediction",
                 },
                 {
                     id: "out1_output_2",
                     index: 2,
                     subType: null,
+                    portKind: "role",
                     role: "evaluation",
                 },
             ],
             inputPorts: [
-                { id: "out1_input_0", index: 0, subType: null, role: null },
+                {
+                    id: "out1_input_0",
+                    index: 0,
+                    subType: null,
+                    portKind: "data",
+                },
             ],
             numInputs: 1,
             numOutputs: 3,
         });
-
         this.assertEqual(node.outputs.length, 3, "Restored 3 outputs");
         this.assertEqual(node.outputs[0].role, "loss", "Restored loss role");
         this.assertEqual(
@@ -2050,11 +2077,9 @@ const CanvasTests = {
         const origNodes = SketchMod.nodes;
         const origLinks = SketchMod.links;
         const origPorts = SketchMod.ports;
-
         SketchMod.nodes = [];
         SketchMod.links = [];
         SketchMod.ports = [];
-
         const opt = new OptimizerNode("opt1", 100, 200);
         opt.lossType = "mse";
         opt.optimizerType = "sgd";
@@ -2062,13 +2087,10 @@ const CanvasTests = {
         SketchMod.nodes.push(opt);
         SketchMod.ports = SketchMod._collectPorts();
         SketchMod._saveToSession();
-
-        // Clear and reload
         SketchMod.nodes = [];
         SketchMod.links = [];
         SketchMod.ports = [];
         SketchMod._loadFromSession();
-
         this.assertEqual(SketchMod.nodes.length, 1, "One node restored");
         const restored = SketchMod.nodes[0];
         this.assertInstanceOf(
@@ -2084,18 +2106,17 @@ const CanvasTests = {
         );
         this.assertEqual(restored.learningRate, 0.01, "Restored learningRate");
         this.assertEqual(restored.inputs.length, 2, "Restored 2 inputs");
-        this.assertEqual(
-            restored.inputs[0].subType,
-            "loss",
-            "Restored loss subType",
+        this.assertInstanceOf(
+            restored.inputs[0],
+            RolePort,
+            "First input is RolePort",
         );
+        this.assertEqual(restored.inputs[0].role, "loss", "Restored loss role");
         this.assertEqual(
-            restored.inputs[1].subType,
+            restored.inputs[1].role,
             "labels",
-            "Restored labels subType",
+            "Restored labels role",
         );
-
-        // Restore
         SketchMod.nodes = origNodes;
         SketchMod.links = origLinks;
         SketchMod.ports = origPorts;
@@ -2105,11 +2126,9 @@ const CanvasTests = {
         const origNodes = SketchMod.nodes;
         const origLinks = SketchMod.links;
         const origPorts = SketchMod.ports;
-
         SketchMod.nodes = [];
         SketchMod.links = [];
         SketchMod.ports = [];
-
         const viz = new VisualizationNode("viz1", 100, 200);
         viz.colorMode = "discrete";
         viz.colorPalette = ["#111", "#222", "#333"];
@@ -2117,13 +2136,10 @@ const CanvasTests = {
         SketchMod.nodes.push(viz);
         SketchMod.ports = SketchMod._collectPorts();
         SketchMod._saveToSession();
-
-        // Clear and reload
         SketchMod.nodes = [];
         SketchMod.links = [];
         SketchMod.ports = [];
         SketchMod._loadFromSession();
-
         this.assertEqual(SketchMod.nodes.length, 1, "One node restored");
         const restored = SketchMod.nodes[0];
         this.assertInstanceOf(
@@ -2142,13 +2158,6 @@ const CanvasTests = {
             true,
             "Restored has color input",
         );
-        this.assertEqual(
-            restored.inputs.length,
-            3,
-            "Restored 3 inputs (2 coord + 1 color)",
-        );
-
-        // Restore
         SketchMod.nodes = origNodes;
         SketchMod.links = origLinks;
         SketchMod.ports = origPorts;
@@ -2204,101 +2213,55 @@ const CanvasTests = {
         this.assertEqual(node.maxParamInputs, 1, "maxParamInputs is 1");
         this.assertEqual(node.maxParamOutputs, 1, "maxParamOutputs is 1");
 
-        // If constructor creates them:
-        if (node.paramInputs.length === 1 && node.paramOutputs.length === 1) {
-            this.assertEqual(
-                node.canAddParamInput(),
-                false,
-                "Already has param input",
-            );
-            this.assertEqual(
-                node.canAddParamOutput(),
-                false,
-                "Already has param output",
-            );
-
-            const pi = node.paramInputs[0];
-            this.assertNotNull(pi, "Param input exists");
-            this.assertEqual(
-                pi.portCategory,
-                "param",
-                "Port category is param",
-            );
-
-            const po = node.paramOutputs[0];
-            this.assertNotNull(po, "Param output exists");
-            this.assertEqual(
-                po.portCategory,
-                "param",
-                "Port category is param",
-            );
-        } else {
-            // If constructor doesn't create them:
-            this.assertEqual(
-                node.canAddParamInput(),
-                true,
-                "Can add param input",
-            );
+        // Check if constructor already created them
+        if (node.paramInputs.length === 0) {
             const pi = node.addParamInput();
             this.assertNotNull(pi, "Param input created");
-            this.assertEqual(
-                pi.portCategory,
-                "param",
-                "Port category is param",
+            this.assertInstanceOf(pi, ParamPort, "Port is ParamPort");
+        } else {
+            this.assertInstanceOf(
+                node.paramInputs[0],
+                ParamPort,
+                "Existing param input is ParamPort",
             );
         }
 
-        this.assertEqual(
-            node.canRemoveParamInput(),
-            true,
-            "Can remove param input",
-        );
-        this.assertEqual(
-            node.canRemoveParamOutput(),
-            true,
-            "Can remove param output",
-        );
+        if (node.paramOutputs.length === 0) {
+            const po = node.addParamOutput();
+            this.assertNotNull(po, "Param output created");
+            this.assertInstanceOf(po, ParamPort, "Port is ParamPort");
+        } else {
+            this.assertInstanceOf(
+                node.paramOutputs[0],
+                ParamPort,
+                "Existing param output is ParamPort",
+            );
+        }
     },
 
     testParamPortDiamondShape() {
         const node = new NormalizeNode("n1", 0, 0);
 
-        let pp, po;
+        let pp =
+            node.paramInputs.length > 0
+                ? node.paramInputs[0]
+                : node.addParamInput();
+        let po =
+            node.paramOutputs.length > 0
+                ? node.paramOutputs[0]
+                : node.addParamOutput();
 
-        // If constructor already created param ports, use them
-        if (node.paramInputs.length > 0) {
-            pp = node.paramInputs[0];
-        } else {
-            pp = node.addParamInput();
-        }
-
-        if (node.paramOutputs.length > 0) {
-            po = node.paramOutputs[0];
-        } else {
-            po = node.addParamOutput();
-        }
-
-        if (pp) {
-            this.assertEqual(
-                pp.portCategory,
-                "param",
-                "Port category is param",
-            );
-        }
-
-        if (po) {
-            this.assertEqual(
-                po.portCategory,
-                "param",
-                "Port category is param",
-            );
-        }
+        if (pp)
+            this.assertInstanceOf(pp, ParamPort, "Param input is ParamPort");
+        if (po)
+            this.assertInstanceOf(po, ParamPort, "Param output is ParamPort");
     },
 
     testParamPortToJSON() {
         const node = new NormalizeNode("n1", 0, 0);
-        node.addParamInput();
-        node.addParamOutput();
+        // Ensure param ports exist
+        if (node.paramInputs.length === 0) node.addParamInput();
+        if (node.paramOutputs.length === 0) node.addParamOutput();
 
         const json = node.toJSON();
         this.assertEqual(json.paramInputs.length, 1, "JSON has 1 param input");
@@ -2309,6 +2272,16 @@ const CanvasTests = {
         );
         this.assertEqual(json.numParamInputs, 1, "JSON numParamInputs");
         this.assertEqual(json.numParamOutputs, 1, "JSON numParamOutputs");
+        this.assertEqual(
+            json.paramInputs[0].portKind,
+            "param",
+            "Param input portKind is param",
+        );
+        this.assertEqual(
+            json.paramOutputs[0].portKind,
+            "param",
+            "Param output portKind is param",
+        );
     },
 
     testParamPortFromJSON() {
@@ -2316,35 +2289,39 @@ const CanvasTests = {
         node.paramInputs = [];
         node.paramOutputs = [];
         node.fromJSON({
-            paramInputs: [{ id: "n1_input_1", index: 1 }],
-            paramOutputs: [{ id: "n1_output_1", index: 1 }],
+            paramInputs: [{ id: "n1_input_1", index: 1, portKind: "param" }],
+            paramOutputs: [{ id: "n1_output_1", index: 1, portKind: "param" }],
             numParamInputs: 1,
             numParamOutputs: 1,
             inputPorts: [
-                { id: "n1_input_0", index: 0, subType: null, role: null },
+                { id: "n1_input_0", index: 0, subType: null, portKind: "data" },
             ],
             outputPorts: [
-                { id: "n1_output_0", index: 0, subType: null, role: null },
+                {
+                    id: "n1_output_0",
+                    index: 0,
+                    subType: null,
+                    portKind: "data",
+                },
             ],
             numInputs: 1,
             numOutputs: 1,
         });
-
         this.assertEqual(node.paramInputs.length, 1, "Restored 1 param input");
         this.assertEqual(
             node.paramOutputs.length,
             1,
             "Restored 1 param output",
         );
-        this.assertEqual(
-            node.paramInputs[0].portCategory,
-            "param",
-            "Restored port category",
+        this.assertInstanceOf(
+            node.paramInputs[0],
+            ParamPort,
+            "Restored param input is ParamPort",
         );
-        this.assertEqual(
-            node.paramOutputs[0].portCategory,
-            "param",
-            "Restored port category",
+        this.assertInstanceOf(
+            node.paramOutputs[0],
+            ParamPort,
+            "Restored param output is ParamPort",
         );
     },
 

@@ -3312,7 +3312,328 @@ const SketchMod = {
         modal.style.display = "flex";
     },
 };
+// ========== PORT BASE CLASS ==========
+class Port {
+    constructor(node, type, index, subType) {
+        this.node = node;
+        this.type = type; // "input" | "output"
+        this.index = index;
+        this.subType = subType || null;
+        this.x = node.x;
+        this.y = node.y;
+        this.radius = 5;
+        this.hoverRadius = 10;
+        this.id = `${node.id}_${type}_${index}`;
+        this.shape = null;
+        this.bias = 0;
+    }
 
+    get connectionLimit() {
+        return 1;
+    }
+
+    setShape(shapeArray, dtype, known, symbolic) {
+        this.shape = {
+            shape: shapeArray || null,
+            dtype: dtype || "float32",
+            known: known || false,
+            symbolic: symbolic || false,
+        };
+    }
+
+    clearShape() {
+        this.shape = null;
+    }
+
+    hasShape() {
+        return this.shape && this.shape.shape && this.shape.shape.length > 0;
+    }
+
+    shapeDisplay() {
+        if (!this.hasShape()) return "Unknown";
+        const shapeStr = "(" + this.shape.shape.join(", ") + ")";
+        if (this.shape.symbolic) return shapeStr + " (abstract)";
+        return shapeStr + (this.shape.known ? "" : " (estimated)");
+    }
+
+    getConnectionCount() {
+        return SketchMod.links.filter((l) => l.from === this || l.to === this)
+            .length;
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this._getColor();
+        ctx.fill();
+        ctx.strokeStyle = "#1a1d2e";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+
+    drawHighlight(ctx) {
+        // Check for error/warning first
+        if (SketchMod.errorPortIds.has(this.id)) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(239, 68, 68, 0.2)";
+            ctx.fill();
+            ctx.strokeStyle = "#ef4444";
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            return;
+        }
+        if (SketchMod.warningPortIds.has(this.id)) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(245, 158, 11, 0.2)";
+            ctx.fill();
+            ctx.strokeStyle = "#f59e0b";
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            return;
+        }
+        // Default selection highlight
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+    }
+    _getColor() {
+        if (this.subType === "loss") return "#ef4444";
+        if (this.subType === "labels") return "#f59e0b";
+        if (this.subType === "train") return "#f59e0b";
+        if (this.subType === "test") return "#4ade80";
+        if (this.subType === "features") return "#ff00b7";
+        if (this.subType === "main") return "#9e396f";
+        if (this.subType === "skip") return "#ffcc00";
+        if (this.subType === "coord") return "#60a5fa";
+        if (this.subType === "color") return "#ff00b7";
+        if (this.type === "input") return "#ef4444";
+        if (this.type === "output") return "#60a5fa";
+        return "#94a3b8";
+    }
+
+    toJSON() {
+        return {
+            id: this.id,
+            type: this.type,
+            index: this.index,
+            subType: this.subType,
+            shape: this.shape,
+            bias: this.bias,
+            portKind: this._getPortKind(),
+        };
+    }
+
+    _getPortKind() {
+        if (this instanceof MultiPort) return "multi";
+        if (this instanceof RolePort) return "role";
+        if (this instanceof ParamPort) return "param";
+        return "data";
+    }
+}
+
+// ========== DATA PORT ==========
+class DataPort extends Port {
+    constructor(node, type, index, subType) {
+        super(node, type, index, subType);
+    }
+
+    get connectionLimit() {
+        return 1;
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this._getColor();
+        ctx.fill();
+        ctx.strokeStyle = "#1a1d2e";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+
+    _getColor() {
+        if (this.subType === "loss") return "#ef4444";
+        if (this.subType === "labels") return "#f59e0b";
+        if (this.subType === "train") return "#f59e0b";
+        if (this.subType === "test") return "#4ade80";
+        if (this.subType === "features") return "#ff00b7";
+        if (this.subType === "main") return "#9e396f";
+        if (this.subType === "skip") return "#ffcc00";
+        if (this.subType === "coord") return "#60a5fa";
+        if (this.subType === "color") return "#ff00b7";
+        if (this.type === "input") return "#ef4444";
+        if (this.type === "output") return "#60a5fa";
+        return "#94a3b8";
+    }
+
+    _getPortKind() {
+        return "data";
+    }
+
+    toJSON() {
+        return {
+            id: this.id,
+            type: this.type,
+            index: this.index,
+            subType: this.subType,
+            shape: this.shape,
+            bias: this.bias,
+            portKind: "data",
+        };
+    }
+}
+
+// ========== MULTI PORT ==========
+class MultiPort extends Port {
+    constructor(node, type, index, subType, maxConnections) {
+        super(node, type, index, subType);
+        this._maxConnections = maxConnections || Infinity;
+    }
+
+    get connectionLimit() {
+        return this._maxConnections;
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this._getColor();
+        ctx.fill();
+        ctx.strokeStyle = "#1a1d2e";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Connection count badge
+        const count = this.getConnectionCount();
+        if (count > 1) {
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 9px Inter, sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(count, this.x, this.y);
+        }
+    }
+
+    _getColor() {
+        return "#a78bfa"; // Purple for multi-ports
+    }
+
+    _getPortKind() {
+        return "multi";
+    }
+
+    toJSON() {
+        return {
+            id: this.id,
+            type: this.type,
+            index: this.index,
+            subType: this.subType,
+            shape: this.shape,
+            bias: this.bias,
+            portKind: "multi",
+        };
+    }
+}
+
+// ========== ROLE PORT ==========
+class RolePort extends Port {
+    constructor(node, type, index, role) {
+        super(node, type, index, null);
+        this.role = role || null; // "loss", "prediction", "evaluation", "labels", "color"
+    }
+
+    get connectionLimit() {
+        return 1;
+    }
+    draw(ctx) {
+        // Diamond shape — slightly smaller than ParamPort
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius - 1);
+        ctx.lineTo(this.x + this.radius + 1, this.y);
+        ctx.lineTo(this.x, this.y + this.radius + 1);
+        ctx.lineTo(this.x - this.radius - 1, this.y);
+        ctx.closePath();
+        ctx.fillStyle = this._getColor();
+        ctx.fill();
+        ctx.strokeStyle = "#1a1d2e";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+    _getPortKind() {
+        return "role";
+    }
+
+    _getColor() {
+        if (this.role === "loss") return "#53BF9D";
+        if (this.role === "prediction") return "#BD4291";
+        if (this.role === "evaluation") return "#FFC54D ";
+        if (this.role === "labels") return "#f59e0b";
+        if (this.role === "color") return "#ff00b7";
+        return "#94a3b8";
+    }
+
+    toJSON() {
+        return {
+            ...super.toJSON(),
+            role: this.role,
+        };
+    }
+}
+
+// ========== PARAM PORT ==========
+class ParamPort extends Port {
+    constructor(node, type, index) {
+        super(node, type, index, null);
+    }
+
+    get connectionLimit() {
+        return 1;
+    }
+
+    draw(ctx) {
+        // Diamond shape — distinct from circles and RolePort diamonds
+        const size = this.radius + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - size);
+        ctx.lineTo(this.x + size, this.y);
+        ctx.lineTo(this.x, this.y + size);
+        ctx.lineTo(this.x - size, this.y);
+        ctx.closePath();
+        ctx.fillStyle = this._getColor();
+        ctx.fill();
+        ctx.strokeStyle = "#1a1d2e";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    _getColor() {
+        if (this.type === "input") return "#fbbf24"; // Bright amber
+        if (this.type === "output") return "#38bdf8"; // Sky blue
+        return "#fbbf24";
+    }
+
+    _getPortKind() {
+        return "param";
+    }
+
+    toJSON() {
+        return {
+            id: this.id,
+            type: this.type,
+            index: this.index,
+            subType: null,
+            shape: this.shape,
+            bias: this.bias,
+            portKind: "param",
+        };
+    }
+}
 // ========== NODE CLASSES ==========
 
 class BaseNode {
@@ -3396,13 +3717,7 @@ class BaseNode {
     }
     addParamInput() {
         if (this.paramInputs.length >= this.maxParamInputs) return null;
-        const p = new Port(
-            this,
-            "input",
-            this.paramInputs.length,
-            null,
-            "param",
-        );
+        const p = new ParamPort(this, "input", this.paramInputs.length);
         this.paramInputs.push(p);
         this.updatePorts();
         return p;
@@ -3410,13 +3725,7 @@ class BaseNode {
 
     addParamOutput() {
         if (this.paramOutputs.length >= this.maxParamOutputs) return null;
-        const p = new Port(
-            this,
-            "output",
-            this.paramOutputs.length,
-            null,
-            "param",
-        );
+        const p = new ParamPort(this, "output", this.paramOutputs.length);
         this.paramOutputs.push(p);
         this.updatePorts();
         return p;
@@ -3548,9 +3857,6 @@ class BaseNode {
                 port.id = p.id;
                 this.paramInputs.push(port);
             }
-        } else {
-            for (let i = 0; i < (data.numParamInputs || 0); i++)
-                this.addParamInput();
         }
 
         // Restore param outputs
@@ -3560,9 +3866,6 @@ class BaseNode {
                 port.id = p.id;
                 this.paramOutputs.push(port);
             }
-        } else {
-            for (let i = 0; i < (data.numParamOutputs || 0); i++)
-                this.addParamOutput();
         }
 
         if (data.activation) this.activation = data.activation;
@@ -4896,8 +5199,6 @@ class NormalizeNode extends RectNode {
         this.minParamOutputs = 0;
         this.addInput();
         this.addOutput();
-        this.addParamInput();
-        this.addParamOutput();
     }
     drawLabel(ctx) {
         ctx.fillText(
@@ -5405,12 +5706,9 @@ class AddNode extends RectNode {
         return errors;
     }
     computeOutputShapes() {
-        if (this.inputs.length < 2) return this._emptyShapes();
-
         const allShapes = this._getAllInputShapeObjs();
         if (allShapes.length < 2) return this._emptyShapes();
 
-        // Check all shapes are identical
         const base = allShapes[0];
         for (let i = 1; i < allShapes.length; i++) {
             if (
@@ -5848,6 +6146,15 @@ class VisualizationNode extends RectNode {
             continuousMaxColor: this.continuousMaxColor,
         };
     }
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.colorMode) this.colorMode = d.colorMode;
+        if (d.colorPalette) this.colorPalette = d.colorPalette;
+        if (d.continuousMinColor)
+            this.continuousMinColor = d.continuousMinColor;
+        if (d.continuousMaxColor)
+            this.continuousMaxColor = d.continuousMaxColor;
+    }
 
     getPropertiesHTML() {
         const coordPorts = this._coordPorts();
@@ -5966,328 +6273,6 @@ class VisualizationNode extends RectNode {
             ${discreteHTML}
             ${continuousHTML}
         `;
-    }
-}
-// ========== PORT BASE CLASS ==========
-class Port {
-    constructor(node, type, index, subType) {
-        this.node = node;
-        this.type = type; // "input" | "output"
-        this.index = index;
-        this.subType = subType || null;
-        this.x = node.x;
-        this.y = node.y;
-        this.radius = 5;
-        this.hoverRadius = 10;
-        this.id = `${node.id}_${type}_${index}`;
-        this.shape = null;
-        this.bias = 0;
-    }
-
-    get connectionLimit() {
-        return 1;
-    }
-
-    setShape(shapeArray, dtype, known, symbolic) {
-        this.shape = {
-            shape: shapeArray || null,
-            dtype: dtype || "float32",
-            known: known || false,
-            symbolic: symbolic || false,
-        };
-    }
-
-    clearShape() {
-        this.shape = null;
-    }
-
-    hasShape() {
-        return this.shape && this.shape.shape && this.shape.shape.length > 0;
-    }
-
-    shapeDisplay() {
-        if (!this.hasShape()) return "Unknown";
-        const shapeStr = "(" + this.shape.shape.join(", ") + ")";
-        if (this.shape.symbolic) return shapeStr + " (abstract)";
-        return shapeStr + (this.shape.known ? "" : " (estimated)");
-    }
-
-    getConnectionCount() {
-        return SketchMod.links.filter((l) => l.from === this || l.to === this)
-            .length;
-    }
-
-    draw(ctx) {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this._getColor();
-        ctx.fill();
-        ctx.strokeStyle = "#1a1d2e";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-    }
-
-    drawHighlight(ctx) {
-        // Check for error/warning first
-        if (SketchMod.errorPortIds.has(this.id)) {
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(239, 68, 68, 0.2)";
-            ctx.fill();
-            ctx.strokeStyle = "#ef4444";
-            ctx.lineWidth = 2.5;
-            ctx.stroke();
-            return;
-        }
-        if (SketchMod.warningPortIds.has(this.id)) {
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(245, 158, 11, 0.2)";
-            ctx.fill();
-            ctx.strokeStyle = "#f59e0b";
-            ctx.lineWidth = 2.5;
-            ctx.stroke();
-            return;
-        }
-        // Default selection highlight
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
-        ctx.fill();
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
-    }
-    _getColor() {
-        if (this.subType === "loss") return "#ef4444";
-        if (this.subType === "labels") return "#f59e0b";
-        if (this.subType === "train") return "#f59e0b";
-        if (this.subType === "test") return "#4ade80";
-        if (this.subType === "features") return "#ff00b7";
-        if (this.subType === "main") return "#9e396f";
-        if (this.subType === "skip") return "#ffcc00";
-        if (this.subType === "coord") return "#60a5fa";
-        if (this.subType === "color") return "#ff00b7";
-        if (this.type === "input") return "#ef4444";
-        if (this.type === "output") return "#60a5fa";
-        return "#94a3b8";
-    }
-
-    toJSON() {
-        return {
-            id: this.id,
-            type: this.type,
-            index: this.index,
-            subType: this.subType,
-            shape: this.shape,
-            bias: this.bias,
-            portKind: this._getPortKind(),
-        };
-    }
-
-    _getPortKind() {
-        if (this instanceof MultiPort) return "multi";
-        if (this instanceof RolePort) return "role";
-        if (this instanceof ParamPort) return "param";
-        return "data";
-    }
-}
-
-// ========== DATA PORT ==========
-class DataPort extends Port {
-    constructor(node, type, index, subType) {
-        super(node, type, index, subType);
-    }
-
-    get connectionLimit() {
-        return 1;
-    }
-
-    draw(ctx) {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this._getColor();
-        ctx.fill();
-        ctx.strokeStyle = "#1a1d2e";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-    }
-
-    _getColor() {
-        if (this.subType === "loss") return "#ef4444";
-        if (this.subType === "labels") return "#f59e0b";
-        if (this.subType === "train") return "#f59e0b";
-        if (this.subType === "test") return "#4ade80";
-        if (this.subType === "features") return "#ff00b7";
-        if (this.subType === "main") return "#9e396f";
-        if (this.subType === "skip") return "#ffcc00";
-        if (this.subType === "coord") return "#60a5fa";
-        if (this.subType === "color") return "#ff00b7";
-        if (this.type === "input") return "#ef4444";
-        if (this.type === "output") return "#60a5fa";
-        return "#94a3b8";
-    }
-
-    _getPortKind() {
-        return "data";
-    }
-
-    toJSON() {
-        return {
-            id: this.id,
-            type: this.type,
-            index: this.index,
-            subType: this.subType,
-            shape: this.shape,
-            bias: this.bias,
-            portKind: "data",
-        };
-    }
-}
-
-// ========== MULTI PORT ==========
-class MultiPort extends Port {
-    constructor(node, type, index, subType, maxConnections) {
-        super(node, type, index, subType);
-        this._maxConnections = maxConnections || Infinity;
-    }
-
-    get connectionLimit() {
-        return this._maxConnections;
-    }
-
-    draw(ctx) {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this._getColor();
-        ctx.fill();
-        ctx.strokeStyle = "#1a1d2e";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Connection count badge
-        const count = this.getConnectionCount();
-        if (count > 1) {
-            ctx.fillStyle = "#ffffff";
-            ctx.font = "bold 9px Inter, sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(count, this.x, this.y);
-        }
-    }
-
-    _getColor() {
-        return "#a78bfa"; // Purple for multi-ports
-    }
-
-    _getPortKind() {
-        return "multi";
-    }
-
-    toJSON() {
-        return {
-            id: this.id,
-            type: this.type,
-            index: this.index,
-            subType: this.subType,
-            shape: this.shape,
-            bias: this.bias,
-            portKind: "multi",
-        };
-    }
-}
-
-// ========== ROLE PORT ==========
-class RolePort extends Port {
-    constructor(node, type, index, role) {
-        super(node, type, index, null);
-        this.role = role || null; // "loss", "prediction", "evaluation", "labels", "color"
-    }
-
-    get connectionLimit() {
-        return 1;
-    }
-    draw(ctx) {
-        // Diamond shape — slightly smaller than ParamPort
-        ctx.beginPath();
-        ctx.moveTo(this.x, this.y - this.radius - 1);
-        ctx.lineTo(this.x + this.radius + 1, this.y);
-        ctx.lineTo(this.x, this.y + this.radius + 1);
-        ctx.lineTo(this.x - this.radius - 1, this.y);
-        ctx.closePath();
-        ctx.fillStyle = this._getColor();
-        ctx.fill();
-        ctx.strokeStyle = "#1a1d2e";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-    }
-    _getPortKind() {
-        return "role";
-    }
-
-    _getColor() {
-        if (this.role === "loss") return "#53BF9D";
-        if (this.role === "prediction") return "#BD4291";
-        if (this.role === "evaluation") return "#FFC54D ";
-        if (this.role === "labels") return "#f59e0b";
-        if (this.role === "color") return "#ff00b7";
-        return "#94a3b8";
-    }
-
-    toJSON() {
-        return {
-            ...super.toJSON(),
-            role: this.role,
-        };
-    }
-}
-
-// ========== PARAM PORT ==========
-class ParamPort extends Port {
-    constructor(node, type, index) {
-        super(node, type, index, null);
-    }
-
-    get connectionLimit() {
-        return 1;
-    }
-
-    draw(ctx) {
-        // Diamond shape — distinct from circles and RolePort diamonds
-        const size = this.radius + 0.5;
-        ctx.beginPath();
-        ctx.moveTo(this.x, this.y - size);
-        ctx.lineTo(this.x + size, this.y);
-        ctx.lineTo(this.x, this.y + size);
-        ctx.lineTo(this.x - size, this.y);
-        ctx.closePath();
-        ctx.fillStyle = this._getColor();
-        ctx.fill();
-        ctx.strokeStyle = "#1a1d2e";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
-
-    _getColor() {
-        if (this.type === "input") return "#fbbf24"; // Bright amber
-        if (this.type === "output") return "#38bdf8"; // Sky blue
-        return "#fbbf24";
-    }
-
-    _getPortKind() {
-        return "param";
-    }
-
-    toJSON() {
-        return {
-            id: this.id,
-            type: this.type,
-            index: this.index,
-            subType: null,
-            shape: this.shape,
-            bias: this.bias,
-            portKind: "param",
-        };
     }
 }
 
