@@ -4588,7 +4588,11 @@ class NeuronNode extends CircleNode {
             if (!s.known) known = false;
         }
 
-        return this._makeShapes([batchDim, 1], symbolic, known);
+        return this._makeShapes(
+            [new ShapeExpr(batchDim), new ShapeExpr(1)],
+            symbolic,
+            known,
+        );
     }
 
     getPropertiesHTML() {
@@ -4657,15 +4661,15 @@ class LayerNode extends RectNode {
         let known = allShapes[0].known;
 
         for (const s of allShapes) {
-            if (String(s.shape[0]) !== String(batchDim)) {
-                // Batch dimension mismatch — still compute output with first batch
-                // The warning is handled by validation
-            }
             if (s.symbolic) symbolic = true;
             if (!s.known) known = false;
         }
 
-        return this._makeShapes([batchDim, this.numNeurons], symbolic, known);
+        return this._makeShapes(
+            [new ShapeExpr(batchDim), new ShapeExpr(this.numNeurons)],
+            symbolic,
+            known,
+        );
     }
     getPropertiesHTML() {
         return (
@@ -4924,14 +4928,16 @@ class ColumnSelectNode extends RectNode {
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
+
         const count =
             this.selectedColumns.length > 0
                 ? this.selectedColumns.length
                 : this.columnInput
                   ? this._countFromInput()
                   : s.shape[1];
+
         return this._makeShapes(
-            [s.shape[0], count],
+            [new ShapeExpr(s.shape[0]), new ShapeExpr(count)],
             s.symbolic,
             this.selectedColumns.length > 0,
         );
@@ -5049,9 +5055,12 @@ class RowSelectNode extends RectNode {
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
-        const rows = this.rowCount > 0 ? this.rowCount : s.shape[0];
+
+        const rows =
+            this.rowCount > 0 ? new ShapeExpr(this.rowCount) : s.shape[0];
+
         return this._makeShapes(
-            [rows, ...s.shape.slice(1)],
+            [rows, ...s.shape.slice(1).map((x) => new ShapeExpr(x))],
             s.symbolic,
             this.rowCount > 0,
         );
@@ -5451,25 +5460,33 @@ class TrainTestSplitNode extends RectNode {
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
+
         const batch = s.shape[0];
-        const trainRows =
-            typeof batch === "number"
-                ? Math.floor(batch * this.trainRatio)
-                : `0.7*${batch}`;
-        const testRows =
-            typeof batch === "number" ? batch - trainRows : `0.3*${batch}`;
+        const trainRows = batch.isNumber()
+            ? new ShapeExpr(Math.floor(batch.value * this.trainRatio))
+            : batch.multiply(this.trainRatio);
+        const testRows = batch.isNumber()
+            ? batch.subtract(trainRows)
+            : batch.multiply(this.testRatio);
+
         return [
             {
-                shape: [trainRows, ...s.shape.slice(1)],
+                shape: [
+                    trainRows,
+                    ...s.shape.slice(1).map((x) => new ShapeExpr(x)),
+                ],
                 dtype: "float32",
                 known: true,
-                symbolic: s.symbolic,
+                symbolic: s.symbolic || !batch.isNumber(),
             },
             {
-                shape: [testRows, ...s.shape.slice(1)],
+                shape: [
+                    testRows,
+                    ...s.shape.slice(1).map((x) => new ShapeExpr(x)),
+                ],
                 dtype: "float32",
                 known: true,
-                symbolic: s.symbolic,
+                symbolic: s.symbolic || !batch.isNumber(),
             },
         ];
     }
@@ -5647,17 +5664,28 @@ class Conv2DNode extends RectNode {
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s || s.shape.length < 3) return this._emptyShapes();
-        // Input: (B, H, W, C) or (B, C, H, W)
-        // Assume channels-last: (B, H, W, C)
-        const H = s.shape[s.shape.length - 3] || 1;
-        const W = s.shape[s.shape.length - 2] || 1;
-        const H_out =
-            Math.floor((H + 2 * this.padding - this.kernelSize) / this.stride) +
-            1;
-        const W_out =
-            Math.floor((W + 2 * this.padding - this.kernelSize) / this.stride) +
-            1;
-        const shape = [...s.shape.slice(0, -3), H_out, W_out, this.filters];
+
+        const H = s.shape[s.shape.length - 3];
+        const W = s.shape[s.shape.length - 2];
+
+        const H_out = ShapeExpr.from(H)
+            .subtract(this.kernelSize)
+            .add(2 * this.padding)
+            .divide(this.stride)
+            .add(1);
+        const W_out = ShapeExpr.from(W)
+            .subtract(this.kernelSize)
+            .add(2 * this.padding)
+            .divide(this.stride)
+            .add(1);
+
+        const shape = [
+            ...s.shape.slice(0, -3).map((x) => new ShapeExpr(x)),
+            H_out,
+            W_out,
+            new ShapeExpr(this.filters),
+        ];
+
         return this._makeShapes(shape, s.symbolic, true);
     }
 
@@ -5732,13 +5760,14 @@ class FlattenNode extends RectNode {
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
-        // Keep batch dim, flatten the rest
-        const flattened = s.shape.slice(1).reduce((a, b) => {
-            if (typeof a === "number" && typeof b === "number") return a * b;
-            return `${a}*${b}`;
-        }, 1);
-        const shape = [s.shape[0], flattened];
-        return this._makeShapes(shape, s.symbolic, true);
+
+        const batchDim = new ShapeExpr(s.shape[0]);
+        let flattened = new ShapeExpr(1);
+        for (let i = 1; i < s.shape.length; i++) {
+            flattened = flattened.multiply(s.shape[i]);
+        }
+
+        return this._makeShapes([batchDim, flattened], s.symbolic, true);
     }
 
     toJSON() {
@@ -5953,43 +5982,28 @@ class ConcatenateNode extends RectNode {
         const allShapes = this._getAllInputShapeObjs();
         if (allShapes.length < 2) return this._emptyShapes();
 
-        const baseShape = [...allShapes[0].shape];
+        const baseShape = allShapes[0].shape.map((s) => new ShapeExpr(s));
         const rank = baseShape.length;
         const axis = this.axis === -1 ? rank - 1 : this.axis;
 
         if (axis < 0 || axis >= rank) return this._emptyShapes();
 
+        let totalConcatDim = new ShapeExpr(0);
         let symbolic = false;
         let known = true;
-
-        // Collect concat dim values
-        const concatDims = [];
 
         for (const s of allShapes) {
             if (s.shape.length !== rank) return this._emptyShapes();
             if (s.symbolic) symbolic = true;
             if (!s.known) known = false;
 
-            // Check non-concat dimensions match
             for (let d = 0; d < rank; d++) {
-                if (d !== axis && String(s.shape[d]) !== String(baseShape[d])) {
+                if (d !== axis && !s.shape[d].equals(baseShape[d])) {
                     return this._emptyShapes();
                 }
             }
 
-            concatDims.push(s.shape[axis]);
-        }
-
-        // Compute total concat dimension
-        const allNumeric = concatDims.every((d) => typeof d === "number");
-        let totalConcatDim;
-
-        if (allNumeric) {
-            totalConcatDim = concatDims.reduce((a, b) => a + b, 0);
-        } else {
-            // Symbolic — build expression like "64 + 32" or "x + x"
-            totalConcatDim = concatDims.join(" + ");
-            symbolic = true;
+            totalConcatDim = totalConcatDim.add(s.shape[axis]);
         }
 
         const outputShape = [...baseShape];
