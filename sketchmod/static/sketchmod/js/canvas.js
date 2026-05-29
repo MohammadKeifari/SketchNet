@@ -5791,8 +5791,6 @@ class ConcatenateNode extends RectNode {
     }
 
     computeOutputShapes() {
-        if (this.inputs.length < 2) return this._emptyShapes();
-
         const allShapes = this._getAllInputShapeObjs();
         if (allShapes.length < 2) return this._emptyShapes();
 
@@ -5800,12 +5798,13 @@ class ConcatenateNode extends RectNode {
         const rank = baseShape.length;
         const axis = this.axis === -1 ? rank - 1 : this.axis;
 
-        // Validate axis is in range
         if (axis < 0 || axis >= rank) return this._emptyShapes();
 
-        let totalConcatDim = 0;
         let symbolic = false;
         let known = true;
+
+        // Collect concat dim values
+        const concatDims = [];
 
         for (const s of allShapes) {
             if (s.shape.length !== rank) return this._emptyShapes();
@@ -5814,12 +5813,24 @@ class ConcatenateNode extends RectNode {
 
             // Check non-concat dimensions match
             for (let d = 0; d < rank; d++) {
-                if (d !== axis && s.shape[d] !== baseShape[d]) {
+                if (d !== axis && String(s.shape[d]) !== String(baseShape[d])) {
                     return this._emptyShapes();
                 }
             }
 
-            totalConcatDim += s.shape[axis]; // ← FIXED: was s.shape[d]
+            concatDims.push(s.shape[axis]);
+        }
+
+        // Compute total concat dimension
+        const allNumeric = concatDims.every((d) => typeof d === "number");
+        let totalConcatDim;
+
+        if (allNumeric) {
+            totalConcatDim = concatDims.reduce((a, b) => a + b, 0);
+        } else {
+            // Symbolic — build expression like "64 + 32" or "x + x"
+            totalConcatDim = concatDims.join(" + ");
+            symbolic = true;
         }
 
         const outputShape = [...baseShape];
