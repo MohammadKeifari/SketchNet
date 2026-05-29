@@ -1798,48 +1798,6 @@ const SketchMod = {
     },
 
     // ========== SERVER ==========
-
-    _translate() {
-        const code = this._compileToPython();
-        const blob = new Blob([code], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "model.py";
-        a.click();
-        URL.revokeObjectURL(url);
-    },
-
-    _compileToPython() {
-        let code = [];
-        code.push("import torch");
-        code.push("import torch.nn as nn");
-        code.push("");
-        code.push("class SketchNetModel(nn.Module):");
-        code.push("    def __init__(self):");
-        code.push("        super().__init__()");
-        code.push("        self.layers = nn.Sequential(");
-
-        for (const node of this.nodes) {
-            if (node.type === "layer") {
-                code.push(
-                    `            nn.Linear(in_features, ${node.numNeurons}),`,
-                );
-                if (node.activation === "relu")
-                    code.push("            nn.ReLU(),");
-                if (node.activation === "sigmoid")
-                    code.push("            nn.Sigmoid(),");
-                if (node.activation === "tanh")
-                    code.push("            nn.Tanh(),");
-            }
-        }
-        code.push("        )");
-        code.push("");
-        code.push("    def forward(self, x):");
-        code.push("        return self.layers(x)");
-        return code.join("\n");
-    },
-
     _getGraphData() {
         return {
             nodes: this.nodes.map((n) => n.toJSON()),
