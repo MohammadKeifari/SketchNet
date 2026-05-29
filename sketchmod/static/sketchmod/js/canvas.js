@@ -5663,18 +5663,12 @@ class VisualizationNode extends RectNode {
     constructor(id, x, y) {
         super(id, x, y, "visualization", 120, 75);
 
-        // Coordinate inputs: min 1, max 3
         this.maxInputs = 4; // 3 coords + 1 color
-        this.minInputs = 1; // at least 1 coord
+        this.minInputs = 1;
         this.maxOutputs = 0;
         this.minOutputs = 0;
 
-        // Color input constraints
-        this.maxColorInputs = 1;
-        this.minColorInputs = 0;
-
-        // Color mode
-        this.colorMode = "none"; // "none", "discrete", "continuous"
+        this.colorMode = "none";
         this.colorPalette = [
             "#ef4444",
             "#4ade80",
@@ -5685,22 +5679,24 @@ class VisualizationNode extends RectNode {
         this.continuousMinColor = "#3b82f6";
         this.continuousMaxColor = "#ef4444";
 
-        // Start with 2 coordinate inputs
-        this.inputs.push(
-            new DataPort(this, "input", this.inputs.length, "coord"),
-        );
-        const p = new RolePort(this, "input", this.inputs.length, "color");
-        this.inputs.push(p);
+        // Start with 2 coord inputs
+        this.inputs.push(new DataPort(this, "input", 0, "coord"));
+        this.inputs.push(new DataPort(this, "input", 1, "coord"));
         this.updatePorts();
     }
 
-    // ---- Helpers ----
     _coordPorts() {
-        return this.inputs.filter((p) => !p.isColorPort);
+        return this.inputs.filter(
+            (p) => !(p instanceof RolePort) && p.subType !== "color",
+        );
     }
 
     _colorPort() {
-        return this.inputs.find((p) => p.isColorPort) || null;
+        return (
+            this.inputs.find(
+                (p) => p instanceof RolePort && p.role === "color",
+            ) || null
+        );
     }
 
     _hasColorInput() {
@@ -5716,14 +5712,13 @@ class VisualizationNode extends RectNode {
     }
 
     _canAddColorInput() {
-        return !this._hasColorInput();
+        return this._colorPort() === null;
     }
 
     _canRemoveColorInput() {
-        return this._hasColorInput();
+        return this._colorPort() !== null;
     }
 
-    // ---- Override BaseNode ----
     canAddInput(subType) {
         if (subType === "color") return this._canAddColorInput();
         return this._canAddCoordInput();
@@ -5776,7 +5771,6 @@ class VisualizationNode extends RectNode {
     updatePorts() {
         const hw = this.width / 2 + 8;
         const total = this.inputs.length;
-
         this.inputs.forEach((p, i) => {
             p.x = this.x - hw;
             p.y =
@@ -5799,14 +5793,6 @@ class VisualizationNode extends RectNode {
                   : "No Color";
         ctx.fillText(modeLabel, this.x, this.y + 10);
     }
-    validateConnections(incomingCount) {
-        const errors = [];
-        // At least 1 coord input, up to 4 total
-        if (incomingCount < 1) {
-            errors.push(`Visualization: requires at least 1 input connection`);
-        }
-        return errors;
-    }
 
     computeOutputShapes() {
         return [];
@@ -5819,22 +5805,7 @@ class VisualizationNode extends RectNode {
             colorPalette: this.colorPalette,
             continuousMinColor: this.continuousMinColor,
             continuousMaxColor: this.continuousMaxColor,
-            hasColorInput: this._hasColorInput(),
-            colorInputId: this._colorPort()?.id || null,
         };
-    }
-
-    fromJSON(d) {
-        super.fromJSON(d);
-        if (d.colorMode) this.colorMode = d.colorMode;
-        if (d.colorPalette) this.colorPalette = d.colorPalette;
-        if (d.continuousMinColor)
-            this.continuousMinColor = d.continuousMinColor;
-        if (d.continuousMaxColor)
-            this.continuousMaxColor = d.continuousMaxColor;
-        // Re-mark color port after ports are rebuilt by super.fromJSON
-        const cp = this.inputs.find((p) => p.subType === "color");
-        if (cp) cp.isColorPort = true;
     }
 
     getPropertiesHTML() {
