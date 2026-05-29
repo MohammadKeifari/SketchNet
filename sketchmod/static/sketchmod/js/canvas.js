@@ -2678,7 +2678,6 @@ const SketchMod = {
         }
 
         // All other Python exports go through API
-        const graphData = JSON.stringify(this._getGraphData());
         fetch("/sketchmod/api/export/", {
             method: "POST",
             headers: {
