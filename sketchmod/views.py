@@ -1,7 +1,9 @@
 import json
+import io
+import zipfile
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404
 from data_manager.models import Dataset
 from django.views.decorators.csrf import csrf_exempt
@@ -72,7 +74,6 @@ def export_api(request):
         graph_json = data.get("graph", "{}")
         export_format = data.get("format", "pytorch-py")
 
-        # Parse graph JSON
         if isinstance(graph_json, str):
             graph = json.loads(graph_json)
         else:
@@ -81,19 +82,16 @@ def export_api(request):
         generator = CodeGenerator(graph)
         code = generator.generate()
 
-        # Determine filename based on format
-        filenames = {
-            "pytorch-py": "model.py",
-            "pytorch-zip": "model.py",  # zip handled separately
-            "python-clipboard": "model.py",
-        }
-        filename = filenames.get(export_format, "model.py")
+        # ZIP export — bundle .py file with dataset
+        if export_format == "pytorch-zip":
+            return _export_zip(graph, code, request)
 
+        # Other formats — return JSON with code
         return JsonResponse(
             {
                 "success": True,
                 "code": code,
-                "filename": filename,
+                "filename": "model.py",
             }
         )
 
@@ -101,3 +99,100 @@ def export_api(request):
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+def _export_zip(graph, code, request):
+    """Create a zip file containing model.py and dataset files."""
+    zip_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Add the generated model.py
+        zf.writestr("model.py", code)
+
+        # Find InputDataNode and add dataset if available
+        input_node = next(
+            (n for n in graph.get("nodes", []) if n["type"] == "input-data"),
+            None,
+        )
+
+        if input_node and input_node.get("datasetId"):
+            dataset_id = input_node["datasetId"]
+            try:
+                from data_manager.models import Dataset
+                from django.conf import settings
+                import os
+
+                # Query by the custom dataset_id field
+                dataset = Dataset.objects.get(dataset_id=dataset_id)
+
+                if dataset.file and dataset.file.name:
+                    file_path = os.path.join(settings.MEDIA_ROOT, dataset.file.name)
+
+                    if os.path.exists(file_path):
+                        filename = os.path.basename(dataset.file.name)
+                        zf.write(file_path, f"data/{filename}")
+
+                        ext = (
+                            dataset.format
+                            if dataset.format
+                            else filename.rsplit(".", 1)[-1]
+                        )
+
+                        load_instructions = ""
+                        if ext == "csv":
+                            load_instructions = f"df = pd.read_csv('data/{filename}')"
+                        elif ext in ("xlsx", "xls"):
+                            load_instructions = f"df = pd.read_excel('data/{filename}')"
+                        elif ext == "json":
+                            load_instructions = f"df = pd.read_json('data/{filename}')"
+                        elif ext == "parquet":
+                            load_instructions = (
+                                f"df = pd.read_parquet('data/{filename}')"
+                            )
+                        else:
+                            load_instructions = f"# Load 'data/{filename}' appropriately for {ext} format"
+
+                        zf.writestr(
+                            "data/README.txt",
+                            f"Dataset: {dataset.name}\n"
+                            f"Format: {ext}\n"
+                            f"Uploaded: {dataset.created_at}\n"
+                            f"\nLoad with:\n"
+                            f"  import pandas as pd\n"
+                            f"  {load_instructions}\n",
+                        )
+                    else:
+                        zf.writestr(
+                            "data/README.txt",
+                            f"Dataset file not found at: {file_path}\n"
+                            f"Please download the dataset separately from SketchNet.\n",
+                        )
+                else:
+                    zf.writestr("data/README.txt", "Dataset has no file attached.\n")
+
+            except ImportError:
+                zf.writestr("data/README.txt", "Cannot import Dataset model.\n")
+            except Dataset.DoesNotExist:
+                zf.writestr(
+                    "data/README.txt", f"Dataset with ID '{dataset_id}' not found.\n"
+                )
+            except Exception as e:
+                zf.writestr("data/README.txt", f"Error accessing dataset: {str(e)}\n")
+        else:
+            # No dataset selected — add a placeholder
+            zf.writestr(
+                "data/README.txt",
+                "No dataset selected in the model.\n"
+                "Add your dataset to the 'data/' folder and update load_data() in model.py\n",
+            )
+
+        # Add requirements.txt
+        zf.writestr(
+            "requirements.txt",
+            "torch>=2.0.0\nnumpy>=1.24.0\nmatplotlib>=3.7.0\npandas>=2.0.0\n",
+        )
+
+    zip_buffer.seek(0)
+    response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")
+    response["Content-Disposition"] = 'attachment; filename="model.zip"'
+    return response
