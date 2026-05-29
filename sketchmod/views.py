@@ -196,3 +196,36 @@ def _export_zip(graph, code, request):
     response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")
     response["Content-Disposition"] = 'attachment; filename="model.zip"'
     return response
+
+
+@login_required
+@csrf_exempt
+def validate_api(request):
+    """API endpoint for graph validation."""
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "POST required"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        graph_json = data.get("graph", "{}")
+
+        if isinstance(graph_json, str):
+            graph = json.loads(graph_json)
+        else:
+            graph = graph_json
+
+        from .codegen.validator import GraphValidator
+        validator = GraphValidator(graph)
+        result = validator.validate()
+
+        return JsonResponse({
+            "success": True,
+            "errors": result["errors"],
+            "warnings": result["warnings"],
+            "isValid": len(result["errors"]) == 0,
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
