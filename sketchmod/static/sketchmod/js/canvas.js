@@ -3462,8 +3462,12 @@ class Port {
     }
 
     setShape(shapeArray, dtype, known, symbolic) {
+        if (!shapeArray) {
+            this.shape = null;
+            return;
+        }
         this.shape = {
-            shape: shapeArray || null,
+            shape: shapeArray.map((s) => ShapeExpr.from(s)),
             dtype: dtype || "float32",
             known: known || false,
             symbolic: symbolic || false,
@@ -3480,7 +3484,8 @@ class Port {
 
     shapeDisplay() {
         if (!this.hasShape()) return "Unknown";
-        const shapeStr = "(" + this.shape.shape.join(", ") + ")";
+        const shapeStr =
+            "(" + this.shape.shape.map((s) => s.toString()).join(", ") + ")";
         if (this.shape.symbolic) return shapeStr + " (abstract)";
         return shapeStr + (this.shape.known ? "" : " (estimated)");
     }
