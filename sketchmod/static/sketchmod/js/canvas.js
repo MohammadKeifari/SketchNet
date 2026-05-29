@@ -4930,14 +4930,49 @@ class NormalizeNode extends RectNode {
         if (d.method) this.method = d.method;
     }
     getPropertiesHTML() {
-        return (
-            this._getShapeSummaryHTML() +
-            `
-            <div class="prop-group"><label>Method</label><select id="prop-normalize-method" class="prop-select" onchange="SketchMod._updateNormalize(this)">
+        const hasParamIn = this.paramInputs.length > 0;
+        const hasParamOut = this.paramOutputs.length > 0;
+
+        let paramHTML = "";
+        if (hasParamIn || hasParamOut) {
+            paramHTML = `
+        <div class="prop-group">
+            <label>Param Ports</label>
+            <div class="port-legend">`;
+            if (hasParamIn) {
+                paramHTML += `
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <polygon points="5,1 9,5 5,9 1,5" fill="#fbbf24" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Param Input — receives fitted statistics
+                </span>`;
+            }
+            if (hasParamOut) {
+                paramHTML += `
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <polygon points="5,1 9,5 5,9 1,5" fill="#38bdf8" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Param Output — passes fitted statistics
+                </span>`;
+            }
+            paramHTML += `
+            </div>
+        </div>`;
+        }
+
+        return `
+        ${this._getShapeSummaryHTML()}
+        ${paramHTML}
+        <div class="prop-group">
+            <label>Method</label>
+            <select id="prop-normalize-method" class="prop-select" onchange="SketchMod._updateNormalize(this)">
                 <option value="standard" ${this.method === "standard" ? "selected" : ""}>Standard (Z-score)</option>
                 <option value="minmax" ${this.method === "minmax" ? "selected" : ""}>Min-Max (0 to 1)</option>
-            </select></div>`
-        );
+            </select>
+        </div>
+    `;
     }
 }
 // ========== CONV2D NODE ==========
@@ -6067,6 +6102,47 @@ class DataPort extends Port {
     get connectionLimit() {
         return 1;
     }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this._getColor();
+        ctx.fill();
+        ctx.strokeStyle = "#1a1d2e";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+
+    _getColor() {
+        if (this.subType === "loss") return "#ef4444";
+        if (this.subType === "labels") return "#f59e0b";
+        if (this.subType === "train") return "#f59e0b";
+        if (this.subType === "test") return "#4ade80";
+        if (this.subType === "features") return "#ff00b7";
+        if (this.subType === "main") return "#9e396f";
+        if (this.subType === "skip") return "#ffcc00";
+        if (this.subType === "coord") return "#60a5fa";
+        if (this.subType === "color") return "#ff00b7";
+        if (this.type === "input") return "#ef4444";
+        if (this.type === "output") return "#60a5fa";
+        return "#94a3b8";
+    }
+
+    _getPortKind() {
+        return "data";
+    }
+
+    toJSON() {
+        return {
+            id: this.id,
+            type: this.type,
+            index: this.index,
+            subType: this.subType,
+            shape: this.shape,
+            bias: this.bias,
+            portKind: "data",
+        };
+    }
 }
 
 // ========== MULTI PORT ==========
@@ -6081,25 +6157,43 @@ class MultiPort extends Port {
     }
 
     draw(ctx) {
-        super.draw(ctx);
-        // Draw connection count badge
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this._getColor();
+        ctx.fill();
+        ctx.strokeStyle = "#1a1d2e";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Connection count badge
         const count = this.getConnectionCount();
         if (count > 1) {
-            const badgeX = this.x + this.radius + 4;
-            const badgeY = this.y - this.radius - 2;
-            ctx.fillStyle = "var(--accent)";
-            ctx.font = "bold 8px Inter, sans-serif";
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 9px Inter, sans-serif";
             ctx.textAlign = "center";
-            ctx.fillText(count, badgeX, badgeY);
-            ctx.textAlign = "start";
+            ctx.textBaseline = "middle";
+            ctx.fillText(count, this.x, this.y);
         }
     }
 
     _getColor() {
-        // MultiPorts are slightly distinct
-        if (this.subType === "main") return "#9e396f";
-        if (this.subType === "skip") return "#ffcc00";
-        return "#a78bfa"; // Purple-ish default for multi-ports
+        return "#a78bfa"; // Purple for multi-ports
+    }
+
+    _getPortKind() {
+        return "multi";
+    }
+
+    toJSON() {
+        return {
+            id: this.id,
+            type: this.type,
+            index: this.index,
+            subType: this.subType,
+            shape: this.shape,
+            bias: this.bias,
+            portKind: "multi",
+        };
     }
 }
 
@@ -6114,7 +6208,7 @@ class RolePort extends Port {
         return 1;
     }
     draw(ctx) {
-        // Diamond shape
+        // Diamond shape — slightly smaller than ParamPort
         ctx.beginPath();
         ctx.moveTo(this.x, this.y - this.radius - 1);
         ctx.lineTo(this.x + this.radius + 1, this.y);
@@ -6126,6 +6220,9 @@ class RolePort extends Port {
         ctx.strokeStyle = "#1a1d2e";
         ctx.lineWidth = 1.5;
         ctx.stroke();
+    }
+    _getPortKind() {
+        return "role";
     }
 
     _getColor() {
@@ -6156,23 +6253,41 @@ class ParamPort extends Port {
     }
 
     draw(ctx) {
+        // Diamond shape — distinct from circles and RolePort diamonds
+        const size = this.radius + 0.5;
         ctx.beginPath();
-        ctx.moveTo(this.x, this.y - this.radius);
-        ctx.lineTo(this.x + this.radius, this.y);
-        ctx.lineTo(this.x, this.y + this.radius);
-        ctx.lineTo(this.x - this.radius, this.y);
+        ctx.moveTo(this.x, this.y - size);
+        ctx.lineTo(this.x + size, this.y);
+        ctx.lineTo(this.x, this.y + size);
+        ctx.lineTo(this.x - size, this.y);
         ctx.closePath();
         ctx.fillStyle = this._getColor();
         ctx.fill();
         ctx.strokeStyle = "#1a1d2e";
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 2;
         ctx.stroke();
     }
 
     _getColor() {
-        if (this.type === "input") return "#f59e0b";
-        if (this.type === "output") return "#fbbf24";
-        return "#f59e0b";
+        if (this.type === "input") return "#fbbf24"; // Bright amber
+        if (this.type === "output") return "#38bdf8"; // Sky blue
+        return "#fbbf24";
+    }
+
+    _getPortKind() {
+        return "param";
+    }
+
+    toJSON() {
+        return {
+            id: this.id,
+            type: this.type,
+            index: this.index,
+            subType: null,
+            shape: this.shape,
+            bias: this.bias,
+            portKind: "param",
+        };
     }
 }
 
