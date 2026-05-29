@@ -6086,6 +6086,20 @@ class RolePort extends Port {
     get connectionLimit() {
         return 1;
     }
+    draw(ctx) {
+        // Diamond shape
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius - 1);
+        ctx.lineTo(this.x + this.radius + 1, this.y);
+        ctx.lineTo(this.x, this.y + this.radius + 1);
+        ctx.lineTo(this.x - this.radius - 1, this.y);
+        ctx.closePath();
+        ctx.fillStyle = this._getColor();
+        ctx.fill();
+        ctx.strokeStyle = "#1a1d2e";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
 
     _getColor() {
         if (this.role === "loss") return "#53BF9D";
