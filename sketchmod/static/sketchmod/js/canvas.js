@@ -2815,10 +2815,14 @@ const SketchMod = {
     },
 
     // ========== VALIDATION ==========
+
+    // Validation state
     errorLinkIds: new Set(),
     errorNodeIds: new Set(),
+    errorPortIds: new Set(),
     warningLinkIds: new Set(),
     warningNodeIds: new Set(),
+    warningPortIds: new Set(),
 
     _runCheck() {
         const result = this._validateGraph();
@@ -2831,8 +2835,10 @@ const SketchMod = {
     _clearValidation() {
         this.errorLinkIds = new Set();
         this.errorNodeIds = new Set();
+        this.errorPortIds = new Set();
         this.warningLinkIds = new Set();
         this.warningNodeIds = new Set();
+        this.warningPortIds = new Set();
 
         const btn = document.getElementById("btnClearValidation");
         if (btn) btn.style.display = "none";
@@ -2911,21 +2917,56 @@ const SketchMod = {
         modal.style.display = "flex";
     },
     _validateGraph() {
+        // Ensure shapes are propagated before validation
         this._propagateShapes();
 
-        const errors = [];
-        const warnings = [];
+        const nodeErrors = []; // { type: "error", node: node, message: "..." }
+        const portErrors = []; // { type: "error", node: node, port: port, message: "..." }
+        const linkErrors = []; // { type: "error", link: link, message: "..." }
+        const nodeWarnings = [];
+        const portWarnings = [];
+        const linkWarnings = [];
 
-        // === 1. Check required ports are connected ===
+        // === 1. Per-node connection rules ===
         for (const node of this.nodes) {
-            // OptimizerNode: loss and labels ports must be connected
+            const incomingLinks = this.links.filter((l) => l.to.node === node);
+            const connectionCount = incomingLinks.length;
+
+            const msgs = node.validateConnections(connectionCount);
+            for (const msg of msgs) {
+                nodeErrors.push({ type: "error", node: node, message: msg });
+            }
+        }
+
+        // === 2. Required ports connected ===
+        for (const node of this.nodes) {
+            for (const port of node.inputs) {
+                const connected = this.links.some((l) => l.to === port);
+                if (!connected && port.connectionLimit > 0) {
+                    // Check if this port is required (node has minInputs that need it)
+                    const portIdx = node.inputs.indexOf(port);
+                    if (
+                        node.minInputs !== undefined &&
+                        portIdx < node.minInputs
+                    ) {
+                        portErrors.push({
+                            type: "error",
+                            node: node,
+                            port: port,
+                            message: `${node.type}: required input port #${portIdx + 1} is not connected`,
+                        });
+                    }
+                }
+            }
+
+            // OptimizerNode: specific port checks
             if (node instanceof OptimizerNode) {
                 for (const port of node.inputs) {
                     const connected = this.links.some((l) => l.to === port);
                     if (!connected) {
                         const label =
-                            port.subType === "loss" ? "Loss" : "Labels";
-                        errors.push({
+                            port instanceof RolePort ? port.role : port.subType;
+                        portErrors.push({
                             type: "error",
                             node: node,
                             port: port,
@@ -2933,149 +2974,104 @@ const SketchMod = {
                         });
                     }
                 }
-                // Check hyperparameters
+                // Hyperparameter checks
                 if (node.learningRate <= 0) {
-                    errors.push({
+                    nodeErrors.push({
                         type: "error",
                         node: node,
                         message: "Optimizer: learning rate must be positive",
                     });
                 }
                 if (node.epochs < 1) {
-                    errors.push({
+                    nodeErrors.push({
                         type: "error",
                         node: node,
                         message: "Optimizer: epochs must be at least 1",
                     });
                 }
                 if (node.batchSize < 1) {
-                    errors.push({
+                    nodeErrors.push({
                         type: "error",
                         node: node,
                         message: "Optimizer: batch size must be at least 1",
                     });
                 }
             }
+        }
 
-            // VisualizationNode: check color mode consistency
-            if (node instanceof VisualizationNode) {
-                if (
-                    (node.colorMode === "discrete" ||
-                        node.colorMode === "continuous") &&
-                    !node._hasColorInput()
-                ) {
-                    warnings.push({
+        // === 3. InputData connectivity ===
+        for (const node of this.nodes) {
+            if (node instanceof InputDataNode) {
+                const hasOutgoing = this.links.some(
+                    (l) => l.from.node === node,
+                );
+                if (!hasOutgoing) {
+                    nodeWarnings.push({
                         type: "warning",
                         node: node,
-                        message:
-                            "Visualization: color mode is set but no color input connected",
+                        message: "InputData: no outgoing connections",
                     });
                 }
             }
+        }
 
-            // Check nodes with minInputs that have unconnected ports
-            for (const port of node.inputs) {
-                const connected = this.links.some((l) => l.to === port);
-                if (!connected && node.inputs.length <= node.minInputs) {
-                    // Only error if it's a required port (below min)
-                    const idx = node.inputs.indexOf(port);
-                    if (idx < node.minInputs) {
-                        errors.push({
-                            type: "error",
-                            node: node,
-                            port: port,
-                            message: `${node.type}: required input port #${idx + 1} is not connected`,
-                        });
-                    }
+        // === 4. OutputNode connectivity ===
+        for (const node of this.nodes) {
+            if (node instanceof OutputNode) {
+                const inputConnected = this.links.some(
+                    (l) => l.to === node.inputs[0],
+                );
+                if (!inputConnected) {
+                    portErrors.push({
+                        type: "error",
+                        node: node,
+                        port: node.inputs[0],
+                        message:
+                            "Output: input port is not connected — no data reaches the output",
+                    });
                 }
             }
         }
 
-        // === 2. Check InputData connectivity ===
-        const inputNodes = this.nodes.filter((n) => n instanceof InputDataNode);
-        for (const node of inputNodes) {
-            const hasOutgoing = this.links.some((l) => l.from.node === node);
-            if (!hasOutgoing) {
-                warnings.push({
-                    type: "warning",
-                    node: node,
-                    message: "InputData: no outgoing connections",
-                });
-            }
-        }
-
-        // === 3. Check OutputNode connectivity ===
-        const outputNodes = this.nodes.filter((n) => n instanceof OutputNode);
-        for (const node of outputNodes) {
-            const inputConnected = this.links.some(
-                (l) => l.to === node.inputs[0],
-            );
-            if (!inputConnected) {
-                errors.push({
-                    type: "error",
-                    node: node,
-                    port: port,
-                    message:
-                        "Output: input port is not connected — no data reaches the output",
-                });
-            }
-        }
-
-        // === 4. Check dimension compatibility at merge points ===
+        // === 5. Dimension compatibility at merge points ===
         for (const node of this.nodes) {
             const incomingLinks = this.links.filter((l) => l.to.node === node);
-            if (incomingLinks.length >= 2) {
-                // All inputs must have the same shape
-                let commonShape = null;
-                let mismatch = false;
+            if (
+                incomingLinks.length >= 2 &&
+                (node instanceof AddNode || node instanceof ConcatenateNode)
+            ) {
+                const shapes = incomingLinks
+                    .map((l) => l.from.shape?.shape)
+                    .filter(Boolean);
 
-                for (const link of incomingLinks) {
-                    if (link.from.shape && link.from.shape.shape) {
-                        const shapeStr = JSON.stringify(link.from.shape.shape);
-                        if (commonShape === null) {
-                            commonShape = shapeStr;
-                        } else if (commonShape !== shapeStr) {
-                            mismatch = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (mismatch) {
-                    // For AddNode, this is always an error
-                    // For ConcatenateNode, check that non-concat axes match
+                if (shapes.length >= 2) {
                     if (node instanceof AddNode) {
-                        errors.push({
-                            type: "error",
-                            node: node,
-                            message:
-                                "Add: all inputs must have identical shapes",
-                        });
+                        const base = JSON.stringify(shapes[0]);
+                        for (let i = 1; i < shapes.length; i++) {
+                            if (JSON.stringify(shapes[i]) !== base) {
+                                linkErrors.push({
+                                    type: "error",
+                                    link: incomingLinks[i],
+                                    message:
+                                        "Add: all inputs must have identical shapes",
+                                });
+                            }
+                        }
                     } else if (node instanceof ConcatenateNode) {
-                        // Check non-concat dimensions match
-                        const axis = node.axis === -1 ? null : node.axis;
-                        const shapes = incomingLinks
-                            .map((l) => l.from.shape?.shape)
-                            .filter(Boolean);
-
-                        if (shapes.length >= 2) {
-                            const baseRank = shapes[0].length;
-                            const concatAxis =
-                                axis !== null ? axis : baseRank - 1;
-
-                            for (const shape of shapes) {
-                                for (let d = 0; d < shape.length; d++) {
-                                    if (
-                                        d !== concatAxis &&
-                                        shape[d] !== shapes[0][d]
-                                    ) {
-                                        errors.push({
-                                            type: "error",
-                                            node: node,
-                                            message: `Concat: dimension ${d} differs across inputs`,
-                                        });
-                                        break;
-                                    }
+                        const rank = shapes[0].length;
+                        const axis = node.axis === -1 ? rank - 1 : node.axis;
+                        for (let i = 1; i < shapes.length; i++) {
+                            for (let d = 0; d < rank; d++) {
+                                if (
+                                    d !== axis &&
+                                    shapes[i][d] !== shapes[0][d]
+                                ) {
+                                    linkErrors.push({
+                                        type: "error",
+                                        link: incomingLinks[i],
+                                        message: `Concat: dimension ${d} differs across inputs`,
+                                    });
+                                    break;
                                 }
                             }
                         }
@@ -3084,88 +3080,73 @@ const SketchMod = {
             }
         }
 
-        // === 5. Check for cycles (DFS) ===
+        // === 6. Cycles ===
         const visited = new Set();
         const inStack = new Set();
+        let hasCycle = false;
 
-        const hasCycle = (node) => {
-            if (inStack.has(node.id)) return true;
-            if (visited.has(node.id)) return false;
-
+        const dfs = (node) => {
+            if (inStack.has(node.id)) {
+                hasCycle = true;
+                return;
+            }
+            if (visited.has(node.id)) return;
             visited.add(node.id);
             inStack.add(node.id);
-
-            const outgoingLinks = this.links.filter(
-                (l) => l.from.node === node,
-            );
-            for (const link of outgoingLinks) {
-                if (hasCycle(link.to.node)) return true;
-            }
-
+            const outgoing = this.links.filter((l) => l.from.node === node);
+            for (const link of outgoing) dfs(link.to.node);
             inStack.delete(node.id);
-            return false;
         };
 
         for (const node of this.nodes) {
-            if (hasCycle(node)) {
-                errors.push({
-                    type: "error",
-                    message:
-                        "Cycle detected in graph — PyTorch cannot handle circular dependencies",
-                });
-                break;
-            }
+            if (!visited.has(node.id)) dfs(node);
+            if (hasCycle) break;
         }
 
-        // === 6. Check graph connectivity (path from Input to Output) ===
-        const inputNodeIds = inputNodes.map((n) => n.id);
-        const outputNodeIds = outputNodes.map((n) => n.id);
+        if (hasCycle) {
+            nodeErrors.push({
+                type: "error",
+                message: "Cycle detected in graph",
+            });
+        }
 
-        if (inputNodeIds.length > 0 && outputNodeIds.length > 0) {
-            const reachableFromInput = new Set();
-            const queue = [...inputNodeIds];
+        // === 7. Graph connectivity (Input → Output) ===
+        const inputNodes = this.nodes.filter((n) => n instanceof InputDataNode);
+        const outputNodes = this.nodes.filter((n) => n instanceof OutputNode);
 
+        if (inputNodes.length > 0 && outputNodes.length > 0) {
+            const reachable = new Set();
+            const queue = inputNodes.map((n) => n.id);
             while (queue.length > 0) {
-                const currentId = queue.shift();
-                if (reachableFromInput.has(currentId)) continue;
-                reachableFromInput.add(currentId);
-
-                const node = this.nodes.find((n) => n.id === currentId);
+                const id = queue.shift();
+                if (reachable.has(id)) continue;
+                reachable.add(id);
+                const node = this.nodes.find((n) => n.id === id);
                 if (!node) continue;
-
                 const outgoing = this.links.filter((l) => l.from.node === node);
-                for (const link of outgoing) {
-                    queue.push(link.to.node.id);
-                }
+                for (const link of outgoing) queue.push(link.to.node.id);
             }
-
-            const anyOutputReachable = outputNodeIds.some((id) =>
-                reachableFromInput.has(id),
-            );
-            if (!anyOutputReachable) {
-                errors.push({
+            if (!outputNodes.some((n) => reachable.has(n.id))) {
+                nodeErrors.push({
                     type: "error",
-                    message:
-                        "No path from InputData to OutputNode — model output is unreachable",
+                    message: "No path from InputData to OutputNode",
                 });
             }
-        } else if (outputNodeIds.length === 0) {
-            errors.push({
+        } else if (outputNodes.length === 0) {
+            nodeErrors.push({
                 type: "error",
                 message: "No OutputNode in the graph",
             });
         }
 
-        // === 7. Check for orphan nodes ===
+        // === 8. Orphan nodes ===
         for (const node of this.nodes) {
             if (node instanceof InputDataNode || node instanceof OutputNode)
                 continue;
-
             const hasIncoming = this.links.some((l) => l.to.node === node);
             const hasOutgoing = this.links.some((l) => l.from.node === node);
-
             if (!hasIncoming && !hasOutgoing) {
-                warnings.push({
+                nodeWarnings.push({
                     type: "warning",
                     node: node,
                     message: `${node.type}: node is not connected to anything`,
@@ -3173,111 +3154,96 @@ const SketchMod = {
             }
         }
 
-        // === 8. Node-specific checks ===
+        // === 9. Node-specific config checks ===
         for (const node of this.nodes) {
             if (node instanceof DropoutNode && node.rate > 0.8) {
-                warnings.push({
+                nodeWarnings.push({
                     type: "warning",
                     node: node,
                     message: `Dropout: rate is very high (${Math.round(node.rate * 100)}%)`,
                 });
             }
-            if (node instanceof TrainTestSplitNode) {
-                if (node.trainRatio <= 0 || node.trainRatio >= 1) {
-                    errors.push({
-                        type: "error",
-                        node: node,
-                        message:
-                            "TrainTestSplit: train ratio must be between 0 and 1",
-                    });
-                }
+            if (
+                node instanceof TrainTestSplitNode &&
+                (node.trainRatio <= 0 || node.trainRatio >= 1)
+            ) {
+                nodeErrors.push({
+                    type: "error",
+                    node: node,
+                    message:
+                        "TrainTestSplit: train ratio must be between 0 and 1",
+                });
             }
             if (node instanceof OneHotEncodeNode && node.numClasses < 2) {
-                errors.push({
+                nodeErrors.push({
                     type: "error",
                     node: node,
                     message:
                         "OneHotEncode: number of classes must be at least 2",
                 });
             }
+            if (node instanceof VisualizationNode) {
+                if (
+                    (node.colorMode === "discrete" ||
+                        node.colorMode === "continuous") &&
+                    !node._hasColorInput()
+                ) {
+                    nodeWarnings.push({
+                        type: "warning",
+                        node: node,
+                        message:
+                            "Visualization: color mode is set but no color input connected",
+                    });
+                }
+            }
         }
 
-        // === 9. Check for OptimizerNode existence ===
+        // === 10. OptimizerNode existence ===
         const hasOptimizer = this.nodes.some((n) => n instanceof OptimizerNode);
-        if (!hasOptimizer && this.nodes.some((n) => n instanceof OutputNode)) {
-            warnings.push({
+        if (!hasOptimizer && outputNodes.length > 0) {
+            nodeWarnings.push({
                 type: "warning",
                 message:
                     "No OptimizerNode found — model can be exported but cannot be trained",
             });
         }
 
-        // === 10. Check per-node connection rules ===
-        for (const node of this.nodes) {
-            const incomingLinks = this.links.filter((l) => l.to.node === node);
-            const connectionCount = incomingLinks.length;
-
-            const nodeErrors = node.validateConnections(connectionCount);
-            for (const msg of nodeErrors) {
-                errors.push({
-                    type: "error",
-                    node: node,
-                    message: msg,
-                });
-            }
-        }
-
-        // Store for visual highlighting
+        // === Populate Sets for visual highlighting ===
         this.errorLinkIds = new Set();
         this.errorNodeIds = new Set();
+        this.errorPortIds = new Set();
         this.warningLinkIds = new Set();
         this.warningNodeIds = new Set();
+        this.warningPortIds = new Set();
 
-        for (const e of errors) {
+        for (const e of nodeErrors) {
             if (e.node) this.errorNodeIds.add(e.node.id);
-
-            if (e.port) {
-                // Find the specific link connected to this port
-                const link = this.links.find(
-                    (l) => l.from === e.port || l.to === e.port,
-                );
-                if (link) {
-                    this.errorLinkIds.add(link.from.id + "→" + link.to.id);
-                }
-            } else if (e.node) {
-                // Node-level error with no specific port — highlight all links to/from this node
-                const connectedLinks = this.links.filter(
-                    (l) => l.from.node === e.node || l.to.node === e.node,
-                );
-                for (const link of connectedLinks) {
-                    this.errorLinkIds.add(link.from.id + "→" + link.to.id);
-                }
-            }
+        }
+        for (const e of portErrors) {
+            if (e.node) this.errorNodeIds.add(e.node.id);
+            if (e.port) this.errorPortIds.add(e.port.id);
+        }
+        for (const e of linkErrors) {
+            if (e.link)
+                this.errorLinkIds.add(e.link.from.id + "→" + e.link.to.id);
         }
 
-        for (const w of warnings) {
+        for (const w of nodeWarnings) {
             if (w.node) this.warningNodeIds.add(w.node.id);
-
-            if (w.port) {
-                const link = this.links.find(
-                    (l) => l.from === w.port || l.to === w.port,
-                );
-                if (link) {
-                    this.warningLinkIds.add(link.from.id + "→" + link.to.id);
-                }
-            } else if (w.node) {
-                const connectedLinks = this.links.filter(
-                    (l) => l.from.node === w.node || l.to.node === w.node,
-                );
-                for (const link of connectedLinks) {
-                    this.warningLinkIds.add(link.from.id + "→" + link.to.id);
-                }
-            }
         }
-        console.log("errorLinkIds:", [...this.errorLinkIds]);
-        console.log("errorNodeIds:", [...this.errorNodeIds]);
-        console.log("warningLinkIds:", [...this.warningLinkIds]);
-        console.log("warningNodeIds:", [...this.warningNodeIds]);
+        for (const w of portWarnings) {
+            if (w.node) this.warningNodeIds.add(w.node.id);
+            if (w.port) this.warningPortIds.add(w.port.id);
+        }
+        for (const w of linkWarnings) {
+            if (w.link)
+                this.warningLinkIds.add(w.link.from.id + "→" + w.link.to.id);
+        }
+
+        // Combine all errors/warnings for display
+        const errors = [...nodeErrors, ...portErrors, ...linkErrors];
+        const warnings = [...nodeWarnings, ...portWarnings, ...linkWarnings];
+
         return { errors, warnings, isValid: errors.length === 0 };
     },
 
@@ -3777,6 +3743,25 @@ class RectNode extends BaseNode {
         const x = this.x - this.width / 2;
         const y = this.y - this.height / 2;
 
+        // Error outline
+        if (SketchMod.errorNodeIds.has(this.id)) {
+            ctx.beginPath();
+            ctx.roundRect(x - 3, y - 3, this.width + 6, this.height + 6, 10);
+            ctx.fillStyle = "rgba(239, 68, 68, 0.15)";
+            ctx.fill();
+            ctx.strokeStyle = "#ef4444";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else if (SketchMod.warningNodeIds.has(this.id)) {
+            ctx.beginPath();
+            ctx.roundRect(x - 3, y - 3, this.width + 6, this.height + 6, 10);
+            ctx.fillStyle = "rgba(245, 158, 11, 0.1)";
+            ctx.fill();
+            ctx.strokeStyle = "#f59e0b";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
         if (selected) {
             ctx.beginPath();
             ctx.roundRect(x - 1, y - 1, this.width + 2, this.height + 2, 8);
@@ -3875,12 +3860,33 @@ class CircleNode extends BaseNode {
 
     draw(ctx, selected) {
         const color = SketchMod._getNodeColor();
+
+        // Error outline
+        if (SketchMod.errorNodeIds.has(this.id)) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 4, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(239, 68, 68, 0.15)";
+            ctx.fill();
+            ctx.strokeStyle = "#ef4444";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else if (SketchMod.warningNodeIds.has(this.id)) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 4, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(245, 158, 11, 0.1)";
+            ctx.fill();
+            ctx.strokeStyle = "#f59e0b";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
         if (selected) {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
             ctx.fillStyle = "var(--accent-glow)";
             ctx.fill();
         }
+
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = color.fill;
@@ -5987,6 +5993,28 @@ class Port {
     }
 
     drawHighlight(ctx) {
+        // Check for error/warning first
+        if (SketchMod.errorPortIds.has(this.id)) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(239, 68, 68, 0.2)";
+            ctx.fill();
+            ctx.strokeStyle = "#ef4444";
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            return;
+        }
+        if (SketchMod.warningPortIds.has(this.id)) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(245, 158, 11, 0.2)";
+            ctx.fill();
+            ctx.strokeStyle = "#f59e0b";
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            return;
+        }
+        // Default selection highlight
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
@@ -5995,7 +6023,6 @@ class Port {
         ctx.lineWidth = 2.5;
         ctx.stroke();
     }
-
     _getColor() {
         if (this.subType === "loss") return "#ef4444";
         if (this.subType === "labels") return "#f59e0b";
