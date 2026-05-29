@@ -858,6 +858,14 @@ const SketchMod = {
     },
 
     _onKeyDown(e) {
+        // Block all canvas keyboard shortcuts when a modal is open
+        if (
+            document.getElementById("saveModal")?.style.display === "flex" ||
+            document.getElementById("validationModal")?.style.display === "flex"
+        ) {
+            return;
+        }
+
         if (e.code === "Space") {
             this.spacePressed = true;
             e.preventDefault();
