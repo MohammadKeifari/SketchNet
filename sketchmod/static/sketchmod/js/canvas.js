@@ -518,19 +518,21 @@ const SketchMod = {
 
                     if (outPort.shape && outPort.shape.shape) {
                         if (targetPort instanceof MultiPort) {
-                            // Collect all incoming shapes
                             if (!targetPort._incomingShapes)
                                 targetPort._incomingShapes = [];
                             targetPort._incomingShapes.push({
-                                shape: [...outPort.shape.shape],
+                                shape: outPort.shape.shape.map(
+                                    (s) => new ShapeExpr(s),
+                                ),
                                 dtype: outPort.shape.dtype,
                                 known: outPort.shape.known,
                                 symbolic: outPort.shape.symbolic,
                             });
-                            // Set the port's primary shape to the first one (for display)
                             if (targetPort._incomingShapes.length === 1) {
                                 targetPort.setShape(
-                                    [...outPort.shape.shape],
+                                    outPort.shape.shape.map(
+                                        (s) => new ShapeExpr(s),
+                                    ),
                                     outPort.shape.dtype,
                                     outPort.shape.known,
                                     outPort.shape.symbolic,
@@ -538,7 +540,9 @@ const SketchMod = {
                             }
                         } else {
                             targetPort.setShape(
-                                [...outPort.shape.shape],
+                                outPort.shape.shape.map(
+                                    (s) => new ShapeExpr(s),
+                                ),
                                 outPort.shape.dtype,
                                 outPort.shape.known,
                                 outPort.shape.symbolic,
