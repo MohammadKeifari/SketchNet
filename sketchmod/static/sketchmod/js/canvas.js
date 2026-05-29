@@ -2231,8 +2231,9 @@ const SketchMod = {
             "epochs",
             "batchSize",
             "gradientClip",
+            "earlyStoppingPatience",
         ];
-        const boolProps = ["shuffle", "nesterov"];
+        const boolProps = ["shuffle", "nesterov", "earlyStopping"];
 
         if (numericProps.includes(prop)) {
             node[prop] =
@@ -2244,8 +2245,7 @@ const SketchMod = {
             node[prop] = value;
         }
 
-        // If optimizer type changed, refresh properties to show/hide specific fields
-        if (prop === "optimizerType") {
+        if (prop === "earlyStopping" || prop === "optimizerType") {
             this._showProperties(node);
         }
 
@@ -2994,6 +2994,14 @@ const SketchMod = {
                         type: "error",
                         node: node,
                         message: "Optimizer: batch size must be at least 1",
+                    });
+                }
+                if (node.earlyStopping && node.earlyStoppingPatience < 1) {
+                    nodeErrors.push({
+                        type: "error",
+                        node: node,
+                        message:
+                            "Optimizer: early stopping patience must be at least 1",
                     });
                 }
             }
@@ -5778,6 +5786,8 @@ class OptimizerNode extends RectNode {
         this.batchSize = 32;
         this.shuffle = true;
         this.gradientClip = null; // null = no clipping
+        this.earlyStopping = false;
+        this.earlyStoppingPatience = 10;
 
         // Ports: 2 inputs, 0 outputs
         this.maxInputs = 2;
@@ -5849,6 +5859,8 @@ class OptimizerNode extends RectNode {
             batchSize: this.batchSize,
             shuffle: this.shuffle,
             gradientClip: this.gradientClip,
+            earlyStopping: this.earlyStopping,
+            earlyStoppingPatience: this.earlyStoppingPatience,
         };
     }
 
@@ -5867,6 +5879,9 @@ class OptimizerNode extends RectNode {
         if (d.batchSize) this.batchSize = d.batchSize;
         if (d.shuffle !== undefined) this.shuffle = d.shuffle;
         if (d.gradientClip !== undefined) this.gradientClip = d.gradientClip;
+        if (d.earlyStopping !== undefined) this.earlyStopping = d.earlyStopping;
+        if (d.earlyStoppingPatience !== undefined)
+            this.earlyStoppingPatience = d.earlyStoppingPatience;
     }
 
     getPropertiesHTML() {
@@ -5953,12 +5968,7 @@ class OptimizerNode extends RectNode {
                 ${lossOptionsHTML}
             </select>
         </div>
-            <div class="prop-group">
-                <label>Loss Function</label>
-                <select id="prop-loss-type" class="prop-select" onchange="SketchMod._updateOptimizerProp('lossType', this.value)">
-                    ${lossOptionsHTML}
-                </select>
-            </div>
+            
             <div class="prop-group">
                 <label>Optimizer</label>
                 <select id="prop-optimizer-type" class="prop-select" onchange="SketchMod._updateOptimizerProp('optimizerType', this.value)">
@@ -5994,6 +6004,28 @@ class OptimizerNode extends RectNode {
                        placeholder="None"
                        onchange="SketchMod._updateOptimizerProp('gradientClip', this.value || null)">
             </div>
+            <div class="prop-group">
+                <label>
+                    <input type="checkbox" id="prop-early-stopping" 
+                        ${this.earlyStopping ? "checked" : ""}
+                        onchange="SketchMod._updateOptimizerProp('earlyStopping', this.checked)">
+                    Early Stopping
+                </label>
+            </div>
+            ${
+                this.earlyStopping
+                    ? `
+            <div class="prop-group">
+                <label>Patience (epochs)</label>
+                <input type="number" id="prop-patience" class="prop-input" 
+                    value="${this.earlyStoppingPatience}" min="1" max="100" step="1"
+                    onchange="SketchMod._updateOptimizerProp('earlyStoppingPatience', this.value)">
+                <p class="prop-hint">Stop training if validation loss doesn't improve for this many epochs</p>
+            </div>
+            `
+                    : ""
+            }
+            
         `;
     }
 }
