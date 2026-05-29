@@ -3561,7 +3561,14 @@ class Port {
             type: this.type,
             index: this.index,
             subType: this.subType,
-            shape: this.shape,
+            shape: this.shape
+                ? {
+                      shape: this.shape.shape.map((s) => s.toString()),
+                      dtype: this.shape.dtype,
+                      known: this.shape.known,
+                      symbolic: this.shape.symbolic,
+                  }
+                : null,
             bias: this.bias,
             portKind: this._getPortKind(),
         };
