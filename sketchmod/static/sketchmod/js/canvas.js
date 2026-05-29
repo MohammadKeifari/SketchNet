@@ -587,6 +587,13 @@ const SketchMod = {
     },
     // ========== MOUSE ==========
     _onMouseDown(e) {
+        // Block canvas interactions when a modal is open
+        if (
+            document.getElementById("saveModal")?.style.display === "flex" ||
+            document.getElementById("validationModal")?.style.display === "flex"
+        ) {
+            return;
+        }
         const mx = e.offsetX;
         const my = e.offsetY;
 
