@@ -5995,7 +5995,7 @@ class ConcatenateNode extends RectNode {
 
         if (axis < 0 || axis >= rank) return this._emptyShapes();
 
-        let totalConcatDim = new ShapeExpr(0);
+        let totalConcatDim = null; // ← Start with null, not 0
         let symbolic = false;
         let known = true;
 
@@ -6010,7 +6010,12 @@ class ConcatenateNode extends RectNode {
                 }
             }
 
-            totalConcatDim = totalConcatDim.add(s.shape[axis]);
+            // First shape sets the initial value, rest are added
+            if (totalConcatDim === null) {
+                totalConcatDim = new ShapeExpr(s.shape[axis]);
+            } else {
+                totalConcatDim = totalConcatDim.add(s.shape[axis]);
+            }
         }
 
         const outputShape = [...baseShape];
