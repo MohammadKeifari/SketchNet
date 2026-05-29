@@ -2623,22 +2623,46 @@ const SketchMod = {
     },
 
     _handleExport(type) {
-        // Validate first
-        const result = this._validateGraph();
-        this._showValidationModal(result);
-        this._render();
-        if (!result.isValid) {
-            this._showToast("Fix errors before exporting");
-            return;
-        }
+        const graphData = JSON.stringify(this._getGraphData());
 
-        // Image exports stay in JS
+        // Validate via API first
+        fetch("/sketchmod/api/validate/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": this._getCsrfToken(),
+            },
+            body: JSON.stringify({ graph: graphData }),
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.success) {
+                    this._applyValidationResults(data);
+                    this._render();
+
+                    if (!data.isValid) {
+                        this._showValidationModal({
+                            errors: data.errors,
+                            warnings: data.warnings,
+                            isValid: false,
+                        });
+                        this._showToast("Fix errors before exporting");
+                        return;
+                    }
+
+                    // Proceed with export...
+                    this._doExport(type, graphData);
+                }
+            });
+    },
+    _doExport(type, graphData) {
+        // Image exports
         if (type === "image-png" || type === "image-jpeg") {
             this._exportImage(type.replace("image-", ""));
             return;
         }
 
-        // JSON clipboard stays in JS
+        // JSON clipboard
         if (type === "json-clipboard") {
             const data = JSON.stringify(this._getGraphData(), null, 2);
             navigator.clipboard.writeText(data).then(() => {
@@ -2693,7 +2717,6 @@ const SketchMod = {
                 this._showToast("Export failed. Check console.");
             });
     },
-
     _exportPyTorchZip() {
         const graphData = JSON.stringify(this._getGraphData());
 
