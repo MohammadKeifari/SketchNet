@@ -30,6 +30,11 @@ class VizGenerator:
             lines.append(f"    # Color palette: {palette}")
         elif color_mode == "continuous":
             lines.append(f"    # Color range: {min_color} → {max_color}")
+            lines.append("    # Uncomment to save with custom colors:")
+            lines.append(
+                f"    # plt.savefig('training_curves.png', dpi=150, bbox_inches='tight',"
+            )
+            lines.append(f"    #             facecolor='{min_color}')")
 
         lines.append("    plt.show()")
         lines.append("    # Uncomment to save:")
