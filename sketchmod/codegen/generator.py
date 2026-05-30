@@ -33,9 +33,27 @@ class CodeGenerator:
         lines.append("")
 
         # Model class
+        ordered = self.topological_order()
         model_gen = ModelGenerator(self)
-        lines.extend(model_gen.generate())
-        lines.append("")
+        model_nodes = [
+            n
+            for n in ordered
+            if n["type"]
+            in {
+                "layer",
+                "neuron",
+                "conv2d",
+                "flatten",
+                "dropout",
+                "batchnorm",
+                "add",
+                "concat",
+            }
+        ]
+        model_code = model_gen.generate(model_nodes)
+        if model_code:
+            lines.extend(model_code)
+            lines.append("")
 
         # Data loading
         data_gen = DataGenerator(self)
@@ -69,23 +87,24 @@ class CodeGenerator:
         return [l for l in self.links if self._port_source_node(l["from"]) == node_id]
 
     def _port_source_node(self, port_id):
-        port = self._port_map.get(port_id)
-        if not port:
+        """Extract node ID from a port ID like 'nodeId_output_0'."""
+        if not port_id:
             return None
-        # Port IDs are like "nodeId_input_0" or "nodeId_output_0"
+        # Split from right: 'n1_output_0' -> ['n1', 'output', '0']
+        # For param ports: 'n1_input_0_param_0' -> more parts
         parts = port_id.rsplit("_", 2)
         if len(parts) >= 3:
-            return "_".join(parts[:-2]) if len(parts) > 3 else parts[0]
+            return parts[0]
         return None
 
     def _port_target_node(self, port_id):
-        return self._port_source_node(port_id)  # Same logic
+        """Same logic for target ports."""
+        return self._port_source_node(port_id)
 
     def find_nodes_by_type(self, node_type):
         return [n for n in self.nodes if n["type"] == node_type]
 
     def topological_order(self):
-        """Return nodes in topological order from input to output."""
         input_nodes = self.find_nodes_by_type("input-data")
         if not input_nodes:
             return self.nodes
@@ -97,7 +116,8 @@ class CodeGenerator:
             if node_id in visited:
                 return
             visited.add(node_id)
-            for link in self.get_links_from(node_id):
+            links = self.get_links_from(node_id)
+            for link in links:
                 target = self._port_target_node(link["to"])
                 if target:
                     dfs(target)
@@ -106,6 +126,32 @@ class CodeGenerator:
         for n in input_nodes:
             dfs(n["id"])
 
-        # Reverse so inputs come first
         result.reverse()
         return [self._node_map[nid] for nid in result if nid in self._node_map]
+
+    def _find_model_boundary(self, ordered_nodes):
+        """Split ordered nodes into preprocessing and model subgraphs."""
+        model_types = {
+            "layer",
+            "neuron",
+            "conv2d",
+            "flatten",
+            "dropout",
+            "batchnorm",
+            "add",
+            "concat",
+        }
+
+        first_model_idx = -1
+        for i, node in enumerate(ordered_nodes):
+            if node["type"] in model_types:
+                first_model_idx = i
+                break
+
+        if first_model_idx == -1:
+            return {"preprocessing": ordered_nodes, "model": []}
+
+        return {
+            "preprocessing": ordered_nodes[:first_model_idx],
+            "model": ordered_nodes[first_model_idx:],
+        }

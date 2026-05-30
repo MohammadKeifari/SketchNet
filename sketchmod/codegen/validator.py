@@ -38,9 +38,12 @@ class GraphValidator:
         return self._port_map.get(port_id)
 
     def _port_node_id(self, port_id):
+        """Extract node ID from a port ID."""
+        if not port_id:
+            return None
         parts = port_id.rsplit("_", 2)
         if len(parts) >= 3:
-            return "_".join(parts[:-2]) if len(parts) > 3 else parts[0]
+            return parts[0]
         return None
 
     def _links_to(self, node_id):

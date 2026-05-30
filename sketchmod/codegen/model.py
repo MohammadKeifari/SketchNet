@@ -6,9 +6,13 @@ class ModelGenerator:
         self.nodes = generator.nodes
         self.links = generator.links
 
-    def generate(self):
-        ordered = self.g.topological_order()
-        model_nodes = [n for n in ordered if n["type"] in self._model_types()]
+    def generate(self, model_nodes=None):
+        if model_nodes is None:
+            ordered = self.g.topological_order()
+            model_nodes = [n for n in ordered if n["type"] in self._model_types()]
+        if not model_nodes:
+            return []  # No model nodes, return empty
+
         is_seq = self._is_sequential(model_nodes)
 
         lines = []
@@ -19,13 +23,13 @@ class ModelGenerator:
         if is_seq:
             lines.append("        self.model = nn.Sequential(")
             for node in model_nodes:
-                layer = self._layer_def(node)
+                layer = self._layer_init(node)  # No assignment
                 if layer:
                     lines.append(f"            {layer},")
             lines.append("        )")
         else:
             for node in model_nodes:
-                layer = self._layer_def(node)
+                layer = self._layer_def(node)  # With assignment
                 if layer:
                     lines.append(f"        {layer}")
 
@@ -39,7 +43,16 @@ class ModelGenerator:
         return lines
 
     def _model_types(self):
-        return {"layer", "neuron", "conv2d", "flatten", "dropout", "batchnorm"}
+        return {
+            "layer",
+            "neuron",
+            "conv2d",
+            "flatten",
+            "dropout",
+            "batchnorm",
+            "add",
+            "concat",
+        }
 
     def _is_sequential(self, model_nodes):
         """Check if model graph is a simple chain."""
@@ -82,6 +95,29 @@ class ModelGenerator:
             return f"self.dropout_{sid} = nn.Dropout({rate})"
         elif t == "batchnorm":
             return f"self.bn_{sid} = nn.BatchNorm1d(num_features)"
+        return None
+
+    def _layer_init(self, node):
+        """Return just the layer constructor for Sequential."""
+        sid = self._safe_id(node["id"])
+        t = node["type"]
+
+        if t == "layer":
+            neurons = node.get("numNeurons", 64)
+            return f"nn.Linear(in_features, {neurons})"
+        elif t == "conv2d":
+            filters = node.get("filters", 32)
+            kernel = node.get("kernelSize", 3)
+            stride = node.get("stride", 1)
+            padding = node.get("padding", 0)
+            return f"nn.Conv2d(in_channels, {filters}, kernel_size={kernel}, stride={stride}, padding={padding})"
+        elif t == "flatten":
+            return "nn.Flatten()"
+        elif t == "dropout":
+            rate = node.get("rate", 0.5)
+            return f"nn.Dropout({rate})"
+        elif t == "batchnorm":
+            return "nn.BatchNorm1d(num_features)"
         return None
 
     def _custom_forward(self, model_nodes):
