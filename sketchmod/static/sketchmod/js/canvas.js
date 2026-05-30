@@ -1480,59 +1480,68 @@ const SketchMod = {
         const shapeText = port.shapeDisplay();
 
         content.innerHTML = `
-        <div class="prop-group">
-            <label>Port</label>
-            <p class="prop-hint">
-                ${port.type === "input" ? "Input" : "Output"} #${port.index + 1} — ${port.node.type}
-                <br><small>${kindLabel}</small>
-            </p>
-        </div>
-        <div class="prop-group">
-            <label>Shape</label>
-            <p class="prop-hint" style="font-family: monospace; color: ${shapeColor}; font-size: 0.85rem;">
-                ${shapeText}
-            </p>
-        </div>
-        ${
-            port.type === "input"
-                ? `
-        <div class="prop-group">
-            <label>Bias</label>
-            <input type="number" id="prop-port-bias" class="prop-input" 
-                   value="${port.bias || 0}" step="0.01"
-                   onchange="SketchMod._updatePortBias(this)">
-        </div>
-        `
-                : ""
-        }
-        ${
-            port.type === "output" && !port.role
-                ? `
-        <div class="prop-group">
-            <label>Output Type</label>
-            <select id="prop-port-subtype" class="prop-select" >
-                ${subTypeOptions
-                    .map(
-                        (o) => `
-                    <option value="${o.value}" ${port.subType === o.value ? "selected" : ""}>${o.label}</option>
-                `,
-                    )
-                    .join("")}
-            </select>
-        </div>
-        `
-                : ""
-        }
-        <div class="prop-group">
-            <label>Connections</label>
-            <p class="prop-hint">${connectedLinks.length} link${connectedLinks.length !== 1 ? "s" : ""}</p>
-        </div>
-        <div class="prop-group">
-            <button class="prop-btn prop-btn-danger" onclick="SketchMod._disconnectPort(SketchMod.selectedPorts[0])">
-                Disconnect All
-            </button>
-        </div>
-    `;
+    <div class="prop-group">
+        <label>Port</label>
+        <p class="prop-hint">
+            ${port.type === "input" ? "Input" : "Output"} #${port.index + 1} — ${port.node.type}
+            <br><small>${kindLabel}</small>
+        </p>
+    </div>
+    <div class="prop-group">
+        <label>Shape</label>
+        <p class="prop-hint" style="font-family: monospace; color: ${shapeColor}; font-size: 0.85rem;">
+            ${shapeText}
+        </p>
+    </div>
+    <div class="prop-group">
+        <label>Activation</label>
+        <select id="prop-activation-mode" class="prop-select" 
+                onchange="SketchMod._updatePortActivation(event.target.value)">
+            <option value="every_batch" ${port.activationMode === "every_batch" ? "selected" : ""}>Every Batch</option>
+            <option value="last_batch" ${port.activationMode === "last_batch" ? "selected" : ""}>Final Evaluation Only</option>
+            <option value="both" ${port.activationMode === "both" ? "selected" : ""}>Both</option>
+        </select>
+    </div>
+    ${
+        port.type === "input"
+            ? `
+    <div class="prop-group">
+        <label>Bias</label>
+        <input type="number" id="prop-port-bias" class="prop-input" 
+               value="${port.bias || 0}" step="0.01"
+               onchange="SketchMod._updatePortBias(this)">
+    </div>
+    `
+            : ""
+    }
+    ${
+        port.type === "output" && !port.role
+            ? `
+    <div class="prop-group">
+        <label>Output Type</label>
+        <select id="prop-port-subtype" class="prop-select" >
+            ${subTypeOptions
+                .map(
+                    (o) => `
+                <option value="${o.value}" ${port.subType === o.value ? "selected" : ""}>${o.label}</option>
+            `,
+                )
+                .join("")}
+        </select>
+    </div>
+    `
+            : ""
+    }
+    <div class="prop-group">
+        <label>Connections</label>
+        <p class="prop-hint">${connectedLinks.length} link${connectedLinks.length !== 1 ? "s" : ""}</p>
+    </div>
+    <div class="prop-group">
+        <button class="prop-btn prop-btn-danger" onclick="SketchMod._disconnectPort(SketchMod.selectedPorts[0])">
+            Disconnect All
+        </button>
+    </div>
+`;
 
         this._currentPortForProps = port;
         // Bind the select change event
@@ -1542,6 +1551,13 @@ const SketchMod = {
                 this._updatePortSubType(select);
             });
         }
+    },
+    _updatePortActivation(value) {
+        if (!this._currentPortForProps) return;
+        this._saveUndoState();
+        this._currentPortForProps.activationMode = value;
+        this._saveToSession();
+        this._showPortProperties();
     },
     _updatePortBias(input) {
         if (!this._currentPortForProps) return;
@@ -3459,8 +3475,12 @@ class Port {
         this.id = `${node.id}_${type}_${index}`;
         this.shape = null;
         this.bias = 0;
+        // Activation timing
+        this.activationMode = this._defaultActivationMode();
     }
-
+    _defaultActivationMode() {
+        return "every_batch";
+    }
     get connectionLimit() {
         return 1;
     }
@@ -3571,6 +3591,7 @@ class Port {
                 : null,
             bias: this.bias,
             portKind: this._getPortKind(),
+            activationMode: this.activationMode,
         };
     }
 
@@ -3692,7 +3713,14 @@ class RolePort extends Port {
         super(node, type, index, null);
         this.role = role || null; // "loss", "prediction", "evaluation", "labels", "color"
     }
-
+    _defaultActivationMode() {
+        if (this.role === "loss") return "every_batch";
+        if (this.role === "prediction") return "last_batch";
+        if (this.role === "evaluation") return "last_batch";
+        if (this.role === "labels") return "every_batch";
+        if (this.role === "color") return "last_batch";
+        return "every_batch";
+    }
     get connectionLimit() {
         return 1;
     }
@@ -4291,16 +4319,23 @@ class BaseNode {
 
     _createPortFromJSON(p, type) {
         const kind = p.portKind || "data";
+        let port;
         switch (kind) {
             case "multi":
-                return new MultiPort(this, type, p.index, p.subType || null);
+                port = new MultiPort(this, type, p.index, p.subType || null);
+                break;
             case "role":
-                return new RolePort(this, type, p.index, p.role || null);
+                port = new RolePort(this, type, p.index, p.role || null);
+                break;
             case "param":
-                return new ParamPort(this, type, p.index);
+                port = new ParamPort(this, type, p.index);
+                break;
             default:
-                return new DataPort(this, type, p.index, p.subType || null);
+                port = new DataPort(this, type, p.index, p.subType || null);
         }
+        port.id = p.id;
+        if (p.activationMode) port.activationMode = p.activationMode;
+        return port;
     }
 
     getPropertiesHTML() {
@@ -4933,12 +4968,16 @@ class InputDataNode extends RectNode {
 class OutputNode extends RectNode {
     constructor(id, x, y) {
         super(id, x, y, "output", 100, 70);
-        this.maxInputs = 1;
-        this.minInputs = 1;
+        this.maxInputs = 2;
+        this.minInputs = 2;
         this.maxOutputs = 3;
         this.minOutputs = 3;
 
-        this.addInput();
+        // Two inputs: train data (every batch) and test data (final eval)
+        this.addInput("train");
+        this.addInput("test");
+
+        // Three outputs: loss, prediction, evaluation
         this.outputs.push(new RolePort(this, "output", 0, "loss"));
         this.outputs.push(new RolePort(this, "output", 1, "prediction"));
         this.outputs.push(new RolePort(this, "output", 2, "evaluation"));
@@ -4947,22 +4986,35 @@ class OutputNode extends RectNode {
 
     updatePorts() {
         const hw = this.width / 2 + 8;
+        const totalIn = this.inputs.length;
+        const totalOut = this.outputs.length;
 
-        // Input on LEFT side
+        // Position all inputs on LEFT
         this.inputs.forEach((p, i) => {
             p.x = this.x - hw;
-            p.y = this.y;
+            p.y =
+                this.y -
+                this.height / 2 +
+                (this.height / (totalIn + 1)) * (i + 1);
         });
 
-        // Output ports on RIGHT side, evenly spaced
-        const total = this.outputs.length;
+        // Position all outputs on RIGHT
         this.outputs.forEach((p, i) => {
             p.x = this.x + hw;
             p.y =
                 this.y -
                 this.height / 2 +
-                (this.height / (total + 1)) * (i + 1);
+                (this.height / (totalOut + 1)) * (i + 1);
         });
+        console.log(
+            "OutputNode inputs:",
+            this.inputs.map((p) => ({
+                id: p.id,
+                x: p.x,
+                y: p.y,
+                subType: p.subType,
+            })),
+        );
     }
 
     drawLabel(ctx) {
@@ -4997,6 +5049,23 @@ class OutputNode extends RectNode {
     getPropertiesHTML() {
         return `
             ${this._getShapeSummaryHTML()}
+            <div class="prop-group">
+                <label>Input Ports</label>
+                <div class="port-legend">
+                    <span class="port-legend-item">
+                        <svg width="10" height="10" viewBox="0 0 10 10">
+                            <circle cx="5" cy="5" r="4" fill="#f59e0b" stroke="#1a1d2e" stroke-width="1"/>
+                        </svg>
+                        train
+                    </span>
+                    <span class="port-legend-item">
+                        <svg width="10" height="10" viewBox="0 0 10 10">
+                            <circle cx="5" cy="5" r="4" fill="#4ade80" stroke="#1a1d2e" stroke-width="1"/>
+                        </svg>
+                        test
+                    </span>
+                </div>
+            </div>
             <div class="prop-group">
                 <label>Output Ports</label>
                 <div class="port-legend">
@@ -5641,6 +5710,23 @@ class TrainTestSplitNode extends RectNode {
         return (
             this._getShapeSummaryHTML() +
             `
+            <div class="prop-group">
+                <label>Output Ports</label>
+                <div class="port-legend">
+                    <span class="port-legend-item">
+                        <svg width="10" height="10" viewBox="0 0 10 10">
+                            <circle cx="5" cy="5" r="4" fill="#f59e0b" stroke="#1a1d2e" stroke-width="1"/>
+                        </svg>
+                        train
+                    </span>
+                    <span class="port-legend-item">
+                        <svg width="10" height="10" viewBox="0 0 10 10">
+                            <circle cx="5" cy="5" r="4" fill="#4ade80" stroke="#1a1d2e" stroke-width="1"/>
+                        </svg>
+                        test
+                    </span>
+                </div>
+            </div>
             <div class="prop-group">
                 <label>Train Ratio</label>
                 <input type="range" id="prop-train-ratio" class="prop-range" min="0.1" max="0.9" step="0.05"
