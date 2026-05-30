@@ -107,7 +107,6 @@ class GraphValidator:
                 "row-select",
                 "dim-select",
                 "train-test",
-                "output",
             }
             if node_type in single_input and count > 1:
                 self._add_error(
@@ -155,13 +154,45 @@ class GraphValidator:
 
     def _check_output_connectivity(self):
         for node in self.nodes:
-            if node["type"] == "output":
-                incoming = self._links_to(node["id"])
-                if not incoming:
-                    self._add_error(
-                        node_id=node["id"],
-                        message="Output: input port is not connected — no data reaches the output",
-                    )
+            if node["type"] != "output":
+                continue
+
+            train_connected = False
+            test_connected = False
+
+            for port_data in node.get("inputPorts", []):
+                port_id = port_data["id"]
+                port_subtype = port_data.get("subType", "")
+                connected = any(l["to"] == port_id for l in self.links)
+
+                if port_subtype == "train":
+                    train_connected = connected
+                elif port_subtype == "test":
+                    test_connected = connected
+
+            if not train_connected and not test_connected:
+                self._add_warning(
+                    node_id=node["id"],
+                    message="Output: no input ports connected — model receives no data",
+                )
+            elif train_connected and not test_connected:
+                self._add_warning(
+                    node_id=node["id"],
+                    message="Output: only train port connected — no evaluation data",
+                )
+            elif test_connected and not train_connected:
+                self._add_warning(
+                    node_id=node["id"],
+                    message="Output: only test port connected — no training data",
+                )
+
+            # Check output connections
+            all_outgoing = self._links_from(node["id"])
+            if not all_outgoing:
+                self._add_warning(
+                    node_id=node["id"],
+                    message="Output: no output ports connected",
+                )
 
     def _check_cycles(self):
         visited = set()
