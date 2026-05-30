@@ -167,9 +167,9 @@ class CodeGenerator:
         # Default train/test split if no TrainTestSplitNode
         has_split = any(n["type"] == "train-test" for n in preprocessing)
         if not has_split:
-            w.line("# No TrainTestSplit configured — using all data for training")
-            w.line("X_train, y_train = X, y")
-            w.line("X_test, y_test = X[:100], y[:100]")
+            w.line("# No TrainTestSplit — using all data for training")
+            w.line("data_train = data")
+            w.line("data_test = data[:100]")
             w.line("")
 
         # Batch size from first optimizer
