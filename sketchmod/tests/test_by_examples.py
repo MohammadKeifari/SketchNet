@@ -358,7 +358,7 @@ class ExampleGraphTests(SimpleTestCase):
         self.assertIn("class SketchNetModel", code)
         self.assertIn("def load_data():", code)
         self.assertIn("def train_model(", code)
-        self.assertIn("def plot_results(", code)
+        self.assertIn("def visualize(", code)
         self.assertIn("Standard", code)
         self.assertIn("Early stopping", code)
         self.assertIn("torch.nn.utils.clip_grad_norm_", code)
