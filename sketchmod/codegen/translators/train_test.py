@@ -12,11 +12,9 @@ class TrainTestSplitTranslator(BaseTranslator):
 
         writer.line(f"# Train/test split: {train_pct}% / {test_pct}%")
         writer.line(f"torch.manual_seed({seed})")
-        writer.line("indices = torch.randperm(len(X))")
-        writer.line(f"split_idx = int(len(X) * {ratio})")
-        writer.line("train_idx = indices[:split_idx]")
-        writer.line("test_idx = indices[split_idx:]")
-        writer.line("X_train, X_test = X[train_idx], X[test_idx]")
-        writer.line("y_train, y_test = y[train_idx], y[test_idx]")
+        writer.line("indices = torch.randperm(len(data))")
+        writer.line(f"split_idx = int(len(data) * {ratio})")
+        writer.line("data_train = data[indices[:split_idx]]")
+        writer.line("data_test = data[indices[split_idx:]]")
         writer.line("")
         return None
