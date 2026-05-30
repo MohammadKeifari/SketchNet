@@ -1,5 +1,5 @@
 from django.test import SimpleTestCase
-from sketchmod.codegen.generator import CodeGenerator
+from sketchmod.generator import CodeGenerator
 from sketchmod.codegen.viz import VizGenerator
 
 
