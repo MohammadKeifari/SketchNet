@@ -3610,7 +3610,7 @@ class DataPort extends Port {
     }
 
     get connectionLimit() {
-        return 1;
+        return 2;
     }
 
     draw(ctx) {
@@ -6517,13 +6517,13 @@ class OptimizerNode extends RectNode {
             <div class="port-legend">
                 <span class="port-legend-item">
                     <svg width="10" height="10" viewBox="0 0 10 10">
-                        <circle cx="5" cy="5" r="4" fill="#2cbde9" stroke="#1a1d2e" stroke-width="1"/>
+                        <circle cx="5" cy="5" r="4" fill="#53BF9D" stroke="#1a1d2e" stroke-width="1"/>
                     </svg>
                     Loss — from OutputNode
                 </span>
                 <span class="port-legend-item">
                     <svg width="10" height="10" viewBox="0 0 10 10">
-                        <circle cx="5" cy="5" r="4" fill="#a78bfa" stroke="#1a1d2e" stroke-width="1"/>
+                        <circle cx="5" cy="5" r="4" fill="#f59e0b" stroke="#1a1d2e" stroke-width="1"/>
                     </svg>
                     Labels — from data pipeline
                 </span>

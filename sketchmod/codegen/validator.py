@@ -367,3 +367,22 @@ class GraphValidator:
                         message=f"Batch dimensions differ ({', '.join(unique)}). "
                         f"Data with smaller batch ({min_batch}) will loop to match.",
                     )
+
+    def _check_dataport_connections(self):
+        for node in self.nodes:
+            for port_data in node.get("inputPorts", []):
+                if port_data.get("portKind") != "data":
+                    continue
+
+                incoming = self._links_to_port(port_data["id"])
+                if len(incoming) > 2:
+                    self._add_error(...)
+
+                if len(incoming) == 2:
+                    # Must be one train + one test
+                    sources = [self._get_port(l["from"]) for l in incoming]
+                    phases = {s.get("activationPhase", "training") for s in sources}
+                    if phases != {"training", "evaluation"}:
+                        self._add_error(
+                            message="DataPort with 2 connections must have one training and one evaluation source"
+                        )
