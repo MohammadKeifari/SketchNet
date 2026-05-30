@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404
 from data_manager.models import Dataset
 from django.views.decorators.csrf import csrf_exempt
 
-from .generator import CodeGenerator
+from .codegen.generator import CodeGenerator
 
 
 @login_required
