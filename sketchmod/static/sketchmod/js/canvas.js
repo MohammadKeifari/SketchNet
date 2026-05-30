@@ -2662,37 +2662,48 @@ const SketchMod = {
     },
 
     _handleExport(type) {
-        const graphData = JSON.stringify(this._getGraphData());
+        // Only validate for Python exports
+        const needsValidation = [
+            "pytorch-py",
+            "pytorch-zip",
+            "python-clipboard",
+        ].includes(type);
 
-        // Validate via API first
-        fetch("/sketchmod/api/validate/", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": this._getCsrfToken(),
-            },
-            body: JSON.stringify({ graph: graphData }),
-        })
-            .then((res) => res.json())
-            .then((data) => {
-                if (data.success) {
-                    this._applyValidationResults(data);
-                    this._render();
+        if (needsValidation) {
+            const graphData = JSON.stringify(this._getGraphData());
 
-                    if (!data.isValid) {
-                        this._showValidationModal({
-                            errors: data.errors,
-                            warnings: data.warnings,
-                            isValid: false,
-                        });
-                        this._showToast("Fix errors before exporting");
-                        return;
+            fetch("/sketchmod/api/validate/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": this._getCsrfToken(),
+                },
+                body: JSON.stringify({ graph: graphData }),
+            })
+                .then((res) => res.json())
+                .then((data) => {
+                    if (data.success) {
+                        this._applyValidationResults(data);
+                        this._render();
+
+                        if (!data.isValid) {
+                            this._showValidationModal({
+                                errors: data.errors,
+                                warnings: data.warnings,
+                                isValid: false,
+                            });
+                            this._showToast("Fix errors before exporting");
+                            return;
+                        }
+
+                        this._doExport(type, graphData);
                     }
+                });
+            return;
+        }
 
-                    // Proceed with export...
-                    this._doExport(type, graphData);
-                }
-            });
+        // Image and JSON exports — no validation needed
+        this._doExport(type);
     },
     _doExport(type, graphData) {
         // Image exports
