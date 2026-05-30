@@ -127,19 +127,50 @@ class CodeGenerator:
         w.indent()
         w.line('"""Load and preprocess data."""')
 
-        # Preprocessing nodes
-        for node in flow["preprocessing"]["nodes"]:
-            t = get_translator(node, self)
-            t.data_code(w, input_var="X")
+        preprocessing = flow["preprocessing"]["nodes"]
+        input_node = next((n for n in preprocessing if n["type"] == "input-data"), None)
 
-        # Placeholder data
-        w.line("# TODO: Replace with actual dataset loading")
-        w.line("X = torch.randn(1000, 784)  # features")
-        w.line("y = torch.randint(0, 10, (1000,))  # labels")
-        w.line("")
-        w.line("X_train, y_train = X, y")
-        w.line("X_test, y_test = X[:100], y[:100]")
-        w.line("")
+        if input_node:
+            # Generate actual data loading from the InputDataNode config
+            dataset_name = input_node.get("datasetName")
+            data_shape = input_node.get("dataShape")
+            dataset_id = input_node.get("datasetId")
+
+            if dataset_id and dataset_name:
+                w.line(f"# Dataset: {dataset_name} (ID: {dataset_id})")
+                w.line(f"# Shape: {data_shape or 'auto-detect'}")
+                w.line("# TODO: Replace with your file path")
+                w.line(f"# df = pd.read_csv('{dataset_name}.csv')")
+                w.line(
+                    "# X = torch.tensor(df.iloc[:, :-1].values, dtype=torch.float32)"
+                )
+                w.line("# y = torch.tensor(df.iloc[:, -1].values, dtype=torch.long)")
+                w.line("")
+            elif data_shape:
+                w.line(f"# Expected shape: {data_shape}")
+                w.line("")
+
+            # Run preprocessing translators
+            for node in preprocessing:
+                if node["type"] == "input-data":
+                    continue  # Already handled
+                t = get_translator(node, self)
+                t.data_code(w, input_var=None)
+
+        else:
+            # No InputDataNode — placeholder
+            w.line("# No InputDataNode configured — using placeholder data")
+            w.line("X = torch.randn(1000, 784)  # features")
+            w.line("y = torch.randint(0, 10, (1000,))  # labels")
+            w.line("")
+
+        # Default train/test split if no TrainTestSplitNode
+        has_split = any(n["type"] == "train-test" for n in preprocessing)
+        if not has_split:
+            w.line("# No TrainTestSplit configured — using all data for training")
+            w.line("X_train, y_train = X, y")
+            w.line("X_test, y_test = X[:100], y[:100]")
+            w.line("")
 
         # Batch size from first optimizer
         optimizers = flow.get("optimizers", [])
