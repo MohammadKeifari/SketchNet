@@ -4,17 +4,22 @@ from .base import BaseTranslator
 class TrainTestSplitTranslator(BaseTranslator):
     node_type = "train-test"
 
-    def data_code(self, writer, input_var):
+    def output_vars(self):
+        nid = self.node_id()
+        return [f"data_{nid}_train", f"data_{nid}_test"]
+
+    def data_code(self, writer, input_vars):
+        src_var = list(input_vars.values())[0]
         ratio = self.node.get("trainRatio", 0.7)
         seed = self.node.get("randomSeed", 42)
+        train_var, test_var = self.output_vars()
         train_pct = int(ratio * 100)
-        test_pct = 100 - train_pct
 
-        writer.line(f"# Train/test split: {train_pct}% / {test_pct}%")
+        writer.line(f"# Train/test split: {train_pct}% / {100 - train_pct}%")
         writer.line(f"torch.manual_seed({seed})")
-        writer.line("indices = torch.randperm(len(data))")
-        writer.line(f"split_idx = int(len(data) * {ratio})")
-        writer.line("data_train = data[indices[:split_idx]]")
-        writer.line("data_test = data[indices[split_idx:]]")
+        writer.line(f"indices = torch.randperm(len({src_var}))")
+        writer.line(f"split_idx = int(len({src_var}) * {ratio})")
+        writer.line(f"{train_var} = {src_var}[indices[:split_idx]]")
+        writer.line(f"{test_var} = {src_var}[indices[split_idx:]]")
         writer.line("")
-        return None
+        return [train_var, test_var]

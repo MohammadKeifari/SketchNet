@@ -4,14 +4,13 @@ from .base import BaseTranslator
 class OneHotEncodeTranslator(BaseTranslator):
     node_type = "onehot"
 
-    def data_code(self, writer, input_var):
+    def data_code(self, writer, input_vars):
+        src_var = list(input_vars.values())[0]
+        out_var = self.output_vars()[0]
         num_classes = self.node.get("numClasses", 10)
-        writer.line(f"# One-hot encode labels ({num_classes} classes)")
+        writer.line(f"# One-hot encode ({num_classes} classes)")
         writer.line(
-            f"y_train = torch.nn.functional.one_hot(y_train, num_classes={num_classes}).float()"
-        )
-        writer.line(
-            f"y_test = torch.nn.functional.one_hot(y_test, num_classes={num_classes}).float()"
+            f"{out_var} = torch.nn.functional.one_hot({src_var}.long(), num_classes={num_classes}).float()"
         )
         writer.line("")
-        return None
+        return [out_var]

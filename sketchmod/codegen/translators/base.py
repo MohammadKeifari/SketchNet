@@ -5,18 +5,27 @@ class BaseTranslator:
         self.node = node
         self.g = generator
 
-    def safe_id(self):
+    def node_id(self):
         return self.node["id"].replace("-", "_")
 
+    def output_vars(self):
+        """Return list of output variable names this node produces."""
+        return [f"data_{self.node_id()}"]
+
+    # === MODEL ===
     def init_code(self, writer, is_sequential):
         pass
 
-    def forward_code(self, writer, input_var, skip_vars):
-        return input_var
+    def forward_code(self, writer, input_vars, skip_vars):
+        """input_vars: dict port_index -> variable_name. Returns list of output var names."""
+        return self.output_vars()
 
-    def data_code(self, writer, input_var):
-        return input_var
+    # === DATA ===
+    def data_code(self, writer, input_vars):
+        """input_vars: dict port_index -> variable_name. Returns list of output var names."""
+        return self.output_vars()
 
+    # === TRAINING ===
     def optimizer_code(self, writer):
         pass
 
