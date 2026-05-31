@@ -247,7 +247,6 @@ class NeuronTranslator(BaseTranslator):
         )
         if bias:
             w.line(f"nn.init.constant_(self.fc_{n.id}.bias, {bias_val})")
-        # scalar weights for each incoming link
         for port in n.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -259,23 +258,31 @@ class NeuronTranslator(BaseTranslator):
 
     def forward_code(self, w):
         n = self.node
-        # Collect inputs and weights
-        in_vars = []
-        weight_vars = []
+        w.line(f"# --- Neuron {n.id} ---")
+        # Collect all incoming tensor names and corresponding weight parameters
+        terms = []
         for port in n.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
                     src_id = self.graph.ports[link.id_from].node_id
-                    in_vars.append(f"inputs_dict.get('{src_id}')")
-                    weight_vars.append(f"self.weight_{link.id_from}_{link.id_to}")
+                    weight_name = f"self.weight_{link.id_from}_{link.id_to}"
+                    terms.append((src_id, weight_name))
                     break
-        if len(in_vars) > 1:
-            w.line(
-                f"x = sum(w * x for w, x in zip([{', '.join(weight_vars)}], [{', '.join(in_vars)}]) if x is not None)"
-            )
-        else:
-            w.line(f"x = {in_vars[0]} if {in_vars[0]} is not None else None")
-        w.line(f"if x is None: raise ValueError('No input for node {n.id}')")
+        if not terms:
+            w.line(f"outputs['{n.id}'] = None  # no input connected")
+            return
+        # Build weighted sum
+        w.line(f"x = None")
+        for src_id, wgt in terms:
+            w.line(f"if '{src_id}' in inputs_dict:")
+            w.indent()
+            w.line(f"if x is None: x = {wgt} * inputs_dict['{src_id}']")
+            w.line(f"else: x = x + {wgt} * inputs_dict['{src_id}']")
+            w.dedent()
+        w.line("if x is None:")
+        w.indent()
+        w.line(f'raise ValueError("No input for neuron {n.id}")')
+        w.dedent()
         activation = n.properties.get("activation", "relu")
         w.line(f"x = self.fc_{n.id}(x)")
         w.line(f"x = torch.{activation}(x)")
@@ -305,7 +312,6 @@ class LayerTranslator(NeuronTranslator):
         )
         if bias:
             w.line(f"nn.init.constant_(self.fc_{n.id}.bias, {bias_val})")
-        # scalar weights
         for port in n.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -315,32 +321,7 @@ class LayerTranslator(NeuronTranslator):
                         f"self.{weight_name} = nn.Parameter(torch.tensor({init_val}))"
                     )
 
-    def forward_code(self, w):
-        # Same as neuron but output size differs
-        n = self.node
-        in_vars, weight_vars = self._collect_inputs(n)
-        if len(in_vars) > 1:
-            w.line(
-                f"x = sum(w * x for w, x in zip([{', '.join(weight_vars)}], [{', '.join(in_vars)}]) if x is not None)"
-            )
-        else:
-            w.line(f"x = {in_vars[0]} if {in_vars[0]} is not None else None")
-        w.line(f"if x is None: raise ValueError('No input for node {n.id}')")
-        activation = n.properties.get("activation", "relu")
-        w.line(f"x = self.fc_{n.id}(x)")
-        w.line(f"x = torch.{activation}(x)")
-        w.line(f"outputs['{n.id}'] = x")
-
-    def _collect_inputs(self, node):
-        in_vars, weight_vars = [], []
-        for port in node.inputs:
-            for link in self.graph.links:
-                if link.id_to == port.id:
-                    src_id = self.graph.ports[link.id_from].node_id
-                    in_vars.append(f"inputs_dict.get('{src_id}')")
-                    weight_vars.append(f"self.weight_{link.id_from}_{link.id_to}")
-                    break
-        return in_vars, weight_vars
+    # forward_code inherited from NeuronTranslator
 
 
 class Conv2DTranslator(BaseTranslator):
@@ -486,23 +467,22 @@ class OutputTranslator(BaseTranslator):
 
     def forward_code(self, w):
         n = self.node
-        # For each input port, route to all output ports
+        seen_sources = set()
         for port in n.inputs:
-            # find source node that feeds this input
             src_id = None
             for link in self.graph.links:
                 if link.id_to == port.id:
                     src_id = self.graph.ports[link.id_from].node_id
                     break
-            if src_id:
+            if src_id and src_id not in seen_sources:
+                seen_sources.add(src_id)
                 w.line(f"if '{src_id}' in inputs_dict:")
                 w.indent()
                 w.line(f"x = inputs_dict['{src_id}']")
                 for out_port in n.outputs:
                     w.line(f"outputs['{out_port.id}'] = x")
                 w.dedent()
-        # Also store node id
-        w.line(f"if 'x' in locals(): outputs['{n.id}'] = x")
+        w.line(f"if seen_sources: outputs['{n.id}'] = x")
 
 
 # ---------------------------------------------------------------------------
@@ -514,6 +494,10 @@ class OptimizerTranslator(BaseTranslator):
     def optimizer_code(self, w):
         n = self.node
         props = n.properties
+
+        def pybool(val):
+            return "True" if val else "False"
+
         config_lines = [
             f"'loss_type': '{props.get('lossType', 'mse')}'",
             f"'optimizer_type': '{props.get('optimizerType', 'adam')}'",
@@ -523,12 +507,12 @@ class OptimizerTranslator(BaseTranslator):
             f"'adam_epsilon': {props.get('adamEpsilon', 1e-8)}",
             f"'sgd_momentum': {props.get('sgdMomentum', 0.9)}",
             f"'weight_decay': {props.get('weightDecay', 0)}",
-            f"'nesterov': {str(props.get('nesterov', False)).lower()}",
+            f"'nesterov': {pybool(props.get('nesterov', False))}",
             f"'epochs': {props.get('epochs', 10)}",
             f"'batch_size': {props.get('batchSize', 32)}",
-            f"'shuffle': {str(props.get('shuffle', True)).lower()}",
+            f"'shuffle': {pybool(props.get('shuffle', True))}",
             f"'gradient_clip': {props.get('gradientClip') if props.get('gradientClip') is not None else 'None'}",
-            f"'early_stopping': {str(props.get('earlyStopping', False)).lower()}",
+            f"'early_stopping': {pybool(props.get('earlyStopping', False))}",
             f"'early_stopping_patience': {props.get('earlyStoppingPatience', 10)}",
         ]
         return (
