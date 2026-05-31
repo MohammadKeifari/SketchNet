@@ -95,26 +95,24 @@ class FlowAnalyzer:
 
     # ========== BOUNDARY DETECTION ==========
 
-    def _find_boundaries(self, ordered_nodes):
-        """Split ordered nodes into preprocessing, model, and output."""
+    def _find_boundaries(self, ordered):
         preprocessing = []
         model_nodes = []
         output_node = None
+        found_model = False
 
-        for node in ordered_nodes:
+        for node in ordered:
             if node["type"] in self.OUTPUT_TYPES:
                 output_node = node
             elif node["type"] in self.MODEL_TYPES:
-                # Everything from first model node onward is model (except config)
-                if not model_nodes:
-                    # First model node — all previous are preprocessing
-                    pass
                 model_nodes.append(node)
+                found_model = True
             elif node["type"] in self.PREPROCESSING_TYPES:
-                if not model_nodes:
+                if found_model:
+                    # Data-type node after model — treat as model node
+                    model_nodes.append(node)
+                else:
                     preprocessing.append(node)
-                # else: preprocessing node after model start? unusual but allowed
-            # CONFIG_TYPES are handled separately, not in these lists
 
         return preprocessing, model_nodes, output_node
 
