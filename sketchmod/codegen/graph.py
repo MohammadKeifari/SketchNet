@@ -94,6 +94,20 @@ def parse_graph(json_data: dict) -> Graph:
                 activation_mode=p.get("activationMode", "every_batch"),
                 bias=p.get("bias", 0),
             )
+            # data/multi ports on non-model nodes default to "both" if not set explicitly
+            if port.port_kind in ("data", "multi") and not p.get("activationMode"):
+                if node.type not in (
+                    "neuron",
+                    "layer",
+                    "conv2d",
+                    "flatten",
+                    "dropout",
+                    "batchnorm",
+                    "add",
+                    "concat",
+                    "output",
+                ):
+                    port.activation_mode = "both"
             node.inputs.append(port)
             graph.ports[port.id] = port
 
@@ -110,7 +124,7 @@ def parse_graph(json_data: dict) -> Graph:
                 activation_mode=p.get("activationMode", "every_batch"),
                 bias=p.get("bias", 0),
             )
-            # If role port without explicit activation, set default based on role
+            # Role ports: apply default based on role if no explicit activation
             if port.port_kind == "role" and not p.get("activationMode"):
                 role_defaults = {
                     "loss": "every_batch",
@@ -120,62 +134,45 @@ def parse_graph(json_data: dict) -> Graph:
                     "color": "last_batch",
                 }
                 port.activation_mode = role_defaults.get(port.role, "every_batch")
+            # Data/multi ports on non-model nodes default to "both"
+            if port.port_kind in ("data", "multi") and not p.get("activationMode"):
+                if node.type not in (
+                    "neuron",
+                    "layer",
+                    "conv2d",
+                    "flatten",
+                    "dropout",
+                    "batchnorm",
+                    "add",
+                    "concat",
+                    "output",
+                ):
+                    port.activation_mode = "both"
             node.outputs.append(port)
             graph.ports[port.id] = port
 
-        # Param ports (not used in data flow, ignore)
-        # We don't need to store them.
+        # Special default for TrainTestSplit outputs if not explicitly set
+        if node.type == "train-test":
+            for port in node.outputs:
+                # Find the original port dict to check if activationMode was provided
+                orig_ports = n.get("outputPorts", [])
+                for orig_port in orig_ports:
+                    if orig_port["id"] == port.id:
+                        if "activationMode" not in orig_port:
+                            if port.sub_type == "train":
+                                port.activation_mode = "every_batch"
+                            elif port.sub_type == "test":
+                                port.activation_mode = "last_batch"
+                        break
 
         graph.add_node(node)
-
-    # Special default for TrainTestSplit outputs (if not already set)
-    for node in graph.nodes.values():
-        if node.type == "train-test":
-            for port in node.outputs:
-                # If activation_mode is still default "every_batch" and not explicitly set in JSON, override based on subType
-                # Check if the original JSON had an explicit activationMode for this port
-                # We'll scan original node dict to see if it was present
-                orig_node = json_data["nodes"][
-                    list(graph.nodes.values()).index(node)
-                ]  # not ideal, better to store original
-                # Simpler: we'll apply override if the port's activation_mode == "every_batch" and we haven't found an explicit activationMode in the JSON for that port.
-                # Since we already set activation_mode from JSON (if present) or default "every_batch", we can check if the port's original data had the key.
-                # We'll need to revisit. I'll add a boolean flag.
-                pass
-
-    # Instead, we'll set the defaults in the port creation with explicit check.
-    # I'll adjust the port creation to mark if activation_mode was explicitly provided.
-
-    # For simplicity, we can do post-processing:
-    for node in graph.nodes.values():
-        if node.type == "train-test":
-            for port in node.outputs:
-                # If the original JSON did NOT contain activationMode for that port, set it based on subType
-                # We'll reconstruct original ports dicts from json_data for that node
-                orig_node = None
-                for orig in json_data["nodes"]:
-                    if orig["id"] == node.id:
-                        orig_node = orig
-                        break
-                if orig_node:
-                    orig_ports = orig_node.get("outputPorts", [])
-                    for orig_port in orig_ports:
-                        if orig_port["id"] == port.id:
-                            if "activationMode" not in orig_port:
-                                if port.sub_type == "train":
-                                    port.activation_mode = "every_batch"
-                                elif port.sub_type == "test":
-                                    port.activation_mode = "last_batch"
-                            break
 
     # Parse links
     for l in json_data.get("links", []):
         link = Link(
             id_from=l["from"],
             id_to=l["to"],
-            weight=(
-                l.get("weight", 1.0) if l.get("weight") != 0 else 1.0
-            ),  # convert 0 to 1
+            weight=l.get("weight", 1.0) if l.get("weight") != 0 else 1.0,
             weight_shape=l.get("weightShape"),
             has_weight=l.get("hasWeight", False),
         )
