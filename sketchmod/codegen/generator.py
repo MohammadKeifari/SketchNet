@@ -137,6 +137,58 @@ class CodeGenerator:
             output_vars = t.data_code(w, input_vars)
             var_table[node["id"]] = output_vars
 
+        # Create DataLoaders from the train/test split outputs
+        split_node = next((n for n in preprocessing if n["type"] == "train-test"), None)
+        optimizers = flow.get("optimizers", [])
+        batch_size = optimizers[0].get("batchSize", 32) if optimizers else 32
+        shuffle = optimizers[0].get("shuffle", True) if optimizers else True
+
+        if split_node:
+            split_vars = var_table.get(split_node["id"], [])
+            if len(split_vars) >= 2:
+                train_var, test_var = split_vars[0], split_vars[1]
+                w.line(
+                    f"train_dataset = TensorDataset({train_var}, {train_var})  # TODO: separate features/labels"
+                )
+                w.line(
+                    f"val_dataset = TensorDataset({test_var}, {test_var})  # TODO: separate features/labels"
+                )
+            else:
+                w.line(
+                    "train_dataset = TensorDataset(data, data)  # TODO: configure properly"
+                )
+                w.line("val_dataset = TensorDataset(data[:100], data[:100])")
+        else:
+            w.line(
+                "train_dataset = TensorDataset(data, data)  # TODO: configure properly"
+            )
+            w.line("val_dataset = TensorDataset(data[:100], data[:100])")
+
+        w.line(
+            f"train_loader = DataLoader(train_dataset, batch_size={batch_size}, shuffle={shuffle})"
+        )
+        w.line(
+            f"val_loader = DataLoader(val_dataset, batch_size={batch_size}, shuffle=False)"
+        )
+        w.line("return train_loader, val_loader")
+        w.dedent()
+        w.line("")
+        preprocessing = flow["preprocessing"]["nodes"]
+        if not preprocessing:
+            return
+
+        w.line("def load_data():")
+        w.indent()
+        w.line('"""Load and preprocess data."""')
+        w.line("")
+
+        var_table = {}
+        for node in preprocessing:
+            t = get_translator(node, self)
+            input_vars = self._build_input_vars(node, var_table)
+            output_vars = t.data_code(w, input_vars)
+            var_table[node["id"]] = output_vars
+
         w.dedent()
         w.line("")
 
