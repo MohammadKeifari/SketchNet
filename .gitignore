@@ -9,4 +9,3 @@ db.sqlite3
 *.code-workspace
 media/
 todo.txt
-examples/
