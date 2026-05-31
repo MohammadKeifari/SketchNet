@@ -12,7 +12,7 @@ class DropoutTranslator(BaseTranslator):
         else:
             writer.line(f"self.dropout_{sid} = nn.Dropout({rate})")
 
-    def forward_code(self, writer, input_vars, skip_vars):
+    def forward_code(self, writer, input_vars):
         src_var = list(input_vars.values())[0]
         sid = self.node_id()
         out_var = self.output_vars()[0]

@@ -10,7 +10,7 @@ class FlattenTranslator(BaseTranslator):
         else:
             writer.line("self.flatten = nn.Flatten()")
 
-    def forward_code(self, writer, input_vars, skip_vars):
+    def forward_code(self, writer, input_vars):
         src_var = list(input_vars.values())[0]
         out_var = self.output_vars()[0]
         writer.line(f"{out_var} = self.flatten({src_var})")

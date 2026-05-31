@@ -139,7 +139,7 @@ class BaseTranslator:
     def init_code(self, writer, is_sequential, in_features="in_features"):
         pass
 
-    def forward_code(self, writer, input_vars, skip_vars):
+    def forward_code(self, writer, input_vars):
         """input_vars: dict port_index -> variable_name. Returns list of output var names."""
         return self.output_vars()
 

@@ -39,7 +39,7 @@ class Conv2DTranslator(BaseTranslator):
 
         return None
 
-    def forward_code(self, writer, input_vars, skip_vars):
+    def forward_code(self, writer, input_vars):
         src_var = list(input_vars.values())[0]
         sid = self.node_id()
         out_var = self.output_vars()[0]

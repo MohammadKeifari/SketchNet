@@ -19,7 +19,7 @@ class LayerTranslator(BaseTranslator):
         else:
             writer.line(f"self.{sid} = nn.Linear({in_features}, {neurons})")
 
-    def forward_code(self, writer, input_vars, skip_vars):
+    def forward_code(self, writer, input_vars):
         sid = self.node_id()
         out_var = f"data_{sid}"
 

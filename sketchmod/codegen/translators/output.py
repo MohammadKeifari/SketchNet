@@ -15,7 +15,7 @@ class OutputTranslator(BaseTranslator):
     def init_code(self, writer, is_sequential):
         pass
 
-    def forward_code(self, writer, input_vars, skip_vars):
+    def forward_code(self, writer, input_vars):
         train_var = input_vars.get(
             0, list(input_vars.values())[0] if input_vars else "x"
         )

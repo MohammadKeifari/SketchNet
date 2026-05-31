@@ -109,15 +109,15 @@ class CodeGenerator:
         if is_seq:
             w.line("return self.model(x)")
         else:
+            var_table = {}
             input_vars = {0: "x"}
-            skip_vars = {}
             for node in model_nodes:
                 t = get_translator(node, self)
-                output_vars = t.forward_code(w, input_vars, skip_vars)
-                skip_vars[node["id"]] = output_vars
+                output_vars = t.forward_code(w, input_vars)
+                var_table[node["id"]] = output_vars
                 if model_nodes.index(node) < len(model_nodes) - 1:
                     next_node = model_nodes[model_nodes.index(node) + 1]
-                    input_vars = self._build_input_vars(next_node, skip_vars)
+                    input_vars = self._build_input_vars(next_node, var_table)
 
         w.dedent()
         w.dedent()
