@@ -211,10 +211,6 @@ class CodeGenerator:
             return
 
         opt = optimizers[0]
-        t = get_translator(opt, self)
-        t.optimizer_code(w)
-        w.line("")
-
         phases = flow.get("phases", {})
         epochs = opt.get("epochs", 10)
         grad_clip = opt.get("gradientClip")
@@ -227,9 +223,12 @@ class CodeGenerator:
         w.line("def train_model(model, loader, optimizer, loss_fn):")
         w.indent()
         w.line("train_losses = []")
-        w.line("val_losses = []")
+        if eval_phases:
+            w.line("val_losses = []")
+        else:
+            w.line("val_losses = []  # No eval phases configured")
 
-        if early_stop:
+        if early_stop and eval_phases:
             w.line("best_val_loss = float('inf')")
             w.line("patience_counter = 0")
             w.line("best_model_state = None")
@@ -237,7 +236,6 @@ class CodeGenerator:
         w.line(f"for epoch in range({epochs}):")
         w.indent()
 
-        # Loop phases (training)
         for mode in loop_phases:
             w.line(f"# Phase: {mode}")
             w.line("model.train()")
@@ -257,7 +255,6 @@ class CodeGenerator:
             w.dedent()
             w.line("train_losses.append(total_loss / len(loader))")
 
-        # Eval phases (validation during training)
         if eval_phases:
             w.line("")
             w.line("model.eval()")
@@ -310,9 +307,14 @@ class CodeGenerator:
         w.indent()
         w.line("loader = load_data()")
         w.line("model = SketchNetModel()")
+        w.line("")
 
         optimizers = flow.get("optimizers", [])
         if optimizers:
+            opt = optimizers[0]
+            t = get_translator(opt, self)
+            t.optimizer_code(w)
+            w.line("")
             w.line(
                 "train_losses, val_losses = train_model(model, loader, optimizer, loss_fn)"
             )
