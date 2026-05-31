@@ -4,13 +4,18 @@ from .base import BaseTranslator
 class LayerTranslator(BaseTranslator):
     node_type = "layer"
 
-    def init_code(self, writer, is_sequential):
+    def input_features(self):
+        # Layer just needs the last dimension of whatever comes in
+        return self._resolve_input_features()
+
+    def init_code(self, writer, is_sequential, in_features="in_features"):
         sid = self.node_id()
         neurons = self.node.get("numNeurons", 64)
+        in_f = in_features if isinstance(in_features, int) else str(in_features)
         if is_sequential:
-            writer.line(f"nn.Linear(in_features, {neurons}),")
+            writer.line(f"nn.Linear({in_f}, {neurons}),")
         else:
-            writer.line(f"self.{sid} = nn.Linear(in_features, {neurons})")
+            writer.line(f"self.{sid} = nn.Linear({in_f}, {neurons})")
 
     def forward_code(self, writer, input_vars, skip_vars):
         src_var = list(input_vars.values())[0]

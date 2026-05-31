@@ -1,6 +1,10 @@
 from django.test import SimpleTestCase
 from sketchmod.codegen.generator import CodeGenerator
 from sketchmod.codegen.validator import GraphValidator
+import os
+import json
+
+EXAMPLES_DIR = os.path.join(os.path.dirname(__file__), "examples")
 
 
 class ExampleGraphTests(SimpleTestCase):
@@ -12,6 +16,11 @@ class ExampleGraphTests(SimpleTestCase):
         gen = CodeGenerator(graph)
         code = gen.generate()
         return result, code
+
+    def _load_graph(self, filename):
+        path = os.path.join(EXAMPLES_DIR, filename)
+        with open(path, "r") as f:
+            return json.load(f)
 
     # ========== EXAMPLE 1: Simple Classifier ==========
 
@@ -362,6 +371,33 @@ class ExampleGraphTests(SimpleTestCase):
         self.assertIn("Z-score", code)
         self.assertIn("Early stopping", code)
         self.assertIn("torch.nn.utils.clip_grad_norm_", code)
+        compile(code, "<test>", "exec")
+
+    def test_train_test_split_with_column_selects(self):
+        """Full pipeline: InputData → ColumnSelect → TrainTestSplit → branches → Neuron → Output → Optimizer"""
+        graph = self._load_graph("train_test_split.json")
+        result, code = self._validate_and_generate(graph)
+
+        # Should have no errors
+        self.assertTrue(
+            result["errors"] == [], f"Unexpected errors: {result['errors']}"
+        )
+
+        # Should generate all preprocessing nodes
+        self.assertIn("data_input_main", code)
+        self.assertIn("data_c6", code)
+        self.assertIn("data_t5_train", code)
+        self.assertIn("data_t5_test", code)
+        self.assertIn("data_c9", code)  # train labels
+        self.assertIn("data_c10", code)  # train features
+        self.assertIn("data_c11", code)  # test labels
+        self.assertIn("data_c12", code)  # test features
+
+        # Should create DataLoaders
+        self.assertIn("DataLoader", code)
+        self.assertIn("return train_loader, val_loader", code)
+
+        # Should be valid Python
         compile(code, "<test>", "exec")
 
     # ========== HELPERS ==========

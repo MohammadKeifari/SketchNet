@@ -4,12 +4,17 @@ from .base import BaseTranslator
 class NeuronTranslator(BaseTranslator):
     node_type = "neuron"
 
-    def init_code(self, writer, is_sequential):
+    def input_features(self):
+        # Layer just needs the last dimension of whatever comes in
+        return self._resolve_input_features()
+
+    def init_code(self, writer, is_sequential, in_features="in_features"):
         sid = self.node_id()
+        in_f = in_features if isinstance(in_features, int) else str(in_features)
         if is_sequential:
-            writer.line("nn.Linear(in_features, 1),")
+            writer.line(f"nn.Linear({in_f}, 1),")
         else:
-            writer.line(f"self.{sid} = nn.Linear(in_features, 1)")
+            writer.line(f"self.{sid} = nn.Linear({in_f}, 1)")
 
     def forward_code(self, writer, input_vars, skip_vars):
         src_var = list(input_vars.values())[0]

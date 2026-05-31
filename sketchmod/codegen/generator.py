@@ -79,12 +79,41 @@ class CodeGenerator:
 
         return "in_features  # TODO: resolve from data shape"
 
+    def _next_in_features(self, translator, current_in):
+        """Determine the input features for the next layer in the chain."""
+        node = translator.node
+        t = node["type"]
+
+        if t == "layer":
+            return node.get("numNeurons", 64)
+        elif t == "neuron":
+            return 1
+        elif t == "conv2d":
+            return node.get("filters", 32)
+        elif t == "flatten":
+            out = translator.output_features()
+            return out if out is not None else "flattened_features"
+        elif t in ("dropout", "batchnorm"):
+            return current_in  # Pass-through
+        elif t in ("add", "concat"):
+            return current_in  # Shape determined by inputs
+
+        return current_in
+
     def _generate_model(self, w, flow):
         model_nodes = flow.get("model_nodes", [])
         if not model_nodes:
             return
 
         is_seq = flow.get("is_sequential", True)
+
+        # Resolve input features for the first model node
+        first_node = model_nodes[0]
+        first_t = get_translator(first_node, self)
+        in_features = first_t.input_features()
+        if in_features is None:
+            in_features = "in_features  # TODO: Replace with actual input features"
+
         w.line("class SketchNetModel(nn.Module):")
         w.indent()
         w.line("def __init__(self):")
@@ -94,15 +123,26 @@ class CodeGenerator:
         if is_seq:
             w.line("self.model = nn.Sequential(")
             w.indent()
+            current_features = in_features
             for node in model_nodes:
                 t = get_translator(node, self)
-                t.init_code(w, is_sequential=True)
+                t.init_code(w, is_sequential=True, in_features=current_features)
+                # Update for next layer
+                next_features = self._next_in_features(t, current_features)
+                current_features = (
+                    next_features if next_features is not None else "in_features"
+                )
             w.dedent()
             w.line(")")
         else:
+            current_features = in_features
             for node in model_nodes:
                 t = get_translator(node, self)
-                t.init_code(w, is_sequential=False)
+                t.init_code(w, is_sequential=False, in_features=current_features)
+                next_features = self._next_in_features(t, current_features)
+                current_features = (
+                    next_features if next_features is not None else "in_features"
+                )
 
         w.dedent()
         w.line("")
@@ -114,14 +154,10 @@ class CodeGenerator:
         else:
             input_vars = {0: "x"}
             skip_vars = {}
-            in_features = self._resolve_in_features(model_nodes)
-
             for node in model_nodes:
                 t = get_translator(node, self)
-                t.init_code(w, is_sequential=is_seq, in_features=in_features)
                 output_vars = t.forward_code(w, input_vars, skip_vars)
                 skip_vars[node["id"]] = output_vars
-                # Set up input_vars for next node
                 if model_nodes.index(node) < len(model_nodes) - 1:
                     next_node = model_nodes[model_nodes.index(node) + 1]
                     input_vars = self._build_input_vars(next_node, skip_vars)
