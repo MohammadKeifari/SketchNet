@@ -3,7 +3,7 @@
         {
             "id": "input-main",
             "type": "input-data",
-            "x": 62.31626808035244,
+            "x": 63.43706799075263,
             "y": 338.42011180952966,
             "inputPorts": [],
             "outputPorts": [
@@ -37,8 +37,8 @@
         {
             "id": "output-main",
             "type": "output",
-            "x": 943.1606275498341,
-            "y": 293.10391550789865,
+            "x": 781.7654404522057,
+            "y": 299.82871497029987,
             "inputPorts": [
                 {
                     "id": "output-main_input_0",
@@ -89,7 +89,7 @@
                     "shape": null,
                     "bias": 0,
                     "portKind": "role",
-                    "activationMode": "every_batch",
+                    "activationMode": "last_batch",
                     "role": "prediction"
                 },
                 {
@@ -100,7 +100,7 @@
                     "shape": null,
                     "bias": 0,
                     "portKind": "role",
-                    "activationMode": "every_batch",
+                    "activationMode": "last_batch",
                     "role": "evaluation"
                 }
             ],
@@ -493,7 +493,7 @@
         {
             "id": "n13",
             "type": "neuron",
-            "x": 739.2763890034335,
+            "x": 668.6659946482209,
             "y": 302.1886763172477,
             "inputPorts": [
                 {
@@ -540,8 +540,8 @@
         {
             "id": "v15",
             "type": "visualization",
-            "x": 1125.5449662949768,
-            "y": 358.85726108148606,
+            "x": 1033.5449662949768,
+            "y": 391.85726108148606,
             "inputPorts": [
                 {
                     "id": "v15_input_0",
@@ -756,7 +756,7 @@
             "shape": null,
             "bias": 0,
             "portKind": "role",
-            "activationMode": "every_batch",
+            "activationMode": "last_batch",
             "role": "prediction"
         },
         {
@@ -767,7 +767,7 @@
             "shape": null,
             "bias": 0,
             "portKind": "role",
-            "activationMode": "every_batch",
+            "activationMode": "last_batch",
             "role": "evaluation"
         },
         {
@@ -1030,6 +1030,6 @@
             "bias": 0,
             "portKind": "data"
         }
-    ],  
+    ],
     "nodeCounter": 18
 }
