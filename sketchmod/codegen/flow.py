@@ -140,19 +140,14 @@ class FlowAnalyzer:
         preprocessing = []
         model_nodes = []
         output_node = None
-        found_model = False
 
         for node in ordered:
             if node["type"] in self.OUTPUT_TYPES:
                 output_node = node
             elif node["type"] in self.MODEL_TYPES:
                 model_nodes.append(node)
-                found_model = True
             elif node["type"] in self.PREPROCESSING_TYPES:
-                if found_model:
-                    model_nodes.append(node)
-                else:
-                    preprocessing.append(node)
+                preprocessing.append(node)  # Always add, regardless of position
 
         return preprocessing, model_nodes, output_node
 
@@ -177,12 +172,17 @@ class FlowAnalyzer:
         for n in input_nodes:
             dfs(n["id"])
 
+        # Second pass: catch any preprocessing nodes not yet visited
+        for node in self.nodes:
+            if node["type"] in self.PREPROCESSING_TYPES and node["id"] not in visited:
+                dfs(node["id"])
+
         result.reverse()
         return [self._node_map[nid] for nid in result if nid in self._node_map]
 
     def _is_sequential(self, model_nodes):
         for node in model_nodes:
-            if node["type"] in ("add", "concat"):
+            if node["type"] in ("add", "concat"):   
                 return False
             model_ids = {n["id"] for n in model_nodes}
             incoming = [

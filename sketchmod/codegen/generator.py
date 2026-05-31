@@ -161,47 +161,141 @@ class CodeGenerator:
             output_vars = t.data_code(w, input_vars)
             var_table[node["id"]] = output_vars
 
-        # Find variable that feeds into the model
-        model_nodes = flow.get("model_nodes", [])
-        data_var = self._find_model_input_var(model_nodes, var_table)
-
         optimizers = flow.get("optimizers", [])
         batch_size = optimizers[0].get("batchSize", 32) if optimizers else 32
         shuffle = optimizers[0].get("shuffle", True) if optimizers else True
 
-        w.line(f"dataset = TensorDataset({data_var}, {data_var})")
-        w.line(
-            f"loader = DataLoader(dataset, batch_size={batch_size}, shuffle={shuffle})"
-        )
-        w.line("return loader")
+        model_nodes = flow.get("model_nodes", [])
+
+        if model_nodes and optimizers:
+            train_feat, test_feat = self._find_model_features(
+                model_nodes[0]["id"], var_table
+            )
+            train_label, test_label = self._find_labels(optimizers[0], var_table)
+
+            # --- Train loader: prefer train split, fallback to test, fallback to any variable ---
+            t_feat = train_feat or test_feat
+            t_label = train_label or test_label or t_feat
+
+            # If still nothing, pick any variable from var_table
+            if not t_feat:
+                t_feat = self._any_var(var_table)
+                t_label = t_feat
+
+            w.line(f"train_dataset = TensorDataset({t_feat}, {t_label})")
+            w.line(
+                f"train_loader = DataLoader(train_dataset, batch_size={batch_size}, shuffle={shuffle})"
+            )
+
+            # --- Val loader: prefer test split, fallback to train, fallback to any ---
+            v_feat = test_feat or train_feat or self._any_var(var_table)
+            v_label = test_label or train_label or v_feat
+
+            w.line(f"val_dataset = TensorDataset({v_feat}, {v_label})")
+            w.line(
+                f"val_loader = DataLoader(val_dataset, batch_size={batch_size}, shuffle=False)"
+            )
+            w.line("return train_loader, val_loader")
+        else:
+            first_var = self._any_var(var_table)
+            w.line(f"dataset = TensorDataset({first_var}, {first_var})")
+            w.line(
+                f"loader = DataLoader(dataset, batch_size={batch_size}, shuffle={shuffle})"
+            )
+            w.line("return loader")
+
         w.dedent()
         w.line("")
 
-    def _find_model_input_var(self, model_nodes, var_table):
-        """Find the variable name that feeds into the first model node."""
-        if not model_nodes:
-            for vars_list in var_table.values():
-                if vars_list:
-                    return vars_list[0]
-            return "data"
-
-        first_model = model_nodes[0]
-        for link in self.links:
-            if self._port_node_id(link["to"]) == first_model["id"]:
-                src_node = self._port_node_id(link["from"])
-                if src_node in var_table:
-                    vars_list = var_table[src_node]
-                    src_port_id = link["from"]
-                    src_node_obj = self._node_map.get(src_node, {})
-                    for j, op in enumerate(src_node_obj.get("outputPorts", [])):
-                        if op["id"] == src_port_id and j < len(vars_list):
-                            return vars_list[j]
-                    return vars_list[0]
-
+    def _any_var(self, var_table):
+        """Return the first available variable from the var_table."""
         for vars_list in var_table.values():
             if vars_list:
                 return vars_list[0]
         return "data"
+
+    def _find_model_features(self, model_node_id, var_table):
+        """Return (train_var, test_var) feeding the model node."""
+        train_var, test_var = None, None
+        for link in self.links:
+            if self._port_node_id(link["to"]) == model_node_id:
+                src_node_id = self._port_node_id(link["from"])
+                if src_node_id not in var_table:
+                    continue
+                var = self._get_output_var(src_node_id, link["from"], var_table)
+                if var is None:
+                    continue
+                split = self._get_split_source(src_node_id, link["from"])
+                if split == "train":
+                    train_var = var
+                elif split == "test":
+                    test_var = var
+                else:
+                    # Unknown split — treat as train
+                    if train_var is None:
+                        train_var = var
+        return train_var, test_var
+
+    def _find_labels(self, optimizer, var_table):
+        """Return (train_label, test_label) from optimizer's labels port."""
+        train_var, test_var = None, None
+        for port in optimizer.get("inputPorts", []):
+            if port.get("role") != "labels":
+                continue
+            port_id = port["id"]
+            for link in self.links:
+                if link["to"] != port_id:
+                    continue
+                src_node_id = self._port_node_id(link["from"])
+                if src_node_id not in var_table:
+                    continue
+                var = self._get_output_var(src_node_id, link["from"], var_table)
+                if var is None:
+                    continue
+                split = self._get_split_source(src_node_id, link["from"])
+                if split == "train":
+                    train_var = var
+                elif split == "test":
+                    test_var = var
+                else:
+                    if train_var is None:
+                        train_var = var
+        return train_var, test_var
+
+    def _get_output_var(self, node_id, port_id, var_table):
+        """Get the variable name for a specific output port of a node."""
+        vars_list = var_table.get(node_id, [])
+        node = self._node_map.get(node_id, {})
+        for j, op in enumerate(node.get("outputPorts", [])):
+            if op["id"] == port_id and j < len(vars_list):
+                return vars_list[j]
+        return vars_list[0] if vars_list else None
+
+    def _get_split_source(self, start_node_id, start_port_id):
+        """Trace backward from a node to find which TrainTestSplit output feeds it.
+        Returns "train", "test", or None."""
+        current_node = start_node_id
+        current_port = start_port_id
+
+        for _ in range(50):  # Safety limit
+            node = self._node_map.get(current_node, {})
+            if node.get("type") == "train-test":
+                # Determine which output port we came from
+                for op in node.get("outputPorts", []):
+                    if op["id"] == current_port:
+                        return op.get("subType")
+                return None
+
+            # Move one step back: find the link that feeds this node
+            incoming = self._links_to(current_node)
+            if not incoming:
+                break
+            # Follow the first incoming link
+            link = incoming[0]
+            current_port = link["from"]
+            current_node = self._port_node_id(current_port)
+
+        return None
 
     # ========== TRAINING ==========
 
@@ -220,13 +314,14 @@ class CodeGenerator:
         loop_phases = {m: p for m, p in phases.items() if p["is_loop"]}
         eval_phases = {m: p for m, p in phases.items() if not p["is_loop"]}
 
-        w.line("def train_model(model, loader, optimizer, loss_fn):")
+        w.line("def train_model(model, train_loader, val_loader, optimizer, loss_fn):")
         w.indent()
         w.line("train_losses = []")
-        if eval_phases:
-            w.line("val_losses = []")
-        else:
-            w.line("val_losses = []  # No eval phases configured")
+        w.line(
+            "val_losses = []  # No eval phases configured"
+            if not eval_phases
+            else "val_losses = []"
+        )
 
         if early_stop and eval_phases:
             w.line("best_val_loss = float('inf')")
@@ -240,7 +335,7 @@ class CodeGenerator:
             w.line(f"# Phase: {mode}")
             w.line("model.train()")
             w.line("total_loss = 0")
-            w.line("for batch_x, batch_y in loader:")
+            w.line("for batch_x, batch_y in train_loader:")
             w.indent()
             w.line("optimizer.zero_grad()")
             w.line(f"pred = model(batch_x, phase='{mode}')")
@@ -253,7 +348,7 @@ class CodeGenerator:
             w.line("optimizer.step()")
             w.line("total_loss += loss.item()")
             w.dedent()
-            w.line("train_losses.append(total_loss / len(loader))")
+            w.line("train_losses.append(total_loss / len(train_loader))")
 
         if eval_phases:
             w.line("")
@@ -263,14 +358,14 @@ class CodeGenerator:
             w.indent()
             for mode in eval_phases:
                 w.line(f"# Phase: {mode}")
-                w.line("for batch_x, batch_y in loader:")
+                w.line("for batch_x, batch_y in val_loader:")
                 w.indent()
                 w.line(f"pred = model(batch_x, phase='{mode}')")
                 w.line("loss = loss_fn(pred, batch_y)")
                 w.line("val_loss += loss.item()")
                 w.dedent()
             w.dedent()
-            w.line("val_losses.append(val_loss / len(loader))")
+            w.line("val_losses.append(val_loss / len(val_loader))")
 
         w.line(f"print(f'Epoch {{epoch+1}}/{epochs}')")
 
@@ -305,7 +400,7 @@ class CodeGenerator:
     def _generate_main(self, w, flow):
         w.line('if __name__ == "__main__":')
         w.indent()
-        w.line("loader = load_data()")
+        w.line("train_loader, val_loader = load_data()")
         w.line("model = SketchNetModel()")
         w.line("")
 
@@ -316,7 +411,8 @@ class CodeGenerator:
             t.optimizer_code(w)
             w.line("")
             w.line(
-                "train_losses, val_losses = train_model(model, loader, optimizer, loss_fn)"
+                "train_losses, val_losses = train_model("
+                "model, train_loader, val_loader, optimizer, loss_fn)"
             )
             w.line("")
             w.line("# Final evaluation")
@@ -325,7 +421,7 @@ class CodeGenerator:
             w.line("total = 0")
             w.line("with torch.no_grad():")
             w.indent()
-            w.line("for batch_x, batch_y in loader:")
+            w.line("for batch_x, batch_y in val_loader:")
             w.indent()
             w.line("pred = model(batch_x, phase='last_batch')")
             w.line("_, predicted = torch.max(pred, 1)")
@@ -346,7 +442,6 @@ class CodeGenerator:
     # ========== HELPERS ==========
 
     def _build_input_vars(self, node, var_table):
-        """Build input_vars dict for a node from upstream connections."""
         input_vars = {}
         for port_data in node.get("inputPorts", []):
             port_id = port_data["id"]
@@ -354,9 +449,9 @@ class CodeGenerator:
             for link in self.links:
                 if link["to"] == port_id:
                     src_node_id = self._port_node_id(link["from"])
-                    src_port_id = link["from"]
                     if src_node_id in var_table:
                         vars_list = var_table[src_node_id]
+                        src_port_id = link["from"]
                         src_node_obj = self._node_map.get(src_node_id, {})
                         for j, op in enumerate(src_node_obj.get("outputPorts", [])):
                             if op["id"] == src_port_id and j < len(vars_list):

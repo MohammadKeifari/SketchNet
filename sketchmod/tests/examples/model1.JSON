@@ -3,8 +3,8 @@
         {
             "id": "input-main",
             "type": "input-data",
-            "x": 80,
-            "y": 336.2096453195737,
+            "x": 62.31626808035244,
+            "y": 338.42011180952966,
             "inputPorts": [],
             "outputPorts": [
                 {
@@ -12,7 +12,12 @@
                     "type": "output",
                     "index": 0,
                     "subType": null,
-                    "shape": null,
+                    "shape": {
+                        "shape": ["x", "5"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -25,22 +30,27 @@
             "paramOutputs": [],
             "numParamInputs": 0,
             "numParamOutputs": 0,
-            "datasetId": "dEhITrHK",
-            "datasetName": "test 1",
-            "dataShape": null
+            "datasetId": null,
+            "datasetName": null,
+            "dataShape": "(x, 5)"
         },
         {
             "id": "output-main",
             "type": "output",
-            "x": 839.5686086766297,
-            "y": 269.5158653511064,
+            "x": 943.1606275498341,
+            "y": 293.10391550789865,
             "inputPorts": [
                 {
                     "id": "output-main_input_0",
                     "type": "input",
                     "index": 0,
                     "subType": "train",
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.7 * x", "1"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 },
@@ -49,7 +59,12 @@
                     "type": "input",
                     "index": 1,
                     "subType": "test",
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.7 * x", "1"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -101,8 +116,8 @@
         {
             "id": "o2",
             "type": "optimizer",
-            "x": 1041.7716673777695,
-            "y": 151.92647857967745,
+            "x": 1047.071924819625,
+            "y": 139.37931551742898,
             "inputPorts": [
                 {
                     "id": "o2_input_0",
@@ -120,7 +135,12 @@
                     "type": "input",
                     "index": 1,
                     "subType": null,
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.7 * x", "1"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "role",
                     "activationMode": "every_batch",
@@ -136,7 +156,7 @@
             "paramOutputs": [],
             "numParamInputs": 0,
             "numParamOutputs": 0,
-            "lossType": "cross_entropy",
+            "lossType": "mse",
             "optimizerType": "adam",
             "learningRate": 0.001,
             "adamBeta1": 0.9,
@@ -155,15 +175,20 @@
         {
             "id": "t5",
             "type": "train-test",
-            "x": 361,
-            "y": 337,
+            "x": 353.2633672851542,
+            "y": 314.89533510044055,
             "inputPorts": [
                 {
                     "id": "t5_input_0",
                     "type": "input",
                     "index": 0,
                     "subType": null,
-                    "shape": null,
+                    "shape": {
+                        "shape": ["x", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -174,7 +199,12 @@
                     "type": "output",
                     "index": 0,
                     "subType": "train",
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.7 * x", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 },
@@ -183,7 +213,12 @@
                     "type": "output",
                     "index": 1,
                     "subType": "test",
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.3 * x", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -203,15 +238,20 @@
         {
             "id": "c6",
             "type": "column-select",
-            "x": 211,
-            "y": 338,
+            "x": 208.78953351004407,
+            "y": 336.89476675502203,
             "inputPorts": [
                 {
                     "id": "c6_input_0",
                     "type": "input",
                     "index": 0,
                     "subType": null,
-                    "shape": null,
+                    "shape": {
+                        "shape": ["x", "5"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -222,7 +262,12 @@
                     "type": "output",
                     "index": 0,
                     "subType": null,
-                    "shape": null,
+                    "shape": {
+                        "shape": ["x", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -252,7 +297,12 @@
                     "type": "input",
                     "index": 0,
                     "subType": null,
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.7 * x", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -263,7 +313,12 @@
                     "type": "output",
                     "index": 0,
                     "subType": "labels",
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.7 * x", "1"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -285,15 +340,20 @@
         {
             "id": "c10",
             "type": "column-select",
-            "x": 523.9655525731555,
-            "y": 244.21323928983875,
+            "x": 515.1236866133318,
+            "y": 253.0551052496625,
             "inputPorts": [
                 {
                     "id": "c10_input_0",
                     "type": "input",
                     "index": 0,
                     "subType": null,
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.7 * x", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -304,7 +364,12 @@
                     "type": "output",
                     "index": 0,
                     "subType": "features",
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.7 * x", "2"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -326,15 +391,20 @@
         {
             "id": "c11",
             "type": "column-select",
-            "x": 543.9617564358092,
-            "y": 484.9019560274488,
+            "x": 515.3760687371359,
+            "y": 483.7037146405647,
             "inputPorts": [
                 {
                     "id": "c11_input_0",
                     "type": "input",
                     "index": 0,
                     "subType": null,
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.3 * x", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -345,7 +415,12 @@
                     "type": "output",
                     "index": 0,
                     "subType": "labels",
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.3 * x", "1"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -367,15 +442,20 @@
         {
             "id": "c12",
             "type": "column-select",
-            "x": 533.9598583671361,
-            "y": 370.0575976586438,
+            "x": 512.6274136768199,
+            "y": 343.6316009190123,
             "inputPorts": [
                 {
                     "id": "c12_input_0",
                     "type": "input",
                     "index": 0,
                     "subType": null,
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.3 * x", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -386,7 +466,12 @@
                     "type": "output",
                     "index": 0,
                     "subType": "features",
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.3 * x", "2"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -399,8 +484,8 @@
             "paramOutputs": [],
             "numParamInputs": 0,
             "numParamOutputs": 0,
-            "selectedColumns": [],
-            "columnInput": "",
+            "selectedColumns": [1, 2],
+            "columnInput": "1:2",
             "availableColumns": [],
             "columnCount": 0,
             "datasetId": null
@@ -408,15 +493,20 @@
         {
             "id": "n13",
             "type": "neuron",
-            "x": 698.7866981156831,
-            "y": 301.73610660516346,
+            "x": 739.2763890034335,
+            "y": 302.1886763172477,
             "inputPorts": [
                 {
                     "id": "n13_input_0",
                     "type": "input",
                     "index": 0,
                     "subType": null,
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.7 * x", "2"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "multi"
                 }
@@ -427,7 +517,12 @@
                     "type": "output",
                     "index": 0,
                     "subType": null,
-                    "shape": null,
+                    "shape": {
+                        "shape": ["0.7 * x", "1"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
                     "bias": 0,
                     "portKind": "data"
                 }
@@ -441,6 +536,56 @@
             "paramOutputs": [],
             "numParamInputs": 0,
             "numParamOutputs": 0
+        },
+        {
+            "id": "v15",
+            "type": "visualization",
+            "x": 1125.5449662949768,
+            "y": 358.85726108148606,
+            "inputPorts": [
+                {
+                    "id": "v15_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": "coord",
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                },
+                {
+                    "id": "v15_input_1",
+                    "type": "input",
+                    "index": 1,
+                    "subType": "coord",
+                    "shape": {
+                        "shape": ["0.3 * x", "1"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": true
+                    },
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "colorMode": "none",
+            "colorPalette": [
+                "#ef4444",
+                "#4ade80",
+                "#60a5fa",
+                "#f59e0b",
+                "#a78bfa"
+            ],
+            "continuousMinColor": "#3b82f6",
+            "continuousMaxColor": "#ef4444"
         }
     ],
     "links": [
@@ -504,26 +649,46 @@
             "from": "c12_output_0",
             "to": "n13_input_0",
             "weight": 0,
-            "weightShape": null,
+            "weightShape": {
+                "shape": [1, "2"],
+                "dtype": "float32"
+            },
             "hasWeight": true
-        },
-        {
-            "from": "n13_output_0",
-            "to": "output-main_input_1",
-            "weight": 0,
-            "weightShape": null,
-            "hasWeight": false
         },
         {
             "from": "c10_output_0",
             "to": "n13_input_0",
             "weight": 0,
-            "weightShape": null,
+            "weightShape": {
+                "shape": [1, "2"],
+                "dtype": "float32"
+            },
             "hasWeight": true
+        },
+        {
+            "from": "output-main_output_1",
+            "to": "v15_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "c11_output_0",
+            "to": "v15_input_1",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
         },
         {
             "from": "n13_output_0",
             "to": "output-main_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "n13_output_0",
+            "to": "output-main_input_1",
             "weight": 0,
             "weightShape": null,
             "hasWeight": false
@@ -535,7 +700,12 @@
             "type": "output",
             "index": 0,
             "subType": null,
-            "shape": null,
+            "shape": {
+                "shape": ["x", "5"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -544,7 +714,12 @@
             "type": "input",
             "index": 0,
             "subType": "train",
-            "shape": null,
+            "shape": {
+                "shape": ["0.7 * x", "1"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -553,7 +728,12 @@
             "type": "input",
             "index": 1,
             "subType": "test",
-            "shape": null,
+            "shape": {
+                "shape": ["0.7 * x", "1"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -606,7 +786,12 @@
             "type": "input",
             "index": 1,
             "subType": null,
-            "shape": null,
+            "shape": {
+                "shape": ["0.7 * x", "1"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "role",
             "activationMode": "every_batch",
@@ -617,7 +802,12 @@
             "type": "input",
             "index": 0,
             "subType": null,
-            "shape": null,
+            "shape": {
+                "shape": ["x", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -626,7 +816,12 @@
             "type": "output",
             "index": 0,
             "subType": "train",
-            "shape": null,
+            "shape": {
+                "shape": ["0.7 * x", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -635,7 +830,12 @@
             "type": "output",
             "index": 1,
             "subType": "test",
-            "shape": null,
+            "shape": {
+                "shape": ["0.3 * x", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -644,7 +844,12 @@
             "type": "input",
             "index": 0,
             "subType": null,
-            "shape": null,
+            "shape": {
+                "shape": ["x", "5"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -653,7 +858,12 @@
             "type": "output",
             "index": 0,
             "subType": null,
-            "shape": null,
+            "shape": {
+                "shape": ["x", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -662,7 +872,12 @@
             "type": "input",
             "index": 0,
             "subType": null,
-            "shape": null,
+            "shape": {
+                "shape": ["0.7 * x", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -671,7 +886,12 @@
             "type": "output",
             "index": 0,
             "subType": "labels",
-            "shape": null,
+            "shape": {
+                "shape": ["0.7 * x", "1"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -680,7 +900,12 @@
             "type": "input",
             "index": 0,
             "subType": null,
-            "shape": null,
+            "shape": {
+                "shape": ["0.7 * x", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -689,7 +914,12 @@
             "type": "output",
             "index": 0,
             "subType": "features",
-            "shape": null,
+            "shape": {
+                "shape": ["0.7 * x", "2"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -698,7 +928,12 @@
             "type": "input",
             "index": 0,
             "subType": null,
-            "shape": null,
+            "shape": {
+                "shape": ["0.3 * x", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -707,7 +942,12 @@
             "type": "output",
             "index": 0,
             "subType": "labels",
-            "shape": null,
+            "shape": {
+                "shape": ["0.3 * x", "1"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -716,7 +956,12 @@
             "type": "input",
             "index": 0,
             "subType": null,
-            "shape": null,
+            "shape": {
+                "shape": ["0.3 * x", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -725,7 +970,12 @@
             "type": "output",
             "index": 0,
             "subType": "features",
-            "shape": null,
+            "shape": {
+                "shape": ["0.3 * x", "2"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "data"
         },
@@ -734,7 +984,12 @@
             "type": "input",
             "index": 0,
             "subType": null,
-            "shape": null,
+            "shape": {
+                "shape": ["0.7 * x", "2"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
             "bias": 0,
             "portKind": "multi"
         },
@@ -743,10 +998,38 @@
             "type": "output",
             "index": 0,
             "subType": null,
+            "shape": {
+                "shape": ["0.7 * x", "1"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "v15_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": "coord",
             "shape": null,
             "bias": 0,
             "portKind": "data"
+        },
+        {
+            "id": "v15_input_1",
+            "type": "input",
+            "index": 1,
+            "subType": "coord",
+            "shape": {
+                "shape": ["0.3 * x", "1"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": true
+            },
+            "bias": 0,
+            "portKind": "data"
         }
-    ],
-    "nodeCounter": 14
+    ],  
+    "nodeCounter": 18
 }
