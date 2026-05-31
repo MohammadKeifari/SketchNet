@@ -1,0 +1,752 @@
+{
+    "nodes": [
+        {
+            "id": "input-main",
+            "type": "input-data",
+            "x": 80,
+            "y": 336.2096453195737,
+            "inputPorts": [],
+            "outputPorts": [
+                {
+                    "id": "input-main_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "numInputs": 0,
+            "numOutputs": 1,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "datasetId": "dEhITrHK",
+            "datasetName": "test 1",
+            "dataShape": null
+        },
+        {
+            "id": "output-main",
+            "type": "output",
+            "x": 839.5686086766297,
+            "y": 269.5158653511064,
+            "inputPorts": [
+                {
+                    "id": "output-main_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": "train",
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                },
+                {
+                    "id": "output-main_input_1",
+                    "type": "input",
+                    "index": 1,
+                    "subType": "test",
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "output-main_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "role",
+                    "activationMode": "every_batch",
+                    "role": "loss"
+                },
+                {
+                    "id": "output-main_output_1",
+                    "type": "output",
+                    "index": 1,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "role",
+                    "activationMode": "every_batch",
+                    "role": "prediction"
+                },
+                {
+                    "id": "output-main_output_2",
+                    "type": "output",
+                    "index": 2,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "role",
+                    "activationMode": "every_batch",
+                    "role": "evaluation"
+                }
+            ],
+            "numInputs": 2,
+            "numOutputs": 3,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0
+        },
+        {
+            "id": "o2",
+            "type": "optimizer",
+            "x": 1041.7716673777695,
+            "y": 151.92647857967745,
+            "inputPorts": [
+                {
+                    "id": "o2_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "role",
+                    "activationMode": "every_batch",
+                    "role": "loss"
+                },
+                {
+                    "id": "o2_input_1",
+                    "type": "input",
+                    "index": 1,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "role",
+                    "activationMode": "every_batch",
+                    "role": "labels"
+                }
+            ],
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "lossType": "cross_entropy",
+            "optimizerType": "adam",
+            "learningRate": 0.001,
+            "adamBeta1": 0.9,
+            "adamBeta2": 0.999,
+            "adamEpsilon": 1e-8,
+            "sgdMomentum": 0.9,
+            "weightDecay": 0,
+            "nesterov": false,
+            "epochs": 10,
+            "batchSize": 32,
+            "shuffle": true,
+            "gradientClip": null,
+            "earlyStopping": false,
+            "earlyStoppingPatience": 10
+        },
+        {
+            "id": "t5",
+            "type": "train-test",
+            "x": 361,
+            "y": 337,
+            "inputPorts": [
+                {
+                    "id": "t5_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "t5_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "subType": "train",
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                },
+                {
+                    "id": "t5_output_1",
+                    "type": "output",
+                    "index": 1,
+                    "subType": "test",
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 2,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "trainRatio": 0.7,
+            "testRatio": 0.3,
+            "randomSeed": 42
+        },
+        {
+            "id": "c6",
+            "type": "column-select",
+            "x": 211,
+            "y": 338,
+            "inputPorts": [
+                {
+                    "id": "c6_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "c6_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "selectedColumns": [0, 1, 2],
+            "columnInput": "0:2",
+            "availableColumns": [],
+            "columnCount": 0,
+            "datasetId": null
+        },
+        {
+            "id": "c9",
+            "type": "column-select",
+            "x": 519.9731448478478,
+            "y": 162.3688809210337,
+            "inputPorts": [
+                {
+                    "id": "c9_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "c9_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "subType": "labels",
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "selectedColumns": [2],
+            "columnInput": "2",
+            "availableColumns": [],
+            "columnCount": 0,
+            "datasetId": null
+        },
+        {
+            "id": "c10",
+            "type": "column-select",
+            "x": 523.9655525731555,
+            "y": 244.21323928983875,
+            "inputPorts": [
+                {
+                    "id": "c10_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "c10_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "subType": "features",
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "selectedColumns": [0, 1],
+            "columnInput": "0,1",
+            "availableColumns": [],
+            "columnCount": 0,
+            "datasetId": null
+        },
+        {
+            "id": "c11",
+            "type": "column-select",
+            "x": 543.9617564358092,
+            "y": 484.9019560274488,
+            "inputPorts": [
+                {
+                    "id": "c11_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "c11_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "subType": "labels",
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "selectedColumns": [2],
+            "columnInput": "2",
+            "availableColumns": [],
+            "columnCount": 0,
+            "datasetId": null
+        },
+        {
+            "id": "c12",
+            "type": "column-select",
+            "x": 533.9598583671361,
+            "y": 370.0575976586438,
+            "inputPorts": [
+                {
+                    "id": "c12_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "c12_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "subType": "features",
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "selectedColumns": [],
+            "columnInput": "",
+            "availableColumns": [],
+            "columnCount": 0,
+            "datasetId": null
+        },
+        {
+            "id": "n13",
+            "type": "neuron",
+            "x": 698.7866981156831,
+            "y": 301.73610660516346,
+            "inputPorts": [
+                {
+                    "id": "n13_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "multi"
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "n13_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "subType": null,
+                    "shape": null,
+                    "bias": 0,
+                    "portKind": "data"
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "activation": "relu",
+            "bias": 0,
+            "hasBias": true,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0
+        }
+    ],
+    "links": [
+        {
+            "from": "output-main_output_0",
+            "to": "o2_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "input-main_output_0",
+            "to": "c6_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "c6_output_0",
+            "to": "t5_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "t5_output_0",
+            "to": "c9_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "t5_output_0",
+            "to": "c10_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "t5_output_1",
+            "to": "c11_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "t5_output_1",
+            "to": "c12_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "c9_output_0",
+            "to": "o2_input_1",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "c12_output_0",
+            "to": "n13_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": true
+        },
+        {
+            "from": "n13_output_0",
+            "to": "output-main_input_1",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "c10_output_0",
+            "to": "n13_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": true
+        },
+        {
+            "from": "n13_output_0",
+            "to": "output-main_input_0",
+            "weight": 0,
+            "weightShape": null,
+            "hasWeight": false
+        }
+    ],
+    "ports": [
+        {
+            "id": "input-main_output_0",
+            "type": "output",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "output-main_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": "train",
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "output-main_input_1",
+            "type": "input",
+            "index": 1,
+            "subType": "test",
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "output-main_output_0",
+            "type": "output",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "role",
+            "activationMode": "every_batch",
+            "role": "loss"
+        },
+        {
+            "id": "output-main_output_1",
+            "type": "output",
+            "index": 1,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "role",
+            "activationMode": "every_batch",
+            "role": "prediction"
+        },
+        {
+            "id": "output-main_output_2",
+            "type": "output",
+            "index": 2,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "role",
+            "activationMode": "every_batch",
+            "role": "evaluation"
+        },
+        {
+            "id": "o2_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "role",
+            "activationMode": "every_batch",
+            "role": "loss"
+        },
+        {
+            "id": "o2_input_1",
+            "type": "input",
+            "index": 1,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "role",
+            "activationMode": "every_batch",
+            "role": "labels"
+        },
+        {
+            "id": "t5_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "t5_output_0",
+            "type": "output",
+            "index": 0,
+            "subType": "train",
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "t5_output_1",
+            "type": "output",
+            "index": 1,
+            "subType": "test",
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "c6_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "c6_output_0",
+            "type": "output",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "c9_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "c9_output_0",
+            "type": "output",
+            "index": 0,
+            "subType": "labels",
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "c10_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "c10_output_0",
+            "type": "output",
+            "index": 0,
+            "subType": "features",
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "c11_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "c11_output_0",
+            "type": "output",
+            "index": 0,
+            "subType": "labels",
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "c12_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "c12_output_0",
+            "type": "output",
+            "index": 0,
+            "subType": "features",
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        },
+        {
+            "id": "n13_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "multi"
+        },
+        {
+            "id": "n13_output_0",
+            "type": "output",
+            "index": 0,
+            "subType": null,
+            "shape": null,
+            "bias": 0,
+            "portKind": "data"
+        }
+    ],
+    "nodeCounter": 14
+}

@@ -53,6 +53,32 @@ class CodeGenerator:
             w.dedent()
         w.line("")
 
+    def _resolve_in_features(self, model_nodes):
+        """Get input feature count from the graph's shape data."""
+        if not model_nodes:
+            return None
+
+        first_node = model_nodes[0]
+        incoming = self._links_to(first_node["id"])
+        if not incoming:
+            return None
+
+        # Get the source port's shape
+        src_port_id = incoming[0]["from"]
+        src_port = self._port_map.get(src_port_id, {})
+        shape_data = src_port.get("shape", {})
+
+        if shape_data and shape_data.get("shape"):
+            shape = shape_data["shape"]
+            # Last element is the feature dimension
+            last_dim = shape[-1]
+            if isinstance(last_dim, (int, float)):
+                return int(last_dim)
+            # If symbolic (like "x"), keep it as a comment
+            return f"in_features  # = {last_dim}"
+
+        return "in_features  # TODO: resolve from data shape"
+
     def _generate_model(self, w, flow):
         model_nodes = flow.get("model_nodes", [])
         if not model_nodes:
@@ -88,8 +114,11 @@ class CodeGenerator:
         else:
             input_vars = {0: "x"}
             skip_vars = {}
+            in_features = self._resolve_in_features(model_nodes)
+
             for node in model_nodes:
                 t = get_translator(node, self)
+                t.init_code(w, is_sequential=is_seq, in_features=in_features)
                 output_vars = t.forward_code(w, input_vars, skip_vars)
                 skip_vars[node["id"]] = output_vars
                 # Set up input_vars for next node
@@ -130,38 +159,76 @@ class CodeGenerator:
         w.line('"""Load and preprocess data."""')
         w.line("")
 
+        # Find the TrainTestSplit node
+        split_node = next((n for n in preprocessing if n["type"] == "train-test"), None)
+
+        # Step 1: Generate nodes BEFORE the split (operate on full data)
         var_table = {}
         for node in preprocessing:
+            if split_node and node["id"] == split_node["id"]:
+                break  # Stop at the split
             t = get_translator(node, self)
             input_vars = self._build_input_vars(node, var_table)
             output_vars = t.data_code(w, input_vars)
             var_table[node["id"]] = output_vars
 
-        # Create DataLoaders from the train/test split outputs
-        split_node = next((n for n in preprocessing if n["type"] == "train-test"), None)
+        # Step 2: Generate the split
+        if split_node:
+            t = get_translator(split_node, self)
+            input_vars = self._build_input_vars(split_node, var_table)
+            output_vars = t.data_code(w, input_vars)
+            var_table[split_node["id"]] = output_vars
+
+        # Step 3: Trace train and test paths separately
+        train_path, test_path = self._trace_split_paths(split_node, preprocessing)
+
+        # Step 3a: Train path preprocessing
+        train_var_table = dict(var_table)  # Copy upstream vars
+        for node in train_path:
+            t = get_translator(node, self)
+            input_vars = self._build_input_vars_from_path(
+                node, train_var_table, split_node, "train"
+            )
+            output_vars = t.data_code(w, input_vars)
+            train_var_table[node["id"]] = output_vars
+
+        # Step 3b: Test path preprocessing
+        test_var_table = dict(var_table)
+        for node in test_path:
+            t = get_translator(node, self)
+            input_vars = self._build_input_vars_from_path(
+                node, test_var_table, split_node, "test"
+            )
+            output_vars = t.data_code(w, input_vars)
+            test_var_table[node["id"]] = output_vars
+
+        # Step 4: Create DataLoaders
         optimizers = flow.get("optimizers", [])
         batch_size = optimizers[0].get("batchSize", 32) if optimizers else 32
         shuffle = optimizers[0].get("shuffle", True) if optimizers else True
 
-        if split_node:
+        # Find the final variables that feed the model
+        train_features = self._find_terminal_var(
+            train_path, train_var_table, split_node
+        )
+        test_features = self._find_terminal_var(test_path, test_var_table, split_node)
+
+        if train_features and test_features:
+            w.line(
+                f"train_dataset = TensorDataset({train_features}, {train_features})  # TODO: separate labels"
+            )
+            w.line(
+                f"val_dataset = TensorDataset({test_features}, {test_features})  # TODO: separate labels"
+            )
+        elif split_node:
             split_vars = var_table.get(split_node["id"], [])
             if len(split_vars) >= 2:
-                train_var, test_var = split_vars[0], split_vars[1]
                 w.line(
-                    f"train_dataset = TensorDataset({train_var}, {train_var})  # TODO: separate features/labels"
+                    f"train_dataset = TensorDataset({split_vars[0]}, {split_vars[0]})"
                 )
-                w.line(
-                    f"val_dataset = TensorDataset({test_var}, {test_var})  # TODO: separate features/labels"
-                )
-            else:
-                w.line(
-                    "train_dataset = TensorDataset(data, data)  # TODO: configure properly"
-                )
-                w.line("val_dataset = TensorDataset(data[:100], data[:100])")
+                w.line(f"val_dataset = TensorDataset({split_vars[1]}, {split_vars[1]})")
         else:
-            w.line(
-                "train_dataset = TensorDataset(data, data)  # TODO: configure properly"
-            )
+            w.line("train_dataset = TensorDataset(data, data)")
             w.line("val_dataset = TensorDataset(data[:100], data[:100])")
 
         w.line(
@@ -173,24 +240,111 @@ class CodeGenerator:
         w.line("return train_loader, val_loader")
         w.dedent()
         w.line("")
-        preprocessing = flow["preprocessing"]["nodes"]
-        if not preprocessing:
-            return
 
-        w.line("def load_data():")
-        w.indent()
-        w.line('"""Load and preprocess data."""')
-        w.line("")
+    def _trace_split_paths(self, split_node, all_preprocessing):
+        """Trace which preprocessing nodes are on the train vs test path after the split."""
+        if not split_node:
+            return [], []
 
-        var_table = {}
-        for node in preprocessing:
-            t = get_translator(node, self)
-            input_vars = self._build_input_vars(node, var_table)
-            output_vars = t.data_code(w, input_vars)
-            var_table[node["id"]] = output_vars
+        split_idx = all_preprocessing.index(split_node)
+        after_split = all_preprocessing[split_idx + 1 :]
 
-        w.dedent()
-        w.line("")
+        train_output_port = None
+        test_output_port = None
+        for port in split_node.get("outputPorts", []):
+            if port.get("subType") == "train":
+                train_output_port = port["id"]
+            elif port.get("subType") == "test":
+                test_output_port = port["id"]
+
+        # BFS from each split output to find reachable nodes
+        train_reachable = (
+            self._reachable_from(train_output_port) if train_output_port else set()
+        )
+        test_reachable = (
+            self._reachable_from(test_output_port) if test_output_port else set()
+        )
+
+        train_path = [
+            n
+            for n in after_split
+            if n["id"] in train_reachable and n["type"] != "output"
+        ]
+        test_path = [
+            n
+            for n in after_split
+            if n["id"] in test_reachable and n["type"] != "output"
+        ]
+
+        return train_path, test_path
+
+    def _reachable_from(self, port_id):
+        """BFS from a port to find all reachable node IDs."""
+        reachable = set()
+        queue = [port_id]
+        while queue:
+            current = queue.pop(0)
+            for link in self.links:
+                if link["from"] == current:
+                    target_node = self._port_node_id(link["to"])
+                    if target_node and target_node not in reachable:
+                        reachable.add(target_node)
+                        # Add all outputs of this node to continue tracing
+                        target = self._node_map.get(target_node, {})
+                        for op in target.get("outputPorts", []):
+                            if op["id"] not in reachable:
+                                queue.append(op["id"])
+        return reachable
+
+    def _build_input_vars_from_path(self, node, var_table, split_node, path_type):
+        """Build input_vars for a node on a specific path (train/test)."""
+        input_vars = {}
+        incoming = self._links_to(node["id"])
+        for i, link in enumerate(incoming):
+            src_node_id = self._port_node_id(link["from"])
+            src_port_id = link["from"]
+
+            if src_node_id == split_node["id"]:
+                # This node connects directly to the split output
+                split_vars = var_table.get(split_node["id"], [])
+                for j, op in enumerate(split_node.get("outputPorts", [])):
+                    if op["id"] == src_port_id and j < len(split_vars):
+                        input_vars[i] = split_vars[j]
+                        break
+            elif src_node_id in var_table:
+                vars_list = var_table[src_node_id]
+                src_node_obj = self._node_map.get(src_node_id, {})
+                for j, op in enumerate(src_node_obj.get("outputPorts", [])):
+                    if op["id"] == src_port_id and j < len(vars_list):
+                        input_vars[i] = vars_list[j]
+                        break
+                else:
+                    input_vars[i] = vars_list[0] if vars_list else "data"
+            else:
+                input_vars[i] = "data"
+        return input_vars
+
+    def _find_terminal_var(self, path, var_table, split_node):
+        """Find the last variable produced on a path that feeds the model."""
+        if not path:
+            # No preprocessing on this path — use the split variable directly
+            split_vars = var_table.get(split_node["id"], []) if split_node else []
+            return split_vars[0] if split_vars else None
+
+        # Find the last node in the path that connects to a model node
+        for node in reversed(path):
+            outgoing = self._links_from(node["id"])
+            for link in outgoing:
+                target_id = self._port_node_id(link["to"])
+                target = self._node_map.get(target_id, {})
+                if (
+                    target.get("type") in FlowAnalyzer.MODEL_TYPES
+                    or target.get("type") == "output"
+                ):
+                    vars_list = var_table.get(node["id"], [])
+                    return vars_list[0] if vars_list else None
+
+        return None
 
     def _generate_training(self, w, flow):
         optimizers = flow.get("optimizers", [])
