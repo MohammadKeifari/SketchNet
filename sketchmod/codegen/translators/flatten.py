@@ -39,3 +39,12 @@ class FlattenTranslator(BaseTranslator):
             return " * ".join(str(d) for d in dims)
 
         return None
+
+    def validate(self):
+        errors, warnings = [], []
+        incoming = self.g.get_links_to(self.node["id"])
+
+        if len(incoming) < 1:
+            errors.append(f"{self.node['type']}: requires at least 1 input connection")
+
+        return {"errors": errors, "warnings": warnings}

@@ -154,3 +154,7 @@ class BaseTranslator:
 
     def training_code(self, writer):
         pass
+
+    def validate(self):
+        """Return {'errors': [...], 'warnings': [...]} for this node."""
+        return {"errors": [], "warnings": []}

@@ -14,3 +14,12 @@ class AddTranslator(BaseTranslator):
         out_var = f"data_{self.node_id()}"
         writer.line(f"{out_var} = {vars_list[0]} + {vars_list[1]}  # Skip connection")
         return [out_var]
+
+    def validate(self):
+        errors, warnings = [], []
+        incoming = self.g.get_links_to(self.node["id"])
+
+        if len(incoming) < 2:
+            errors.append("Add: requires at least 2 input connections")
+
+        return {"errors": errors, "warnings": warnings}

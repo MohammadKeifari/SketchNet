@@ -49,3 +49,12 @@ class Conv2DTranslator(BaseTranslator):
             fn = {"relu": "relu", "sigmoid": "sigmoid", "tanh": "tanh"}.get(act, act)
             writer.line(f"{out_var} = torch.{fn}({out_var})")
         return [out_var]
+
+    def validate(self):
+        errors, warnings = [], []
+        incoming = self.g.get_links_to(self.node["id"])
+
+        if len(incoming) < 1:
+            errors.append(f"{self.node['type']}: requires at least 1 input connection")
+
+        return {"errors": errors, "warnings": warnings}

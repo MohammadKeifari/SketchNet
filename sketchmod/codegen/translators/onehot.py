@@ -14,3 +14,12 @@ class OneHotEncodeTranslator(BaseTranslator):
         )
         writer.line("")
         return [out_var]
+
+    def validate(self):
+        errors, warnings = [], []
+        classes = self.node.get("numClasses", 10)
+
+        if classes < 2:
+            errors.append("OneHotEncode: number of classes must be at least 2")
+
+        return {"errors": errors, "warnings": warnings}

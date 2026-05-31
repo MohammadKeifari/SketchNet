@@ -34,3 +34,12 @@ class NeuronTranslator(BaseTranslator):
             writer.line(f"{out_var} = torch.{fn}({out_var})")
 
         return [out_var]
+
+    def validate(self):
+        errors, warnings = [], []
+        incoming = self.g.get_links_to(self.node["id"])
+
+        if len(incoming) < 1:
+            errors.append("Neuron: requires at least 1 input connection")
+
+        return {"errors": errors, "warnings": warnings}

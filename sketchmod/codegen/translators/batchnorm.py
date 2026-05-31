@@ -17,3 +17,12 @@ class BatchNormTranslator(BaseTranslator):
         out_var = self.output_vars()[0]
         writer.line(f"{out_var} = self.bn_{sid}({src_var})")
         return [out_var]
+
+    def validate(self):
+        errors, warnings = [], []
+        incoming = self.g.get_links_to(self.node["id"])
+
+        if len(incoming) < 1:
+            errors.append(f"{self.node['type']}: requires at least 1 input connection")
+
+        return {"errors": errors, "warnings": warnings}

@@ -35,3 +35,16 @@ class LayerTranslator(BaseTranslator):
             writer.line(f"{out_var} = torch.{fn}({out_var})")
 
         return [out_var]
+
+    def validate(self):
+        errors, warnings = [], []
+        incoming = self.g.get_links_to(self.node["id"])
+
+        if len(incoming) < 1:
+            errors.append("Layer: requires at least 1 input connection")
+
+        neurons = self.node.get("numNeurons", 64)
+        if neurons < 1:
+            errors.append(f"Layer: neurons must be >= 1, got {neurons}")
+
+        return {"errors": errors, "warnings": warnings}

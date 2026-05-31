@@ -23,3 +23,12 @@ class TrainTestSplitTranslator(BaseTranslator):
         writer.line(f"{test_var} = {src_var}[indices[split_idx:]]")
         writer.line("")
         return [train_var, test_var]
+
+    def validate(self):
+        errors, warnings = [], []
+        ratio = self.node.get("trainRatio", 0.7)
+
+        if ratio <= 0 or ratio >= 1:
+            errors.append("TrainTestSplit: train ratio must be between 0 and 1")
+
+        return {"errors": errors, "warnings": warnings}

@@ -34,3 +34,28 @@ class OutputTranslator(BaseTranslator):
         writer.dedent()
 
         return self.output_vars()
+
+    def validate(self):
+        errors, warnings = [], []
+
+        train_connected = False
+        test_connected = False
+
+        for port_data in self.node.get("inputPorts", []):
+            port_id = port_data["id"]
+            subtype = port_data.get("subType", "")
+            connected = any(l["to"] == port_id for l in self.g.links)
+
+            if subtype == "train":
+                train_connected = connected
+            elif subtype == "test":
+                test_connected = connected
+
+        if not train_connected and not test_connected:
+            warnings.append("Output: no input ports connected")
+        elif train_connected and not test_connected:
+            warnings.append("Output: only train port connected — no evaluation data")
+        elif test_connected and not train_connected:
+            warnings.append("Output: only test port connected — no training data")
+
+        return {"errors": errors, "warnings": warnings}
