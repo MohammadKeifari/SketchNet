@@ -104,6 +104,37 @@ class BaseTranslator:
                 total += 1
         return total if total > 0 else None
 
+    def _generate_multi_input_init(self, writer, sid, neurons):
+        """Generate init code for nodes with multiple inputs."""
+        incoming = self.g._links_to(self.node["id"])
+        for i, link in enumerate(incoming):
+            src_port_id = link["from"]
+            src_node_id = self.g._port_node_id(src_port_id)
+            feat = self._trace_features_back(src_node_id, src_port_id)
+            if feat is None:
+                feat = "in_features"
+            writer.line(f"self.{sid}_{i} = nn.Linear({feat}, {neurons})")
+        if self.node.get("hasBias", False):
+            writer.line(f"self.{sid}_bias = nn.Parameter(torch.zeros({neurons}))")
+
+    def _generate_multi_input_forward(self, writer, input_vars, sid, out_var):
+        """Generate forward code for nodes with multiple inputs."""
+        vars_list = list(input_vars.values())
+
+        if len(vars_list) <= 1:
+            writer.line(f"{out_var} = self.{sid}({vars_list[0]})")
+            return
+
+        terms = []
+        for i, var in enumerate(vars_list):
+            writer.line(f"{out_var}_{i} = self.{sid}_{i}({var})")
+            terms.append(f"{out_var}_{i}")
+
+        line = f"{out_var} = {' + '.join(terms)}"
+        if self.node.get("hasBias", False):
+            line += f" + self.{sid}_bias"
+        writer.line(line)
+
     # === MODEL ===
     def init_code(self, writer, is_sequential, in_features="in_features"):
         pass
