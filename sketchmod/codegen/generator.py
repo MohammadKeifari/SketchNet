@@ -67,14 +67,16 @@ class CodeGenerator:
         first_node = model_nodes[0]
         first_t = get_translator(first_node, self)
         in_features = first_t.input_features()
-        if in_features is None:
-            in_features = "in_features  # TODO: Resolve from data shape"
 
         w.line("class SketchNetModel(nn.Module):")
         w.indent()
         w.line("def __init__(self):")
         w.indent()
         w.line("super().__init__()")
+
+        if in_features is None:
+            w.line("# TODO: Resolve input features from data shape")
+            in_features = "in_features"
 
         if is_seq:
             w.line("self.model = nn.Sequential(")
