@@ -79,14 +79,12 @@ def export_api(request):
         else:
             graph = graph_json
 
-        generator = CodeGenerator(graph)
+        generator = CodeGenerator(graph)  # using the new generator
         code = generator.generate()
 
-        # ZIP export — bundle .py file with dataset
         if export_format == "pytorch-zip":
             return _export_zip(graph, code, request)
 
-        # Other formats — return JSON with code
         return JsonResponse(
             {
                 "success": True,
@@ -122,7 +120,6 @@ def _export_zip(graph, code, request):
                 from django.conf import settings
                 import os
 
-                # Query by the custom dataset_id field
                 dataset = Dataset.objects.get(dataset_id=dataset_id)
 
                 if dataset.file and dataset.file.name:
@@ -179,7 +176,6 @@ def _export_zip(graph, code, request):
             except Exception as e:
                 zf.writestr("data/README.txt", f"Error accessing dataset: {str(e)}\n")
         else:
-            # No dataset selected — add a placeholder
             zf.writestr(
                 "data/README.txt",
                 "No dataset selected in the model.\n"
@@ -215,15 +211,18 @@ def validate_api(request):
             graph = graph_json
 
         from .codegen.validator import GraphValidator
+
         validator = GraphValidator(graph)
         result = validator.validate()
 
-        return JsonResponse({
-            "success": True,
-            "errors": result["errors"],
-            "warnings": result["warnings"],
-            "isValid": len(result["errors"]) == 0,
-        })
+        return JsonResponse(
+            {
+                "success": True,
+                "errors": result["errors"],
+                "warnings": result["warnings"],
+                "isValid": len(result["errors"]) == 0,
+            }
+        )
 
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
