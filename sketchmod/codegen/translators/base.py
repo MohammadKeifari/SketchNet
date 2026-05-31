@@ -17,7 +17,6 @@ class BaseTranslator:
         return self._resolve_input_features()
 
     def _resolve_input_features(self):
-        """Default: look at the first incoming link's source port shape."""
         incoming = self.g._links_to(self.node["id"])
         if not incoming:
             return None
@@ -32,13 +31,20 @@ class BaseTranslator:
                 last_dim = shape[-1]
                 if isinstance(last_dim, (int, float)):
                     return int(last_dim)
-                return str(last_dim)  # Symbolic like "F" or "C"
+                if isinstance(last_dim, str):
+                    try:
+                        return int(last_dim)
+                    except ValueError:
+                        return last_dim  # Symbolic like "F"
             if len(shape) == 1:
-                return (
-                    int(shape[0])
-                    if isinstance(shape[0], (int, float))
-                    else str(shape[0])
-                )
+                dim = shape[0]
+                if isinstance(dim, (int, float)):
+                    return int(dim)
+                if isinstance(dim, str):
+                    try:
+                        return int(dim)
+                    except ValueError:
+                        return dim
 
         return None
 
