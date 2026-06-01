@@ -3292,6 +3292,7 @@ class DataPort extends Port {
             shape: this.shape,
             bias: this.bias,
             portKind: "data",
+            activationMode: this.activationMode,
         };
     }
 }
@@ -3344,6 +3345,7 @@ class MultiPort extends Port {
             shape: this.shape,
             bias: this.bias,
             portKind: "multi",
+            activationMode: this.activationMode,
         };
     }
 }
@@ -3445,6 +3447,7 @@ class ParamPort extends Port {
             shape: this.shape,
             bias: this.bias,
             portKind: "param",
+            activationMode: this.activationMode,
         };
     }
 }
@@ -4488,6 +4491,7 @@ class InputDataNode extends RectNode {
         this.minOutputs = 1;
         this.allowedOutputTypes = ["features", "labels"];
         this.addOutput();
+        this.outputs[0].activationMode = "both";
     }
     drawLabel(ctx) {
         ctx.fillText("Input", this.x, this.y);
@@ -4726,6 +4730,8 @@ class ColumnSelectNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
+        this.inputs[0].activationMode = "both";
+        this.outputs[0].activationMode = "both";
     }
 
     drawLabel(ctx) {
@@ -4856,6 +4862,8 @@ class RowSelectNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
+        this.inputs[0].activationMode = "both";
+        this.outputs[0].activationMode = "both";
     }
 
     drawLabel(ctx) {
@@ -5021,6 +5029,8 @@ class DimSelectNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
+        this.inputs[0].activationMode = "both";
+        this.outputs[0].activationMode = "both";
     }
 
     drawLabel(ctx) {
@@ -5256,6 +5266,8 @@ class TrainTestSplitNode extends RectNode {
         this.addInput();
         this.addOutput("train");
         this.addOutput("test");
+        this.outputs[0].activationMode = "every_batch"; // train output
+        this.outputs[1].activationMode = "last_batch"; // test output
     }
 
     drawLabel(ctx) {
@@ -5380,6 +5392,8 @@ class NormalizeNode extends RectNode {
         this.minParamOutputs = 0;
         this.addInput();
         this.addOutput();
+        this.inputs[0].activationMode = "both";
+        this.outputs[0].activationMode = "both";
     }
     drawLabel(ctx) {
         ctx.fillText(
@@ -5736,6 +5750,8 @@ class OneHotEncodeNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
+        this.inputs[0].activationMode = "both";
+        this.outputs[0].activationMode = "both";
     }
 
     drawLabel(ctx) {
