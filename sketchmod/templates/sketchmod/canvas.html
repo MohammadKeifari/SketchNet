@@ -138,6 +138,37 @@
                         </div>
                     </div>
                 </div>
+                <!-- Highlight Path Button -->
+                <div class="export-dropdown" id="highlightDropdown">
+                    <button class="sidebar-btn"
+                            id="btnHighlightPath"
+                            title="Highlight active path">
+                        <svg width="16"
+                             height="16"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        <span>Highlight Path</span>
+                        <svg width="10"
+                             height="10"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2"
+                             class="export-chevron">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </button>
+                    <div class="export-menu" id="highlightMenu">
+                        <div class="export-menu-item" data-phase="preprocessing">Preprocessing</div>
+                        <div class="export-menu-item" data-phase="training">Training</div>
+                        <div class="export-menu-item" data-phase="evaluation">Evaluation</div>
+                    </div>
+                </div>
                 <!-- Check Button -->
                 <button class="sidebar-btn" id="btnCheck" title="Validate model">
                     <svg width="16"

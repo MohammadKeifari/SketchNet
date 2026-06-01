@@ -271,6 +271,44 @@ const SketchMod = {
         document
             .getElementById("btnCheck")
             ?.addEventListener("click", () => this._runCheck());
+        document
+            .getElementById("btnHighlightPath")
+            ?.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this._toggleHighlightMenu();
+            });
+        // Close highlight menu when clicking outside
+        document.addEventListener("click", (e) => {
+            const menu = document.getElementById("highlightMenu");
+            const btn = document.getElementById("btnHighlightPath");
+            if (
+                menu &&
+                menu.classList.contains("open") &&
+                btn &&
+                !btn.contains(e.target) &&
+                !menu.contains(e.target)
+            ) {
+                menu.classList.remove("open");
+                document
+                    .getElementById("highlightDropdown")
+                    ?.classList.remove("open");
+            }
+        });
+        // Highlight menu item clicks
+        document
+            .querySelectorAll("#highlightMenu .export-menu-item")
+            .forEach((item) => {
+                item.addEventListener("click", () => {
+                    const phase = item.dataset.phase;
+                    this._highlightPhase(phase);
+                    document
+                        .getElementById("highlightMenu")
+                        ?.classList.remove("open");
+                    document
+                        .getElementById("highlightDropdown")
+                        ?.classList.remove("open");
+                });
+            });
         // Undo and redo button
         document
             .getElementById("btnUndo")
@@ -1494,13 +1532,27 @@ const SketchMod = {
         </p>
     </div>
     <div class="prop-group">
-        <label>Activation</label>
-        <select id="prop-activation-mode" class="prop-select" 
-                onchange="SketchMod._updatePortActivation(event.target.value)">
-            <option value="every_batch" ${port.activationMode === "every_batch" ? "selected" : ""}>Every Batch</option>
-            <option value="last_batch" ${port.activationMode === "last_batch" ? "selected" : ""}>Final Evaluation Only</option>
-            <option value="both" ${port.activationMode === "both" ? "selected" : ""}>Both</option>
-        </select>
+        <label>Active in phases</label>
+        <div class="checkbox-group" id="prop-activation-phases">
+            <label class="checkbox-label">
+                <input type="checkbox" value="preprocessing"
+                    ${port.activationPhases.includes("preprocessing") ? "checked" : ""}
+                    onchange="SketchMod._updatePortPhase(this)">
+                Preprocessing
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" value="training"
+                    ${port.activationPhases.includes("training") ? "checked" : ""}
+                    onchange="SketchMod._updatePortPhase(this)">
+                Training
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" value="evaluation"
+                    ${port.activationPhases.includes("evaluation") ? "checked" : ""}
+                    onchange="SketchMod._updatePortPhase(this)">
+                Evaluation
+            </label>
+        </div>
     </div>
     ${
         port.type === "input"
@@ -1552,12 +1604,22 @@ const SketchMod = {
             });
         }
     },
-    _updatePortActivation(value) {
+
+    _updatePortPhase(checkbox) {
         if (!this._currentPortForProps) return;
         this._saveUndoState();
-        this._currentPortForProps.activationMode = value;
+        const phase = checkbox.value;
+        const port = this._currentPortForProps;
+        if (checkbox.checked) {
+            if (!port.activationPhases.includes(phase))
+                port.activationPhases.push(phase);
+        } else {
+            port.activationPhases = port.activationPhases.filter(
+                (p) => p !== phase,
+            );
+        }
         this._saveToSession();
-        this._showPortProperties();
+        this._render();
     },
     _updatePortBias(input) {
         if (!this._currentPortForProps) return;
@@ -3101,6 +3163,85 @@ const SketchMod = {
 
         modal.style.display = "flex";
     },
+    _toggleHighlightMenu() {
+        const menu = document.getElementById("highlightMenu");
+        const dropdown = document.getElementById("highlightDropdown");
+        if (!menu || !dropdown) return;
+
+        const isOpen = menu.classList.contains("open");
+        if (isOpen) {
+            menu.classList.remove("open");
+            dropdown.classList.remove("open");
+        } else {
+            // Close export menu if open
+            document.getElementById("exportMenu")?.classList.remove("open");
+            document.getElementById("exportDropdown")?.classList.remove("open");
+            menu.classList.add("open");
+            dropdown.classList.add("open");
+        }
+    },
+
+    _highlightPhase(phase) {
+        this._clearHighlight();
+
+        this._highlightPhaseLinks = new Set();
+        this._highlightPhaseNodes = new Set();
+
+        // Find all output ports that have this phase, then follow links
+        const visitedPorts = new Set();
+        const queue = [];
+
+        // Start from ports that have the phase and are on reached nodes (or InputData)
+        for (const port of this.ports) {
+            if (
+                port.activationPhases &&
+                port.activationPhases.includes(phase) &&
+                port.type === "output"
+            ) {
+                // Check if the node that owns this port is "reachable" for this phase
+                // For simplicity, we start from any output port with the phase
+                queue.push(port);
+                visitedPorts.add(port.id);
+            }
+        }
+
+        while (queue.length > 0) {
+            const srcPort = queue.shift();
+            // find all links from this port
+            const links = this.links.filter((l) => l.from === srcPort);
+            for (const link of links) {
+                this._highlightPhaseLinks.add(link);
+                this._highlightPhaseNodes.add(link.from.node);
+                this._highlightPhaseNodes.add(link.to.node);
+
+                const toPort = link.to;
+                if (!visitedPorts.has(toPort.id)) {
+                    visitedPorts.add(toPort.id);
+                    // propagate further if the target node's output ports have this phase
+                    const node = toPort.node;
+                    for (const outPort of node.outputs) {
+                        if (
+                            outPort.activationPhases &&
+                            outPort.activationPhases.includes(phase)
+                        ) {
+                            queue.push(outPort);
+                            visitedPorts.add(outPort.id);
+                        }
+                    }
+                }
+            }
+        }
+
+        this._render();
+    },
+
+    _clearHighlight() {
+        this._highlightPhaseLinks = null;
+        this._highlightPhaseNodes = null;
+        // also clear any old highlight sets if you had them
+        if (this._highlightLinks) this._highlightLinks = null;
+        if (this._highlightNodes) this._highlightNodes = null;
+    },
 };
 // ========== PORT BASE CLASS ==========
 class Port {
@@ -3116,11 +3257,10 @@ class Port {
         this.id = `${node.id}_${type}_${index}`;
         this.shape = null;
         this.bias = 0;
-        // Activation timing
-        this.activationMode = this._defaultActivationMode();
+        this.activationPhases = this._defaultPhases();
     }
-    _defaultActivationMode() {
-        return "every_batch";
+    _defaultPhases() {
+        return [];
     }
     get connectionLimit() {
         return 1;
@@ -3232,7 +3372,7 @@ class Port {
                 : null,
             bias: this.bias,
             portKind: this._getPortKind(),
-            activationMode: this.activationMode,
+            activationPhases: this.activationPhases,
         };
     }
 
@@ -3285,14 +3425,8 @@ class DataPort extends Port {
 
     toJSON() {
         return {
-            id: this.id,
-            type: this.type,
-            index: this.index,
-            subType: this.subType,
-            shape: this.shape,
-            bias: this.bias,
+            ...super.toJSON(),
             portKind: "data",
-            activationMode: this.activationMode,
         };
     }
 }
@@ -3338,14 +3472,8 @@ class MultiPort extends Port {
 
     toJSON() {
         return {
-            id: this.id,
-            type: this.type,
-            index: this.index,
-            subType: this.subType,
-            shape: this.shape,
-            bias: this.bias,
+            ...super.toJSON(),
             portKind: "multi",
-            activationMode: this.activationMode,
         };
     }
 }
@@ -3356,13 +3484,15 @@ class RolePort extends Port {
         super(node, type, index, null);
         this.role = role || null; // "loss", "prediction", "evaluation", "labels", "color"
     }
-    _defaultActivationMode() {
-        if (this.role === "loss") return "every_batch";
-        if (this.role === "prediction") return "last_batch";
-        if (this.role === "evaluation") return "last_batch";
-        if (this.role === "labels") return "every_batch";
-        if (this.role === "color") return "last_batch";
-        return "every_batch";
+    _defaultPhases() {
+        const roleDefaults = {
+            loss: ["training"],
+            prediction: ["evaluation"],
+            evaluation: ["evaluation"],
+            labels: ["training"],
+            color: ["evaluation"],
+        };
+        return this.role ? roleDefaults[this.role] || [] : [];
     }
     get connectionLimit() {
         return 1;
@@ -3398,6 +3528,7 @@ class RolePort extends Port {
         return {
             ...super.toJSON(),
             role: this.role,
+            portKind: "role",
         };
     }
 }
@@ -3440,14 +3571,8 @@ class ParamPort extends Port {
 
     toJSON() {
         return {
-            id: this.id,
-            type: this.type,
-            index: this.index,
-            subType: null,
-            shape: this.shape,
-            bias: this.bias,
+            ...super.toJSON(),
             portKind: "param",
-            activationMode: this.activationMode,
         };
     }
 }
@@ -3978,7 +4103,12 @@ class BaseNode {
                 port = new DataPort(this, type, p.index, p.subType || null);
         }
         port.id = p.id;
-        if (p.activationMode) port.activationMode = p.activationMode;
+        if (p.activationPhases) {
+            port.activationPhases = p.activationPhases;
+        } else {
+            // fallback: set defaults based on node type (we'll have a helper)
+            port.activationPhases = this._getDefaultPhasesForPort(port);
+        }
         return port;
     }
 
@@ -4183,6 +4313,23 @@ class RectNode extends BaseNode {
             ctx.stroke();
         }
 
+        if (
+            SketchMod._highlightPhaseNodes &&
+            SketchMod._highlightPhaseNodes.has(this)
+        ) {
+            ctx.beginPath();
+            // For RectNode, draw a slightly larger rectangle with green glow
+            const x = this.x - this.width / 2 - 4;
+            const y = this.y - this.height / 2 - 4;
+            ctx.roundRect(x, y, this.width + 8, this.height + 8, 10);
+            ctx.strokeStyle = "#4ade80";
+            ctx.lineWidth = 3;
+            ctx.shadowColor = "#4ade80";
+            ctx.shadowBlur = 10;
+            ctx.stroke();
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+        }
         if (selected) {
             ctx.beginPath();
             ctx.roundRect(x - 1, y - 1, this.width + 2, this.height + 2, 8);
@@ -4342,6 +4489,8 @@ class NeuronNode extends CircleNode {
 
         this.inputs.push(new MultiPort(this, "input", 0, null));
         this.addOutput();
+        this.inputs[0].activationPhases = ["training", "evaluation"];
+        this.outputs[0].activationPhases = ["training", "evaluation"];
         this.updatePorts();
     }
 
@@ -4419,6 +4568,8 @@ class LayerNode extends RectNode {
 
         this.inputs.push(new MultiPort(this, "input", 0, null));
         this.addOutput();
+        this.inputs[0].activationPhases = ["training", "evaluation"];
+        this.outputs[0].activationPhases = ["training", "evaluation"];
         this.updatePorts();
     }
 
@@ -4491,7 +4642,7 @@ class InputDataNode extends RectNode {
         this.minOutputs = 1;
         this.allowedOutputTypes = ["features", "labels"];
         this.addOutput();
-        this.outputs[0].activationMode = "both";
+        this.outputs[0].activationPhases = ["preprocessing"];
     }
     drawLabel(ctx) {
         ctx.fillText("Input", this.x, this.y);
@@ -4604,6 +4755,11 @@ class OutputNode extends RectNode {
         this.outputs.push(new RolePort(this, "output", 0, "loss"));
         this.outputs.push(new RolePort(this, "output", 1, "prediction"));
         this.outputs.push(new RolePort(this, "output", 2, "evaluation"));
+        this.inputs[0].activationPhases = ["training"];
+        this.inputs[1].activationPhases = ["evaluation"];
+        this.outputs[0].activationPhases = ["training"]; // loss
+        this.outputs[1].activationPhases = ["evaluation"]; // prediction
+        this.outputs[2].activationPhases = ["evaluation"]; // evaluation
         this.updatePorts();
     }
 
@@ -4730,8 +4886,16 @@ class ColumnSelectNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationMode = "both";
-        this.outputs[0].activationMode = "both";
+        this.inputs[0].activationPhases = [
+            "preprocessing",
+            "training",
+            "evaluation",
+        ];
+        this.outputs[0].activationPhases = [
+            "preprocessing",
+            "training",
+            "evaluation",
+        ];
     }
 
     drawLabel(ctx) {
@@ -4862,8 +5026,16 @@ class RowSelectNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationMode = "both";
-        this.outputs[0].activationMode = "both";
+        this.inputs[0].activationPhases = [
+            "preprocessing",
+            "training",
+            "evaluation",
+        ];
+        this.outputs[0].activationPhases = [
+            "preprocessing",
+            "training",
+            "evaluation",
+        ];
     }
 
     drawLabel(ctx) {
@@ -5029,8 +5201,16 @@ class DimSelectNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationMode = "both";
-        this.outputs[0].activationMode = "both";
+        this.inputs[0].activationPhases = [
+            "preprocessing",
+            "training",
+            "evaluation",
+        ];
+        this.outputs[0].activationPhases = [
+            "preprocessing",
+            "training",
+            "evaluation",
+        ];
     }
 
     drawLabel(ctx) {
@@ -5266,8 +5446,8 @@ class TrainTestSplitNode extends RectNode {
         this.addInput();
         this.addOutput("train");
         this.addOutput("test");
-        this.outputs[0].activationMode = "every_batch"; // train output
-        this.outputs[1].activationMode = "last_batch"; // test output
+        this.outputs[0].activationPhases = ["training"];
+        this.outputs[1].activationPhases = ["evaluation"];
     }
 
     drawLabel(ctx) {
@@ -5392,8 +5572,16 @@ class NormalizeNode extends RectNode {
         this.minParamOutputs = 0;
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationMode = "both";
-        this.outputs[0].activationMode = "both";
+        this.inputs[0].activationPhases = [
+            "preprocessing",
+            "training",
+            "evaluation",
+        ];
+        this.outputs[0].activationPhases = [
+            "preprocessing",
+            "training",
+            "evaluation",
+        ];
     }
     drawLabel(ctx) {
         ctx.fillText(
@@ -5488,6 +5676,8 @@ class Conv2DNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
+        this.inputs[0].activationPhases = ["training", "evaluation"];
+        this.outputs[0].activationPhases = ["training", "evaluation"];
     }
 
     drawLabel(ctx) {
@@ -5591,6 +5781,8 @@ class FlattenNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
+        this.inputs[0].activationPhases = ["training", "evaluation"];
+        this.outputs[0].activationPhases = ["training", "evaluation"];
     }
 
     drawLabel(ctx) {
@@ -5646,6 +5838,8 @@ class DropoutNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
+        this.inputs[0].activationPhases = ["training", "evaluation"];
+        this.outputs[0].activationPhases = ["training", "evaluation"];
     }
 
     drawLabel(ctx) {
@@ -5699,6 +5893,8 @@ class BatchNormNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
+        this.inputs[0].activationPhases = ["training", "evaluation"];
+        this.outputs[0].activationPhases = ["training", "evaluation"];
     }
 
     drawLabel(ctx) {
@@ -5750,8 +5946,16 @@ class OneHotEncodeNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationMode = "both";
-        this.outputs[0].activationMode = "both";
+        this.inputs[0].activationPhases = [
+            "preprocessing",
+            "training",
+            "evaluation",
+        ];
+        this.outputs[0].activationPhases = [
+            "preprocessing",
+            "training",
+            "evaluation",
+        ];
     }
 
     drawLabel(ctx) {
@@ -5805,6 +6009,8 @@ class ConcatenateNode extends RectNode {
         // Single MultiPort for all incoming connections
         this.inputs.push(new MultiPort(this, "input", 0, null));
         this.addOutput();
+        this.inputs[0].activationPhases = ["training", "evaluation"];
+        this.outputs[0].activationPhases = ["training", "evaluation"];
         this.updatePorts();
     }
     canAddInput() {
@@ -5900,6 +6106,8 @@ class AddNode extends RectNode {
         this.inputs.push(new MultiPort(this, "input", 0, "main"));
         this.addOutput();
         this.updatePorts();
+        this.inputs[0].activationPhases = ["training", "evaluation"];
+        this.outputs[0].activationPhases = ["training", "evaluation"];
     }
 
     drawLabel(ctx) {
@@ -5999,6 +6207,8 @@ class OptimizerNode extends RectNode {
 
         this.inputs.push(new RolePort(this, "input", 0, "loss"));
         this.inputs.push(new RolePort(this, "input", 1, "labels"));
+        this.inputs[0].activationPhases = ["training"]; // loss
+        this.inputs[1].activationPhases = ["training"]; // labels
         this.updatePorts();
     }
 
@@ -6255,6 +6465,10 @@ class VisualizationNode extends RectNode {
         // Start with 2 coord inputs
         this.inputs.push(new DataPort(this, "input", 0, "coord"));
         this.inputs.push(new DataPort(this, "input", 1, "coord"));
+        // for coord inputs and color input
+        for (const port of this.inputs) {
+            port.activationPhases = ["evaluation"];
+        }
         this.updatePorts();
     }
 
@@ -6582,22 +6796,31 @@ class Link {
         ctx.lineTo(this.to.x, this.to.y);
 
         const linkKey = this.from.id + "→" + this.to.id;
-
-        if (SketchMod.errorLinkIds.has(linkKey)) {
-            ctx.strokeStyle = "#ef4444";
+        if (
+            SketchMod._highlightPhaseLinks &&
+            SketchMod._highlightPhaseLinks.has(this)
+        ) {
+            ctx.strokeStyle = "#4ade80";
             ctx.lineWidth = 3;
-        } else if (SketchMod.warningLinkIds.has(linkKey)) {
-            ctx.strokeStyle = "#f59e0b";
-            ctx.lineWidth = 2.5;
-        } else if (selected) {
-            ctx.strokeStyle = "var(--accent)";
-            ctx.lineWidth = 3;
-        } else if (this.hasWeight) {
-            ctx.strokeStyle = "var(--text-primary)";
-            ctx.lineWidth = 2.5;
+            ctx.shadowColor = "#4ade80";
+            ctx.shadowBlur = 6;
         } else {
-            ctx.strokeStyle = "var(--text-secondary)";
-            ctx.lineWidth = 1.5;
+            if (SketchMod.errorLinkIds.has(linkKey)) {
+                ctx.strokeStyle = "#ef4444";
+                ctx.lineWidth = 3;
+            } else if (SketchMod.warningLinkIds.has(linkKey)) {
+                ctx.strokeStyle = "#f59e0b";
+                ctx.lineWidth = 2.5;
+            } else if (selected) {
+                ctx.strokeStyle = "var(--accent)";
+                ctx.lineWidth = 3;
+            } else if (this.hasWeight) {
+                ctx.strokeStyle = "var(--text-primary)";
+                ctx.lineWidth = 2.5;
+            } else {
+                ctx.strokeStyle = "var(--text-secondary)";
+                ctx.lineWidth = 1.5;
+            }
         }
         ctx.stroke();
 
@@ -6649,6 +6872,8 @@ class Link {
         }
         ctx.fillStyle = fillColor;
         ctx.fill();
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
     }
 
     hitTest(px, py) {
