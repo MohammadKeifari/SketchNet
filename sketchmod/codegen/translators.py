@@ -477,10 +477,8 @@ class ConcatTranslator(BaseTranslator):
         preds = list(self.graph.predecessors(n.id))
         axis = n.properties.get("axis", -1)
         if len(preds) >= 2:
-            preds_str = ", ".join(f"'{p}'" for p in preds)
-            w.line(
-                f"tensors = [inputs_dict.get(p) for p in [{preds_str}] if inputs_dict.get(p) is not None]"
-            )
+            ids = ", ".join(f"'{p}'" for p in preds)
+            w.line(f"tensors = [inputs_dict.get(p) for p in [{ids}] if inputs_dict.get(p) is not None]")
             w.line(f"if len(tensors) > 1:")
             w.indent()
             w.line(f"x = torch.cat(tensors, dim={axis})")
