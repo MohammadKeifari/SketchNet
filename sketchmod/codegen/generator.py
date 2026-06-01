@@ -4,15 +4,36 @@ from .phase_analyzer import analyze_phases
 from .writer import CodeWriter
 from .translators import get_translator
 
+# Node type categories
+MODEL_TYPES = {
+    "neuron",
+    "layer",
+    "conv2d",
+    "flatten",
+    "dropout",
+    "batchnorm",
+    "add",
+    "concat",
+    "output",
+}
+
+DATA_TRANSFORM_TYPES = {
+    "column-select",
+    "row-select",
+    "dim-select",
+    "normalize",
+    "onehot",
+    "train-test",
+}
+
 
 class CodeGenerator:
     def __init__(self, graph_data: dict):
         self.graph = parse_graph(graph_data)
         self.flow = analyze_phases(self.graph)
-        self.var_map = {}  # node/port id -> variable name
+        self.var_map = {}  # node id -> variable name (for the output of that node)
         self.translators = {}  # node id -> translator instance
 
-        # Instantiate translators for all nodes
         for nid, node in self.graph.nodes.items():
             self.translators[nid] = get_translator(node, self.graph, self.var_map)
 
@@ -26,6 +47,7 @@ class CodeGenerator:
         self._write_main(w)
         return str(w)
 
+    # ------------------------------------------------------------------
     def _write_header(self, w):
         w.line("import torch")
         w.line("import torch.nn as nn")
@@ -37,46 +59,62 @@ class CodeGenerator:
         w.line("device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')")
         w.line("")
 
+    # ------------------------------------------------------------------
     def _write_load_and_preprocess(self, w):
         w.line("def load_and_preprocess():")
         w.indent()
-        # InputData nodes (already in preprocessing_order)
+
+        # 1. Preprocessing nodes (user‑defined phase)
         for nid in self.flow["preprocessing_order"]:
-            node = self.graph.nodes[nid]
             self.translators[nid].data_code(w, "pre")
-        # Train branch data transforms (non-model nodes in train_order not in preprocessing_order)
-        train_data_nodes = [
+
+        # 2. Train‑branch data transforms (non‑model nodes in train_order not yet seen)
+        train_data = [
             nid
             for nid in self.flow["train_order"]
             if nid not in self.flow["preprocessing_order"]
             and self.graph.nodes[nid].type not in MODEL_TYPES
         ]
-        for nid in train_data_nodes:
+        for nid in train_data:
             self.translators[nid].data_code(w, "train")
-        # Eval branch data transforms (non-model nodes in eval_order not in preprocessing_order)
-        eval_data_nodes = [
+
+        # 3. Eval‑branch data transforms
+        eval_data = [
             nid
             for nid in self.flow["eval_order"]
             if nid not in self.flow["preprocessing_order"]
             and self.graph.nodes[nid].type not in MODEL_TYPES
         ]
-        for nid in eval_data_nodes:
+        for nid in eval_data:
             self.translators[nid].data_code(w, "eval")
-        # Now determine X_train, y_train, X_test, y_test from var_map
-        # ... (same as before but using var_map built by translators)
+
+        # 4. Determine variable names for the return
+        train_feed = self._get_var_for_first_model_input("train")
+        train_labels = self._get_var_for_optimizer_labels()
+        test_feed = self._get_var_for_first_model_input("eval")
+        # test labels: try to get from eval data pipeline (often not needed)
+        test_labels = "None"
+
+        w.line(f"X_train = {train_feed}")
+        w.line(f"y_train = {train_labels}")
+        w.line(f"X_test = {test_feed}")
+        w.line(f"y_test = {test_labels}")
         w.line("return X_train, y_train, X_test, y_test")
         w.dedent()
         w.line("")
 
+    # ------------------------------------------------------------------
     def _get_var_for_first_model_input(self, phase):
-        """Return the variable name that feeds the first model node in given phase."""
-        order = self.flow[f"{phase}_model_order"]
+        """Variable name that feeds the first model node in the given phase."""
+        order = self.flow[f"{phase}_order"]
         if not order:
             return "None"
-        first = order[0]
-        src_id = self._find_input_source(first)
-        if src_id and src_id in self.var_map:
-            return self.var_map[src_id]
+        # find the first node that is actually a model node
+        for nid in order:
+            if self.graph.nodes[nid].type in MODEL_TYPES:
+                src_id = self._find_input_source(nid)
+                if src_id and src_id in self.var_map:
+                    return self.var_map[src_id]
         return "None"
 
     def _get_var_for_optimizer_labels(self):
@@ -94,7 +132,7 @@ class CodeGenerator:
         return "None"
 
     def _find_input_source(self, node_id):
-        """Return the node id that feeds the first input port of node_id."""
+        """Return the node id that feeds the first input port of a node."""
         node = self.graph.nodes[node_id]
         if not node.inputs:
             return None
@@ -104,26 +142,33 @@ class CodeGenerator:
                 return self.graph.ports[link.id_from].node_id
         return None
 
+    # ------------------------------------------------------------------
     def _write_model_class(self, w):
         w.line("class Model(nn.Module):")
         w.indent()
         w.line("def __init__(self):")
         w.indent()
         w.line("super().__init__()")
-        # Collect model nodes from both train and eval orders (unique, topo sorted)
-        model_nodes = set(
-            self.flow["train_model_order"] + self.flow["eval_model_order"]
-        )
-        # Topological sort: use the order from flow
+
+        # Collect model nodes from both training and evaluation orders (unique)
+        model_nodes = set()
+        for phase in ("train_order", "eval_order"):
+            for nid in self.flow.get(phase, []):
+                if self.graph.nodes[nid].type in MODEL_TYPES:
+                    model_nodes.add(nid)
+
+        # Topological sort: use the order from the flow (they are already topo sorted)
         ordered = []
-        for nid in self.flow["train_model_order"]:
+        for nid in self.flow["train_order"]:
             if nid in model_nodes and nid not in ordered:
                 ordered.append(nid)
-        for nid in self.flow["eval_model_order"]:
+        for nid in self.flow["eval_order"]:
             if nid in model_nodes and nid not in ordered:
                 ordered.append(nid)
+
         for nid in ordered:
             self.translators[nid].init_code(w)
+
         w.dedent()
         w.line("")
         w.line("def forward(self, inputs_dict):")
@@ -136,6 +181,7 @@ class CodeGenerator:
         w.dedent()
         w.line("")
 
+    # ------------------------------------------------------------------
     def _write_training(self, w):
         opt_node = self.flow.get("optimizer")
         if not opt_node:
@@ -229,7 +275,7 @@ class CodeGenerator:
             )
         w.line("optimizer.step()")
         w.line("total_loss += loss.item() * batch_X.size(0)")
-        w.dedent()  # for batch loop
+        w.dedent()
         w.line("avg_train_loss = total_loss / len(train_loader.dataset)")
         w.line("")
         # Validation
@@ -248,12 +294,12 @@ class CodeGenerator:
             w.line("pred = list(outputs.values())[0]")
         w.line("loss = criterion(pred, batch_y)")
         w.line("val_loss += loss.item() * batch_X.size(0)")
-        w.dedent()  # for test batch loop
-        w.dedent()  # for no_grad
+        w.dedent()
+        w.dedent()
         w.line("avg_val_loss = val_loss / len(test_loader.dataset)")
         w.line("")
         w.line(
-            f"print(f'Epoch {{epoch+1:3d}}/{{epochs}}  Train Loss: {{avg_train_loss:.6f}}  Val Loss: {{avg_val_loss:.6f}}')"
+            "print(f'Epoch {epoch+1:3d}/{epochs}  Train Loss: {avg_train_loss:.6f}  Val Loss: {avg_val_loss:.6f}')"
         )
         w.line("")
         w.line("if patience is not None:")
@@ -272,35 +318,22 @@ class CodeGenerator:
         w.line("break")
         w.dedent()
         w.dedent()
-        w.dedent()  # close if patience
-        w.dedent()  # close for epoch
+        w.dedent()
+        w.dedent()
         w.line("")
         w.line("return model")
-        w.dedent()  # close function
+        w.dedent()
         w.line("")
 
     def _get_feed_key(self, phase):
-        order = self.flow[f"{phase}_model_order"]
+        """Returns the node id that should be passed as key to the model forward dict."""
+        order = self.flow[f"{phase}_order"]
         if order:
-            src_id = self._find_input_source(order[0])
-            if src_id:
-                return src_id
-        return "input"
-
-    def _get_train_feed_key(self):
-        train_model = self.flow["train_model_order"]
-        if train_model:
-            src_id = self._find_input_source(train_model[0])
-            if src_id:
-                return src_id
-        return "input"
-
-    def _get_eval_feed_key(self):
-        eval_model = self.flow["eval_model_order"]
-        if eval_model:
-            src_id = self._find_input_source(eval_model[0])
-            if src_id:
-                return src_id
+            for nid in order:
+                if self.graph.nodes[nid].type in MODEL_TYPES:
+                    src_id = self._find_input_source(nid)
+                    if src_id:
+                        return src_id
         return "input"
 
     def _get_loss_port_id(self):
@@ -313,13 +346,14 @@ class CodeGenerator:
                 return loss_port.id
         return None
 
+    # ------------------------------------------------------------------
     def _write_evaluation(self, w):
         w.line("def evaluate(model, X_test, y_test):")
         w.indent()
         w.line("model.eval()")
         w.line("with torch.no_grad():")
         w.indent()
-        eval_feed = self._get_eval_feed_key()
+        eval_feed = self._get_feed_key("eval")
         w.line(f"outputs = model({{'{eval_feed}': X_test.to(device)}})")
         pred_port_id = None
         eval_port_id = None
@@ -368,6 +402,7 @@ class CodeGenerator:
             w.dedent()
             w.line("")
 
+    # ------------------------------------------------------------------
     def _write_main(self, w):
         w.line("if __name__ == '__main__':")
         w.indent()
