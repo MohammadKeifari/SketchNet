@@ -4313,6 +4313,13 @@ class RectNode extends BaseNode {
             ctx.stroke();
         }
 
+        if (selected) {
+            ctx.beginPath();
+            ctx.roundRect(x - 1, y - 1, this.width + 2, this.height + 2, 8);
+            ctx.fillStyle = "var(--accent-glow)";
+            ctx.fill();
+        }
+
         if (
             SketchMod._highlightPhaseNodes &&
             SketchMod._highlightPhaseNodes.has(this)
@@ -4329,12 +4336,6 @@ class RectNode extends BaseNode {
             ctx.stroke();
             ctx.shadowColor = "transparent";
             ctx.shadowBlur = 0;
-        }
-        if (selected) {
-            ctx.beginPath();
-            ctx.roundRect(x - 1, y - 1, this.width + 2, this.height + 2, 8);
-            ctx.fillStyle = "var(--accent-glow)";
-            ctx.fill();
         }
 
         ctx.beginPath();
@@ -4453,6 +4454,21 @@ class CircleNode extends BaseNode {
             ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
             ctx.fillStyle = "var(--accent-glow)";
             ctx.fill();
+        }
+
+        if (
+            SketchMod._highlightPhaseNodes &&
+            SketchMod._highlightPhaseNodes.has(this)
+        ) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 6, 0, Math.PI * 2);
+            ctx.strokeStyle = "#4ade80";
+            ctx.lineWidth = 3;
+            ctx.shadowColor = "#4ade80";
+            ctx.shadowBlur = 10;
+            ctx.stroke();
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
         }
 
         ctx.beginPath();
