@@ -2497,7 +2497,6 @@ const SketchMod = {
                 ?.value || "private";
         const coverFile = document.getElementById("saveCoverInput")?.files[0];
         const graphData = JSON.stringify(SketchMod._getGraphData());
-        console.log("Saving graph data:", graphData); // ADD THIS
         const formData = new FormData();
         formData.append("name", name);
         formData.append("description", description);
