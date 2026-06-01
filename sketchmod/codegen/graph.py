@@ -6,13 +6,13 @@ from typing import List, Dict, Optional, Any
 class Port:
     id: str
     node_id: str
-    type: str  # "input" / "output"
+    type: str
     index: int
     sub_type: Optional[str] = None
-    port_kind: str = "data"  # "data", "multi", "role", "param"
+    port_kind: str = "data"
     role: Optional[str] = None
-    activation_mode: str = "every_batch"  # will be overridden
-    shape: Optional[Any] = None  # ignore
+    activation_phases: List[str] = field(default_factory=list)
+    shape: Optional[Any] = None
     bias: float = 0.0
     connection_limit: int = 1
 
@@ -21,7 +21,7 @@ class Port:
 class Link:
     id_from: str
     id_to: str
-    weight: float = 1.0  # default 1 (will be set from JSON)
+    weight: float = 1.0
     weight_shape: Optional[Any] = None
     has_weight: bool = False
 
@@ -49,15 +49,7 @@ class Graph:
     def add_link(self, link: Link):
         self.links.append(link)
 
-    def get_node(self, node_id: str) -> Node:
-        return self.nodes[node_id]
-
-    def get_port(self, port_id: str) -> Port:
-        return self.ports[port_id]
-
-    # Build adjacency
     def successors(self, node_id: str) -> List[str]:
-        """Nodes that receive output from this node"""
         out_ids = {p.id for p in self.nodes[node_id].outputs}
         targets = set()
         for link in self.links:
@@ -83,6 +75,7 @@ def parse_graph(json_data: dict) -> Graph:
         )
         # Input ports
         for p in n.get("inputPorts", []):
+            phases = p.get("activationPhases", [])
             port = Port(
                 id=p["id"],
                 node_id=n["id"],
@@ -91,28 +84,15 @@ def parse_graph(json_data: dict) -> Graph:
                 sub_type=p.get("subType"),
                 port_kind=p.get("portKind", "data"),
                 role=p.get("role"),
-                activation_mode=p.get("activationMode", "every_batch"),
+                activation_phases=phases,
                 bias=p.get("bias", 0),
             )
-            # data/multi ports on non-model nodes default to "both" if not set explicitly
-            if port.port_kind in ("data", "multi") and not p.get("activationMode"):
-                if node.type not in (
-                    "neuron",
-                    "layer",
-                    "conv2d",
-                    "flatten",
-                    "dropout",
-                    "batchnorm",
-                    "add",
-                    "concat",
-                    "output",
-                ):
-                    port.activation_mode = "both"
             node.inputs.append(port)
             graph.ports[port.id] = port
 
         # Output ports
         for p in n.get("outputPorts", []):
+            phases = p.get("activationPhases", [])
             port = Port(
                 id=p["id"],
                 node_id=n["id"],
@@ -121,51 +101,16 @@ def parse_graph(json_data: dict) -> Graph:
                 sub_type=p.get("subType"),
                 port_kind=p.get("portKind", "data"),
                 role=p.get("role"),
-                activation_mode=p.get("activationMode", "every_batch"),
+                activation_phases=phases,
                 bias=p.get("bias", 0),
             )
-            # Role ports: apply default based on role if no explicit activation
-            if port.port_kind == "role" and not p.get("activationMode"):
-                role_defaults = {
-                    "loss": "every_batch",
-                    "prediction": "last_batch",
-                    "evaluation": "last_batch",
-                    "labels": "every_batch",
-                    "color": "last_batch",
-                }
-                port.activation_mode = role_defaults.get(port.role, "every_batch")
-            # Data/multi ports on non-model nodes default to "both"
-            if port.port_kind in ("data", "multi") and not p.get("activationMode"):
-                if node.type not in (
-                    "neuron",
-                    "layer",
-                    "conv2d",
-                    "flatten",
-                    "dropout",
-                    "batchnorm",
-                    "add",
-                    "concat",
-                    "output",
-                ):
-                    port.activation_mode = "both"
             node.outputs.append(port)
             graph.ports[port.id] = port
 
-        # Special default for TrainTestSplit outputs if not explicitly set
-        if node.type == "train-test":
-            for port in node.outputs:
-                # Find the original port dict to check if activationMode was provided
-                orig_ports = n.get("outputPorts", [])
-                for orig_port in orig_ports:
-                    if orig_port["id"] == port.id:
-                        if "activationMode" not in orig_port:
-                            if port.sub_type == "train":
-                                port.activation_mode = "every_batch"
-                            elif port.sub_type == "test":
-                                port.activation_mode = "last_batch"
-                        break
-
         graph.add_node(node)
+
+    # Apply default phases for ports that have empty activation_phases
+    _apply_default_phases(graph)
 
     # Parse links
     for l in json_data.get("links", []):
@@ -179,3 +124,65 @@ def parse_graph(json_data: dict) -> Graph:
         graph.add_link(link)
 
     return graph
+
+
+def _apply_default_phases(graph: Graph):
+    """Set default activation phases for ports that were not explicitly set."""
+    for node in graph.nodes.values():
+        if node.type == "input-data":
+            for p in node.outputs:
+                if not p.activation_phases:
+                    p.activation_phases = ["preprocessing"]
+        elif node.type in (
+            "column-select",
+            "row-select",
+            "dim-select",
+            "normalize",
+            "onehot",
+        ):
+            for p in node.inputs + node.outputs:
+                if not p.activation_phases:
+                    p.activation_phases = ["preprocessing", "training", "evaluation"]
+        elif node.type == "train-test":
+            for p in node.outputs:
+                if not p.activation_phases:
+                    if p.sub_type == "train":
+                        p.activation_phases = ["training"]
+                    elif p.sub_type == "test":
+                        p.activation_phases = ["evaluation"]
+        elif node.type in (
+            "neuron",
+            "layer",
+            "conv2d",
+            "flatten",
+            "dropout",
+            "batchnorm",
+            "add",
+            "concat",
+        ):
+            for p in node.inputs + node.outputs:
+                if not p.activation_phases:
+                    p.activation_phases = ["training", "evaluation"]
+        elif node.type == "output":
+            for p in node.inputs:
+                if not p.activation_phases:
+                    if p.sub_type == "train":
+                        p.activation_phases = ["training"]
+                    elif p.sub_type == "test":
+                        p.activation_phases = ["evaluation"]
+            for p in node.outputs:
+                if not p.activation_phases:
+                    if p.role == "loss":
+                        p.activation_phases = ["training"]
+                    elif p.role in ("prediction", "evaluation"):
+                        p.activation_phases = ["evaluation"]
+        elif node.type == "optimizer":
+            for p in node.inputs:
+                if not p.activation_phases:
+                    if p.role == "loss" or p.role == "labels":
+                        p.activation_phases = ["training"]
+        elif node.type == "visualization":
+            for p in node.inputs:
+                if not p.activation_phases:
+                    p.activation_phases = ["evaluation"]
+        # ParamPorts are left empty
