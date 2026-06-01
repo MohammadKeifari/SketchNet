@@ -4,37 +4,50 @@ from typing import Set, List, Dict, Optional, Any
 
 def _traverse_phase(graph: Graph, phase: str) -> Set[str]:
     """
-    BFS traversal that follows links whose source port has `phase` in its
-    activation_phases list.  Returns the set of node IDs reachable.
+    Return nodes that are fully active in the given phase.
+    A node is active if all its input ports have at least one incoming link
+    from an active source port, or it is an InputData node with an active output port.
     """
-    reached = set()
-
-    # InputData nodes are always considered "reached" if they have an output
-    # port with this phase.
-    for nid, node in graph.nodes.items():
-        if node.type == "input-data":
-            if any(phase in p.activation_phases for p in node.outputs):
-                reached.add(nid)
-
-    queue = list(reached)
-
-    while queue:
-        src_id = queue.pop(0)
-        src_node = graph.nodes[src_id]
-
-        for out_port in src_node.outputs:
-            if phase not in out_port.activation_phases:
+    active_nodes = set()
+    # Determine active input ports for each node
+    # We'll iterate until stable
+    changed = True
+    while changed:
+        changed = False
+        for nid, node in graph.nodes.items():
+            if nid in active_nodes:
                 continue
-
-            for link in graph.links:
-                if link.id_from == out_port.id:
-                    tgt_port = graph.ports[link.id_to]
-                    tgt_id = tgt_port.node_id
-                    if tgt_id not in reached:
-                        reached.add(tgt_id)
-                        queue.append(tgt_id)
-
-    return reached
+            if node.type == "input-data":
+                # active if any output port has the phase
+                if any(phase in p.activation_phases for p in node.outputs):
+                    active_nodes.add(nid)
+                    changed = True
+            else:
+                # check all input ports are satisfied
+                all_satisfied = True
+                for in_port in node.inputs:
+                    # find at least one incoming link where source port has the phase,
+                    # target port has the phase, and source node is already active
+                    satisfied = False
+                    for link in graph.links:
+                        if link.id_to == in_port.id:
+                            src_port = graph.ports[link.id_from]
+                            tgt_port = graph.ports[link.id_to]  # same as in_port
+                            if (
+                                phase in src_port.activation_phases
+                                and phase in tgt_port.activation_phases
+                                and src_port.node_id in active_nodes
+                            ):
+                                satisfied = True
+                                break
+                    if not satisfied:
+                        all_satisfied = False
+                        break
+                if all_satisfied and node.inputs:  # must have inputs
+                    active_nodes.add(nid)
+                    changed = True
+                # If node has no inputs, it's InputData (already handled)
+    return active_nodes
 
 
 def _topo_sort(nids: Set[str], graph: Graph) -> List[str]:
@@ -101,22 +114,21 @@ def analyze_phases(graph: Graph) -> Dict[str, Any]:
 
 
 def highlight_path(graph_data: dict, phase: str) -> dict:
-    """
-    API helper: given the raw graph JSON and a phase name,
-    returns a dict with 'nodes' (list of node IDs) and 'links'
-    (list of link keys like "fromPortId→toPortId") that are active
-    in that phase.
-    """
     graph = parse_graph(graph_data)
-    reached_nodes = _traverse_phase(graph, phase)
+    active_nodes = _traverse_phase(graph, phase)
 
     highlighted_links = []
     for link in graph.links:
         src_port = graph.ports[link.id_from]
-        if phase in src_port.activation_phases and src_port.node_id in reached_nodes:
+        tgt_port = graph.ports[link.id_to]
+        if (
+            phase in src_port.activation_phases
+            and phase in tgt_port.activation_phases
+            and src_port.node_id in active_nodes
+        ):
             highlighted_links.append(f"{link.id_from}→{link.id_to}")
 
     return {
-        "nodes": list(reached_nodes),
+        "nodes": list(active_nodes),
         "links": highlighted_links,
     }
