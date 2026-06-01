@@ -1938,6 +1938,8 @@ const SketchMod = {
         this.ports = this._collectPorts();
         this._propagateShapes();
         this._render();
+        this._clearHighlight();
+        this._clearValidation();
     },
 
     _redo() {
@@ -1951,6 +1953,8 @@ const SketchMod = {
         this.ports = this._collectPorts();
         this._propagateShapes();
         this._render();
+        this._clearHighlight();
+        this._clearValidation();
     },
 
     _captureState() {
@@ -1985,16 +1989,24 @@ const SketchMod = {
         this.ports = this._collectPorts();
 
         // Restore port shapes
-        for (const p of state.ports || []) {
-            const port = this.ports.find((pp) => pp.id === p.id);
-            if (port && p.shape) {
-                port.setShape(
-                    p.shape.shape,
-                    p.shape.dtype,
-                    p.shape.known,
-                    p.shape.symbolic,
-                );
-                if (p.bias !== undefined) port.bias = p.bias;
+        if (state.ports) {
+            for (const saved of state.ports) {
+                const port = this.ports.find((p) => p.id === saved.id);
+                if (!port) continue;
+                if (saved.shape)
+                    port.setShape(
+                        saved.shape.shape,
+                        saved.shape.dtype,
+                        saved.shape.known,
+                        saved.shape.symbolic,
+                    );
+                if (saved.bias !== undefined) port.bias = saved.bias;
+                if (saved.activationPhases)
+                    port.activationPhases = saved.activationPhases.slice();
+                if (saved.activationMode) {
+                    // backward compatibility
+                    port.activationPhases = [saved.activationMode]; // convert old to new
+                }
             }
         }
 
