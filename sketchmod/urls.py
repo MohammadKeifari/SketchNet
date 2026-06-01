@@ -12,4 +12,5 @@ urlpatterns = [
         views.api_dataset_columns,
         name="api_dataset_columns",
     ),
+    path("api/highlight-path/", views.highlight_path_api, name="highlight_path_api"),
 ]

@@ -3182,57 +3182,40 @@ const SketchMod = {
     },
 
     _highlightPhase(phase) {
-        this._clearHighlight();
+        const graphData = JSON.stringify(this._getGraphData());
 
-        this._highlightPhaseLinks = new Set();
-        this._highlightPhaseNodes = new Set();
-
-        // Find all output ports that have this phase, then follow links
-        const visitedPorts = new Set();
-        const queue = [];
-
-        // Start from ports that have the phase and are on reached nodes (or InputData)
-        for (const port of this.ports) {
-            if (
-                port.activationPhases &&
-                port.activationPhases.includes(phase) &&
-                port.type === "output"
-            ) {
-                // Check if the node that owns this port is "reachable" for this phase
-                // For simplicity, we start from any output port with the phase
-                queue.push(port);
-                visitedPorts.add(port.id);
-            }
-        }
-
-        while (queue.length > 0) {
-            const srcPort = queue.shift();
-            // find all links from this port
-            const links = this.links.filter((l) => l.from === srcPort);
-            for (const link of links) {
-                this._highlightPhaseLinks.add(link);
-                this._highlightPhaseNodes.add(link.from.node);
-                this._highlightPhaseNodes.add(link.to.node);
-
-                const toPort = link.to;
-                if (!visitedPorts.has(toPort.id)) {
-                    visitedPorts.add(toPort.id);
-                    // propagate further if the target node's output ports have this phase
-                    const node = toPort.node;
-                    for (const outPort of node.outputs) {
-                        if (
-                            outPort.activationPhases &&
-                            outPort.activationPhases.includes(phase)
-                        ) {
-                            queue.push(outPort);
-                            visitedPorts.add(outPort.id);
-                        }
+        fetch("/sketchmod/api/highlight-path/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": this._getCsrfToken(),
+            },
+            body: JSON.stringify({ graph: graphData, phase: phase }),
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.success) {
+                    this._clearHighlight();
+                    this._highlightPhaseNodes = new Set(data.nodes);
+                    this._highlightPhaseLinks = new Set();
+                    // Build set of Link objects by matching link keys
+                    for (const key of data.links) {
+                        const link = this.links.find(
+                            (l) => l.from.id + "→" + l.to.id === key,
+                        );
+                        if (link) this._highlightPhaseLinks.add(link);
                     }
+                    this._render();
+                } else {
+                    this._showToast(
+                        "Highlight failed: " + (data.error || "Unknown error"),
+                    );
                 }
-            }
-        }
-
-        this._render();
+            })
+            .catch((err) => {
+                console.error("Highlight path failed:", err);
+                this._showToast("Highlight failed. Check console.");
+            });
     },
 
     _clearHighlight() {

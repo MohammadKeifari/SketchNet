@@ -228,3 +228,27 @@ def validate_api(request):
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@login_required
+@csrf_exempt
+def highlight_path_api(request):
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "POST required"}, status=405)
+    try:
+        data = json.loads(request.body)
+        graph_json = data.get("graph", "{}")
+        phase = data.get("phase", "")
+
+        if isinstance(graph_json, str):
+            graph = json.loads(graph_json)
+        else:
+            graph = graph_json
+
+        from .codegen.phase_analyzer import highlight_path
+
+        result = highlight_path(graph, phase)
+
+        return JsonResponse({"success": True, **result})
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
