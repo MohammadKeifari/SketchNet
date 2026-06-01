@@ -4400,10 +4400,10 @@ class RectNode extends BaseNode {
             }
             ctx.strokeStyle = "#4ade80";
             ctx.lineWidth = 3;
-            ctx.shadowColor = "#4ade80";
-            ctx.shadowBlur = 10;
+            // ctx.shadowColor = "#4ade80";
+            // ctx.shadowBlur = 10;
             ctx.stroke();
-            ctx.shadowColor = "transparent";
+            // ctx.shadowColor = "transparent";
             ctx.shadowBlur = 0;
         }
 
@@ -6977,9 +6977,10 @@ class Link {
         if (isHL) {
             strokeColor = "#4ade80";
             fillColor = "#4ade80";
-            lineWidth = 3;
-            ctx.shadowColor = "#4ade80";
-            ctx.shadowBlur = 6;
+            lineWidth = 2.5;
+            // lineWidth = 3;
+            // ctx.shadowColor = "#4ade80";
+            // ctx.shadowBlur = 6;
         } else if (SketchMod.errorLinkIds.has(linkKey)) {
             strokeColor = "#ef4444";
             fillColor = "#ef4444";
@@ -7010,9 +7011,10 @@ class Link {
         ctx.lineWidth = lineWidth;
         ctx.stroke();
 
-        // Reset shadow immediately after stroke
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
+
+        // // Reset shadow immediately after stroke
+        // ctx.shadowColor = "transparent";
+        // ctx.shadowBlur = 0;
 
         // -------- Arrow head --------
         const dx = this.to.x - this.from.x;
@@ -7047,9 +7049,9 @@ class Link {
         ctx.fillStyle = fillColor;
         ctx.fill();
 
-        // Final reset (safety)
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
+        // // Final reset (safety)
+        // ctx.shadowColor = "transparent";
+        // ctx.shadowBlur = 0;
     }
 
     hitTest(px, py) {
