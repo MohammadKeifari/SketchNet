@@ -1,122 +1,44 @@
-from .graph import Graph, Node
-from typing import Set, List, Dict, Tuple, Optional
-
-# Node type categories
-DATA_TRANSFORM_TYPES = {
-    "column-select",
-    "row-select",
-    "dim-select",
-    "normalize",
-    "onehot",
-    "train-test",
-}
-MODEL_TYPES = {
-    "neuron",
-    "layer",
-    "conv2d",
-    "flatten",
-    "dropout",
-    "batchnorm",
-    "add",
-    "concat",
-}
-OUTPUT_TYPE = "output"
-INPUT_DATA_TYPE = "input-data"
-OPTIMIZER_TYPE = "optimizer"
-VISUALIZATION_TYPE = "visualization"
+from .graph import Graph
+from typing import Set, List, Dict
 
 
 def _traverse_phase(graph: Graph, phase: str) -> Set[str]:
-    """
-    phase: "train" (every_batch/both) or "eval" (last_batch/both)
-    Returns set of node ids that are reachable and fully satisfied.
-    """
-    # Find start nodes (input-data)
-    start_nodes = [
-        nid for nid, node in graph.nodes.items() if node.type == INPUT_DATA_TYPE
-    ]
-    # Track which input ports of each node have an active incoming link
-    active_inputs = {
-        nid: {p.id: False for p in graph.nodes[nid].inputs} for nid in graph.nodes
-    }
-    reached_nodes = set(start_nodes)
-
-    # BFS: node becomes active when all its inputs have at least one active link.
-    # We'll iterate until no change.
-    changed = True
-    while changed:
-        changed = False
-        # For each node, check if all inputs are satisfied.
-        for nid, node in graph.nodes.items():
-            if nid in reached_nodes:
-                continue
-            all_inputs_satisfied = True
-            for in_port in node.inputs:
-                # Check if any link to this input is active in this phase
-                found_active = False
+    """Return nodes reachable when only links with `phase` in source port's activation_phases are active."""
+    reached = set()
+    # Start from input-data nodes if they have outputs with this phase, or any node with an input connected from such a source.
+    # Simpler: iterate through all links; if source port has phase, and source node is reached, then target node becomes reached.
+    # BFS
+    # Initialize: any node whose input ports are all fed from ports that have the phase? Actually we follow the rule:
+    # A node is reached if at least one input port receives data (from a source port with phase) and the source node is reached.
+    # InputData node is always considered "reached" (it has no inputs).
+    for nid, node in graph.nodes.items():
+        if node.type == "input-data":
+            # check if any of its output ports has the phase, then node can be start
+            if any(phase in p.activation_phases for p in node.outputs):
+                reached.add(nid)
+    # BFS
+    queue = list(reached)
+    while queue:
+        src_id = queue.pop(0)
+        src_node = graph.nodes[src_id]
+        for out_port in src_node.outputs:
+            if phase in out_port.activation_phases:
                 for link in graph.links:
-                    if link.id_to == in_port.id:
-                        src_port = graph.ports[link.id_from]
-                        if (
-                            phase == "train"
-                            and src_port.activation_mode in ("every_batch", "both")
-                        ) or (
-                            phase == "eval"
-                            and src_port.activation_mode in ("last_batch", "both")
-                        ):
-                            # also check that the source node is reached
-                            if src_port.node_id in reached_nodes:
-                                found_active = True
-                                break
-                if not found_active:
-                    all_inputs_satisfied = False
-                    break
-            if all_inputs_satisfied:
-                reached_nodes.add(nid)
-                changed = True
-    return reached_nodes
+                    if link.id_from == out_port.id:
+                        tgt_port = graph.ports[link.id_to]
+                        tgt_id = tgt_port.node_id
+                        if tgt_id not in reached:
+                            reached.add(tgt_id)
+                            queue.append(tgt_id)
+    return reached
 
 
 def analyze_phases(graph: Graph) -> Dict:
-    # Get train and eval sets
-    train_set = _traverse_phase(graph, "train")
-    eval_set = _traverse_phase(graph, "eval")
+    pre_set = _traverse_phase(graph, "preprocessing")
+    train_set = _traverse_phase(graph, "training")
+    eval_set = _traverse_phase(graph, "evaluation")
 
-    # Preprocessing: nodes in both sets, but exclude model types and output
-    common = train_set.intersection(eval_set)
-    preprocessing_set = {
-        nid
-        for nid in common
-        if graph.nodes[nid].type not in MODEL_TYPES
-        and graph.nodes[nid].type != OUTPUT_TYPE
-    }
-
-    # Train-specific data nodes (not in preprocessing and not model)
-    train_data = (train_set - preprocessing_set) - {
-        nid
-        for nid in train_set
-        if graph.nodes[nid].type in MODEL_TYPES or graph.nodes[nid].type == OUTPUT_TYPE
-    }
-    # Train model nodes (including output)
-    train_model = (train_set - preprocessing_set) & {
-        nid
-        for nid in train_set
-        if graph.nodes[nid].type in MODEL_TYPES or graph.nodes[nid].type == OUTPUT_TYPE
-    }
-
-    # Eval data and model
-    eval_data = (eval_set - preprocessing_set) - {
-        nid
-        for nid in eval_set
-        if graph.nodes[nid].type in MODEL_TYPES or graph.nodes[nid].type == OUTPUT_TYPE
-    }
-    eval_model = (eval_set - preprocessing_set) & {
-        nid
-        for nid in eval_set
-        if graph.nodes[nid].type in MODEL_TYPES or graph.nodes[nid].type == OUTPUT_TYPE
-    }
-
-    # Topological sort for each group
+    # Topological sort within each set
     def topo_sort(nids: Set[str]) -> List[str]:
         # Kahn's algorithm on subgraph induced by nids
         in_degree = {nid: 0 for nid in nids}
@@ -137,32 +59,26 @@ def analyze_phases(graph: Graph) -> Dict:
                     queue.append(succ)
         return order
 
-    preprocessing_order = topo_sort(preprocessing_set)
-    train_data_order = topo_sort(train_data)
-    train_model_order = topo_sort(train_model)
-    eval_data_order = topo_sort(eval_data)
-    eval_model_order = topo_sort(eval_model)
+    pre_order = topo_sort(pre_set)
+    train_order = topo_sort(train_set)
+    eval_order = topo_sort(eval_set)
 
-    # Find optimizer node (should be in train set)
+    # Find optimizer node (should be in train_set)
     opt_node = None
     for nid in train_set:
-        if graph.nodes[nid].type == OPTIMIZER_TYPE:
+        if graph.nodes[nid].type == "optimizer":
             opt_node = graph.nodes[nid]
             break
 
-    # Find visualization nodes (in eval set usually)
+    # Find visualization nodes (should be in eval_set)
     viz_nodes = [
-        graph.nodes[nid]
-        for nid in eval_set
-        if graph.nodes[nid].type == VISUALIZATION_TYPE
+        graph.nodes[nid] for nid in eval_set if graph.nodes[nid].type == "visualization"
     ]
 
     return {
-        "preprocessing_order": preprocessing_order,
-        "train_data_order": train_data_order,
-        "train_model_order": train_model_order,
-        "eval_data_order": eval_data_order,
-        "eval_model_order": eval_model_order,
+        "preprocessing_order": pre_order,
+        "train_order": train_order,
+        "eval_order": eval_order,
         "optimizer": opt_node,
         "visualizations": viz_nodes,
     }
