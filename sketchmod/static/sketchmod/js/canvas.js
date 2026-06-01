@@ -479,7 +479,8 @@ const SketchMod = {
         if (this.nodes.length === 0) {
             this._createDefaultNodes();
         }
-
+        this.resize();
+        this._zoomFit();
         this._render();
         this._saveUndoState();
     },
