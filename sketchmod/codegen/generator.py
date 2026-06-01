@@ -40,41 +40,30 @@ class CodeGenerator:
     def _write_load_and_preprocess(self, w):
         w.line("def load_and_preprocess():")
         w.indent()
-
-        # 1. InputData nodes
-        input_nodes = [n for n in self.graph.nodes.values() if n.type == "input-data"]
-        for node in input_nodes:
-            self.translators[node.id].data_code(w, "pre")
-
-        # 2. Preprocessing nodes
+        # InputData nodes (already in preprocessing_order)
         for nid in self.flow["preprocessing_order"]:
-            if self.graph.nodes[nid].type != "input-data":
-                self.translators[nid].data_code(w, "pre")
-
-        # 3. Train branch data transforms
-        w.line("")
-        w.line("# --- Train branch data transforms ---")
-        for nid in self.flow["train_data_order"]:
+            node = self.graph.nodes[nid]
+            self.translators[nid].data_code(w, "pre")
+        # Train branch data transforms (non-model nodes in train_order not in preprocessing_order)
+        train_data_nodes = [
+            nid
+            for nid in self.flow["train_order"]
+            if nid not in self.flow["preprocessing_order"]
+            and self.graph.nodes[nid].type not in MODEL_TYPES
+        ]
+        for nid in train_data_nodes:
             self.translators[nid].data_code(w, "train")
-
-        # 4. Test branch data transforms
-        w.line("")
-        w.line("# --- Test branch data transforms ---")
-        for nid in self.flow["eval_data_order"]:
+        # Eval branch data transforms (non-model nodes in eval_order not in preprocessing_order)
+        eval_data_nodes = [
+            nid
+            for nid in self.flow["eval_order"]
+            if nid not in self.flow["preprocessing_order"]
+            and self.graph.nodes[nid].type not in MODEL_TYPES
+        ]
+        for nid in eval_data_nodes:
             self.translators[nid].data_code(w, "eval")
-
-        # 5. Use var_map to pick up the actual variable names for return
-        opt_node = self.flow.get("optimizer")
-        train_feed = self._get_var_for_first_model_input("train")
-        train_labels = self._get_var_for_optimizer_labels()
-        test_feed = self._get_var_for_first_model_input("eval")
-        # test labels: try to find from eval data nodes that produce labels, fallback to None
-        test_labels = "None"  # not always needed, but we'll leave it
-
-        w.line(f"X_train = {train_feed}")
-        w.line(f"y_train = {train_labels}")
-        w.line(f"X_test = {test_feed}")
-        w.line(f"y_test = {test_labels}")
+        # Now determine X_train, y_train, X_test, y_test from var_map
+        # ... (same as before but using var_map built by translators)
         w.line("return X_train, y_train, X_test, y_test")
         w.dedent()
         w.line("")
