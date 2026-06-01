@@ -57,6 +57,9 @@ const SketchMod = {
     _currentModelId: null,
     _currentModelName: null,
 
+    _highlightPhaseNodes: null, // Set of node instances that are highlighted
+    _highlightPhaseLinks: null, // Set of link instances that are highlighted
+
     _getNodeColor() {
         const theme =
             document.documentElement.getAttribute("data-theme") || "light";
@@ -3206,7 +3209,6 @@ const SketchMod = {
 
     _highlightPhase(phase) {
         const graphData = JSON.stringify(this._getGraphData());
-
         fetch("/sketchmod/api/highlight-path/", {
             method: "POST",
             headers: {
@@ -3219,9 +3221,14 @@ const SketchMod = {
             .then((data) => {
                 if (data.success) {
                     this._clearHighlight();
-                    this._highlightPhaseNodes = new Set(data.nodes);
+                    this._highlightPhaseNodes = new Set();
                     this._highlightPhaseLinks = new Set();
-                    // Build set of Link objects by matching link keys
+                    // Map node ids to actual node objects
+                    for (const nid of data.nodes) {
+                        const node = this.nodes.find((n) => n.id === nid);
+                        if (node) this._highlightPhaseNodes.add(node);
+                    }
+                    // Map link keys to Link objects
                     for (const key of data.links) {
                         const link = this.links.find(
                             (l) => l.from.id + "→" + l.to.id === key,
@@ -3242,11 +3249,9 @@ const SketchMod = {
     },
 
     _clearHighlight() {
-        this._highlightPhaseLinks = null;
         this._highlightPhaseNodes = null;
-        // also clear any old highlight sets if you had them
-        if (this._highlightLinks) this._highlightLinks = null;
-        if (this._highlightNodes) this._highlightNodes = null;
+        this._highlightPhaseLinks = null;
+        this._render();
     },
 };
 // ========== PORT BASE CLASS ==========
@@ -3543,6 +3548,7 @@ class RolePort extends Port {
 class ParamPort extends Port {
     constructor(node, type, index) {
         super(node, type, index, null);
+        this.id = `${node.id}_${type === "input" ? "param_in" : "param_out"}_${index}`;
     }
 
     get connectionLimit() {
@@ -4326,15 +4332,20 @@ class RectNode extends BaseNode {
             ctx.fill();
         }
 
+        // Highlight path (green glow)
         if (
             SketchMod._highlightPhaseNodes &&
             SketchMod._highlightPhaseNodes.has(this)
         ) {
             ctx.beginPath();
-            // For RectNode, draw a slightly larger rectangle with green glow
-            const x = this.x - this.width / 2 - 4;
-            const y = this.y - this.height / 2 - 4;
-            ctx.roundRect(x, y, this.width + 8, this.height + 8, 10);
+            // For RectNode
+            if (this.getBounds) {
+                const b = this.getBounds();
+                ctx.roundRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8, 10);
+            } else {
+                // CircleNode
+                ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+            }
             ctx.strokeStyle = "#4ade80";
             ctx.lineWidth = 3;
             ctx.shadowColor = "#4ade80";
@@ -7005,16 +7016,23 @@ class Link {
         ctx.lineTo(tipX, tipY);
         ctx.closePath();
         let fillColor;
-        if (SketchMod.errorLinkIds.has(linkKey)) {
-            fillColor = "#ef4444";
-        } else if (SketchMod.warningLinkIds.has(linkKey)) {
-            fillColor = "#f59e0b";
-        } else if (selected) {
-            fillColor = "var(--accent)";
-        } else if (this.hasWeight) {
-            fillColor = "var(--text-primary)";
+        if (
+            SketchMod._highlightPhaseLinks &&
+            SketchMod._highlightPhaseLinks.has(this)
+        ) {
+            fillColor = "#4ade80";
         } else {
-            fillColor = "var(--text-secondary)";
+            if (SketchMod.errorLinkIds.has(linkKey)) {
+                fillColor = "#ef4444";
+            } else if (SketchMod.warningLinkIds.has(linkKey)) {
+                fillColor = "#f59e0b";
+            } else if (selected) {
+                fillColor = "var(--accent)";
+            } else if (this.hasWeight) {
+                fillColor = "var(--text-primary)";
+            } else {
+                fillColor = "var(--text-secondary)";
+            }
         }
         ctx.fillStyle = fillColor;
         ctx.fill();
