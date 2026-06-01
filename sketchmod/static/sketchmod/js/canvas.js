@@ -312,6 +312,12 @@ const SketchMod = {
                         ?.classList.remove("open");
                 });
             });
+        document
+            .getElementById("btnClearPath")
+            ?.addEventListener("click", () => {
+                this._clearHighlight();
+                document.getElementById("btnClearPath").style.display = "none";
+            });
         // Undo and redo button
         document
             .getElementById("btnUndo")
@@ -3235,6 +3241,14 @@ const SketchMod = {
                         );
                         if (link) this._highlightPhaseLinks.add(link);
                     }
+                    // In _highlightPhase, after successfully applying the highlight:
+                    if (data.success) {
+                        // ... existing code ...
+                        const clearBtn =
+                            document.getElementById("btnClearPath");
+                        if (clearBtn) clearBtn.style.display = "flex";
+                    }
+
                     this._render();
                 } else {
                     this._showToast(
@@ -3251,6 +3265,8 @@ const SketchMod = {
     _clearHighlight() {
         this._highlightPhaseNodes = null;
         this._highlightPhaseLinks = null;
+        const btn = document.getElementById("btnClearPath");
+        if (btn) btn.style.display = "none";
         this._render();
     },
 };
