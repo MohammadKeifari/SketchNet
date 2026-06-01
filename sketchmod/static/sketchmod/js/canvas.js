@@ -3226,14 +3226,14 @@ const SketchMod = {
                 if (data.success) {
                     this._clearHighlight();
 
-                    // Build node set
+                    // 1. Active nodes
                     this._highlightPhaseNodes = new Set();
                     for (const nid of data.nodes) {
                         const node = this.nodes.find((n) => n.id === nid);
                         if (node) this._highlightPhaseNodes.add(node);
                     }
 
-                    // Build link set and simultaneously collect active ports
+                    // 2. Active links + collect active ports
                     this._highlightPhaseLinks = new Set();
                     const activePorts = new Set();
                     for (const key of data.links) {
@@ -3247,34 +3247,29 @@ const SketchMod = {
                             activePorts.add(link.to);
                         }
                     }
-                    // Also include ports of active nodes that are connected (for nodes with no outgoing links)
+
+                    // 3. Also mark ports of active nodes that have the phase (even if no links)
                     for (const node of this._highlightPhaseNodes) {
-                        for (const port of node.inputs) {
+                        for (const p of node.inputs.concat(
+                            node.outputs,
+                            node.paramInputs,
+                            node.paramOutputs,
+                        )) {
                             if (
-                                port.activationPhases &&
-                                port.activationPhases.includes(phase)
-                            )
-                                activePorts.add(port);
-                        }
-                        for (const port of node.outputs) {
-                            if (
-                                port.activationPhases &&
-                                port.activationPhases.includes(phase)
-                            )
-                                activePorts.add(port);
+                                p.activationPhases &&
+                                p.activationPhases.includes(phase)
+                            ) {
+                                activePorts.add(p);
+                            }
                         }
                     }
-                    this._highlightPhasePorts = activePorts;
+
+                    this._highlightPhasePorts = activePorts; // <-- this line is crucial
 
                     this._render();
 
-                    // Show Clear Path button
                     const btn = document.getElementById("btnClearPath");
                     if (btn) btn.style.display = "flex";
-                } else {
-                    this._showToast(
-                        "Highlight failed: " + (data.error || "Unknown error"),
-                    );
                 }
             })
             .catch((err) => {
@@ -7010,7 +7005,6 @@ class Link {
         ctx.strokeStyle = strokeColor;
         ctx.lineWidth = lineWidth;
         ctx.stroke();
-
 
         // // Reset shadow immediately after stroke
         // ctx.shadowColor = "transparent";
