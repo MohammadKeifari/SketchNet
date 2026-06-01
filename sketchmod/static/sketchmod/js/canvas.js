@@ -713,13 +713,14 @@ const SketchMod = {
         if (hit && hit.node) {
             if (this.shiftPressed) {
                 const idx = this.selectedNodes.indexOf(hit.node);
-                if (idx >= 0) {
-                    this.selectedNodes.splice(idx, 1);
-                } else {
-                    this.selectedNodes.push(hit.node);
-                }
+                if (idx >= 0) this.selectedNodes.splice(idx, 1);
+                else this.selectedNodes.push(hit.node);
             } else {
-                this.selectedNodes = [hit.node];
+                // If the clicked node is not already selected, select it exclusively
+                if (!this.selectedNodes.includes(hit.node)) {
+                    this.selectedNodes = [hit.node];
+                }
+                // otherwise keep the multi‑selection (drag will move all)
             }
             this.selectedLinks = [];
             this.selectedPorts = [];
