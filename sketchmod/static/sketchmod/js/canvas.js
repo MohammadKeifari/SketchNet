@@ -60,6 +60,7 @@ const SketchMod = {
     _highlightPhaseNodes: null, // Set of node instances that are highlighted
     _highlightPhaseLinks: null, // Set of link instances that are highlighted
 
+    clipboard: null,
     _getNodeColor() {
         const theme =
             document.documentElement.getAttribute("data-theme") || "light";
@@ -964,6 +965,14 @@ const SketchMod = {
         if ((e.ctrlKey || e.metaKey) && e.key === "y") {
             e.preventDefault();
             this._redo();
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+            e.preventDefault();
+            this._copySelected();
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+            e.preventDefault();
+            this._pasteClipboard();
         }
     },
 
@@ -3301,6 +3310,103 @@ const SketchMod = {
         this._highlightPhasePorts = null;
         const btn = document.getElementById("btnClearPath");
         if (btn) btn.style.display = "none";
+        this._render();
+    },
+    _copySelected() {
+        if (this.selectedNodes.length === 0) return;
+        const selectedIds = new Set(this.selectedNodes.map((n) => n.id));
+        const nodesData = this.selectedNodes.map((n) => n.toJSON());
+        const linksData = this.links
+            .filter(
+                (l) =>
+                    selectedIds.has(l.from.node.id) &&
+                    selectedIds.has(l.to.node.id),
+            )
+            .map((l) => l.toJSON());
+        this.clipboard = { nodes: nodesData, links: linksData };
+        this._showToast(`${nodesData.length} node(s) copied`);
+    },
+    _pasteClipboard() {
+        if (!this.clipboard) return;
+        this._saveUndoState();
+        const cb = this.clipboard;
+
+        // Find top‑left offset for pasted nodes
+        let minX = Infinity,
+            minY = Infinity;
+        for (const nd of cb.nodes) {
+            if (nd.x < minX) minX = nd.x;
+            if (nd.y < minY) minY = nd.y;
+        }
+        const offsetX = 50;
+        const offsetY = 50;
+
+        const oldToNewId = {};
+        const oldPortToNewPort = {};
+
+        // Create new nodes
+        for (const nd of cb.nodes) {
+            const entry = this.nodeRegistry.find((r) => r.type === nd.type);
+            if (!entry && nd.type !== "input-data" && nd.type !== "output")
+                continue;
+            const newId = nd.type[0] + ++this.nodeCounter;
+            oldToNewId[nd.id] = newId;
+            let node;
+            if (entry) {
+                node = new entry.class(newId, nd.x + offsetX, nd.y + offsetY);
+            } else if (nd.type === "input-data") {
+                node = new InputDataNode(newId, nd.x + offsetX, nd.y + offsetY);
+            } else if (nd.type === "output") {
+                node = new OutputNode(newId, nd.x + offsetX, nd.y + offsetY);
+            }
+            if (!node) continue;
+
+            // Deep copy properties from the serialised form
+            node.fromJSON(nd);
+            // Override id and position
+            node.id = newId;
+            node.x = nd.x + offsetX;
+            node.y = nd.y + offsetY;
+            // Regenerate port IDs
+            node.inputs.forEach((p, i) => {
+                oldPortToNewPort[nd.inputPorts?.[i]?.id] = p; // old id -> new port
+                p.id = `${newId}_input_${i}`;
+            });
+            node.outputs.forEach((p, i) => {
+                oldPortToNewPort[nd.outputPorts?.[i]?.id] = p;
+                p.id = `${newId}_output_${i}`;
+            });
+            node.paramInputs.forEach((p, i) => {
+                oldPortToNewPort[nd.paramInputs?.[i]?.id] = p;
+                p.id = `${newId}_param_in_${i}`;
+            });
+            node.paramOutputs.forEach((p, i) => {
+                oldPortToNewPort[nd.paramOutputs?.[i]?.id] = p;
+                p.id = `${newId}_param_out_${i}`;
+            });
+            node.updatePorts(); // reposition
+            this.nodes.push(node);
+        }
+
+        this.ports = this._collectPorts();
+
+        // Recreate links between pasted nodes
+        for (const ld of cb.links) {
+            const newFrom = oldPortToNewPort[ld.from];
+            const newTo = oldPortToNewPort[ld.to];
+            if (newFrom && newTo) {
+                this.links.push(new Link(newFrom, newTo, ld.weight));
+            }
+        }
+
+        // Select the pasted nodes
+        this.selectedNodes = this.nodes.filter((n) =>
+            Object.values(oldToNewId).includes(n.id),
+        );
+        this.selectedLinks = [];
+        this.selectedPorts = [];
+        this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
 };
