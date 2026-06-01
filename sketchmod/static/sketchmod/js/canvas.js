@@ -3550,7 +3550,9 @@ class ParamPort extends Port {
         super(node, type, index, null);
         this.id = `${node.id}_${type === "input" ? "param_in" : "param_out"}_${index}`;
     }
-
+    _defaultPhases() {
+        return ["preprocessing"];
+    }
     get connectionLimit() {
         return 1;
     }
@@ -4910,16 +4912,8 @@ class ColumnSelectNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationPhases = [
-            "preprocessing",
-            "training",
-            "evaluation",
-        ];
-        this.outputs[0].activationPhases = [
-            "preprocessing",
-            "training",
-            "evaluation",
-        ];
+        this.inputs[0].activationPhases = ["preprocessing"];
+        this.outputs[0].activationPhases = ["preprocessing"];
     }
 
     drawLabel(ctx) {
@@ -5050,16 +5044,8 @@ class RowSelectNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationPhases = [
-            "preprocessing",
-            "training",
-            "evaluation",
-        ];
-        this.outputs[0].activationPhases = [
-            "preprocessing",
-            "training",
-            "evaluation",
-        ];
+        this.inputs[0].activationPhases = ["preprocessing"];
+        this.outputs[0].activationPhases = ["preprocessing"];
     }
 
     drawLabel(ctx) {
@@ -5225,16 +5211,8 @@ class DimSelectNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationPhases = [
-            "preprocessing",
-            "training",
-            "evaluation",
-        ];
-        this.outputs[0].activationPhases = [
-            "preprocessing",
-            "training",
-            "evaluation",
-        ];
+        this.inputs[0].activationPhases = ["preprocessing"];
+        this.outputs[0].activationPhases = ["preprocessing"];
     }
 
     drawLabel(ctx) {
@@ -5596,16 +5574,8 @@ class NormalizeNode extends RectNode {
         this.minParamOutputs = 0;
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationPhases = [
-            "preprocessing",
-            "training",
-            "evaluation",
-        ];
-        this.outputs[0].activationPhases = [
-            "preprocessing",
-            "training",
-            "evaluation",
-        ];
+        this.inputs[0].activationPhases = ["preprocessing"];
+        this.outputs[0].activationPhases = ["preprocessing"];
     }
     drawLabel(ctx) {
         ctx.fillText(
@@ -5974,16 +5944,8 @@ class OneHotEncodeNode extends RectNode {
         this.minParamOutputs = 0;
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationPhases = [
-            "preprocessing",
-            "training",
-            "evaluation",
-        ];
-        this.outputs[0].activationPhases = [
-            "preprocessing",
-            "training",
-            "evaluation",
-        ];
+        this.inputs[0].activationPhases = ["preprocessing"];
+        this.outputs[0].activationPhases = ["preprocessing"];
     }
 
     drawLabel(ctx) {
@@ -6081,6 +6043,8 @@ class DeOneHotNode extends RectNode {
 
         this.addInput();
         this.addOutput();
+        this.inputs[0].activationPhases = ["preprocessing"];
+        this.outputs[0].activationPhases = ["preprocessing"];
     }
 
     drawLabel(ctx) {
