@@ -41,14 +41,14 @@ class CodeGenerator:
         w.line("def load_and_preprocess():")
         w.indent()
 
-        # 1. InputData node(s)
+        # 1. InputData nodes
         input_nodes = [n for n in self.graph.nodes.values() if n.type == "input-data"]
         for node in input_nodes:
             self.translators[node.id].data_code(w, "pre")
 
         # 2. Preprocessing nodes
         for nid in self.flow["preprocessing_order"]:
-            if self.graph.nodes[nid].type != "input-data":  # already handled
+            if self.graph.nodes[nid].type != "input-data":
                 self.translators[nid].data_code(w, "pre")
 
         # 3. Train branch data transforms
@@ -63,50 +63,13 @@ class CodeGenerator:
         for nid in self.flow["eval_data_order"]:
             self.translators[nid].data_code(w, "eval")
 
-        # 5. Determine variable names for X_train, y_train, X_test, y_test
-        # We need to find the tensors that feed the model and optimizer.
+        # 5. Use var_map to pick up the actual variable names for return
         opt_node = self.flow.get("optimizer")
-        train_feed, train_labels = None, None
-        test_feed = None
-
-        # Training input: first model node's input source
-        train_model = self.flow["train_model_order"]
-        if train_model:
-            first = train_model[0]
-            # find source node id feeding its first input
-            src_id = self._find_input_source(first)
-            if src_id and src_id in self.var_map:
-                train_feed = self.var_map[src_id]
-            # else use placeholder
-        if not train_feed:
-            train_feed = "train_features"
-
-        # Training labels: from optimizer's labels input
-        if opt_node:
-            labels_port = opt_node.inputs[1] if len(opt_node.inputs) > 1 else None
-            if labels_port:
-                label_src = None
-                for link in self.graph.links:
-                    if link.id_to == labels_port.id:
-                        label_src = self.graph.ports[link.id_from].node_id
-                        break
-                if label_src and label_src in self.var_map:
-                    train_labels = self.var_map[label_src]
-        if not train_labels:
-            train_labels = "train_labels_placeholder"
-
-        # Test input: first eval model node's input source
-        eval_model = self.flow["eval_model_order"]
-        if eval_model:
-            first = eval_model[0]
-            src_id = self._find_input_source(first)
-            if src_id and src_id in self.var_map:
-                test_feed = self.var_map[src_id]
-        if not test_feed:
-            test_feed = "test_features"
-
-        # Test labels: we might not need them for evaluation, but we'll try to find from test data pipeline
-        test_labels = "test_labels_placeholder"
+        train_feed = self._get_var_for_first_model_input("train")
+        train_labels = self._get_var_for_optimizer_labels()
+        test_feed = self._get_var_for_first_model_input("eval")
+        # test labels: try to find from eval data nodes that produce labels, fallback to None
+        test_labels = "None"  # not always needed, but we'll leave it
 
         w.line(f"X_train = {train_feed}")
         w.line(f"y_train = {train_labels}")
@@ -115,6 +78,31 @@ class CodeGenerator:
         w.line("return X_train, y_train, X_test, y_test")
         w.dedent()
         w.line("")
+
+    def _get_var_for_first_model_input(self, phase):
+        """Return the variable name that feeds the first model node in given phase."""
+        order = self.flow[f"{phase}_model_order"]
+        if not order:
+            return "None"
+        first = order[0]
+        src_id = self._find_input_source(first)
+        if src_id and src_id in self.var_map:
+            return self.var_map[src_id]
+        return "None"
+
+    def _get_var_for_optimizer_labels(self):
+        opt = self.flow.get("optimizer")
+        if not opt:
+            return "None"
+        labels_port = opt.inputs[1] if len(opt.inputs) > 1 else None
+        if not labels_port:
+            return "None"
+        for link in self.graph.links:
+            if link.id_to == labels_port.id:
+                src_id = self.graph.ports[link.id_from].node_id
+                if src_id in self.var_map:
+                    return self.var_map[src_id]
+        return "None"
 
     def _find_input_source(self, node_id):
         """Return the node id that feeds the first input port of node_id."""
@@ -222,14 +210,12 @@ class CodeGenerator:
             "                             weight_decay=config.get('weight_decay', 0))"
         )
         w.line("")
-        # Early stopping setup
         w.line("best_loss = float('inf')")
         w.line(
             "patience = config.get('early_stopping_patience', 10) if config.get('early_stopping') else None"
         )
         w.line("no_improve = 0")
         w.line("")
-        # Training loop
         w.line("for epoch in range(epochs):")
         w.indent()
         w.line("model.train()")
@@ -237,8 +223,7 @@ class CodeGenerator:
         w.line("for batch_X, batch_y in train_loader:")
         w.indent()
         w.line("batch_X, batch_y = batch_X.to(device), batch_y.to(device)")
-        # Feed dict: determine which source node id to use
-        feed_key = self._get_train_feed_key()
+        feed_key = self._get_feed_key("train")
         w.line(f"outputs = model({{'{feed_key}': batch_X}})")
         loss_port = self._get_loss_port_id()
         if loss_port:
@@ -255,7 +240,7 @@ class CodeGenerator:
             )
         w.line("optimizer.step()")
         w.line("total_loss += loss.item() * batch_X.size(0)")
-        w.dedent()
+        w.dedent()  # for batch loop
         w.line("avg_train_loss = total_loss / len(train_loader.dataset)")
         w.line("")
         # Validation
@@ -266,7 +251,7 @@ class CodeGenerator:
         w.line("for batch_X, batch_y in test_loader:")
         w.indent()
         w.line("batch_X, batch_y = batch_X.to(device), batch_y.to(device)")
-        eval_feed_key = self._get_eval_feed_key()
+        eval_feed_key = self._get_feed_key("eval")
         w.line(f"outputs = model({{'{eval_feed_key}': batch_X}})")
         if loss_port:
             w.line(f"pred = outputs['{loss_port}']")
@@ -274,8 +259,8 @@ class CodeGenerator:
             w.line("pred = list(outputs.values())[0]")
         w.line("loss = criterion(pred, batch_y)")
         w.line("val_loss += loss.item() * batch_X.size(0)")
-        w.dedent()
-        w.dedent()
+        w.dedent()  # for test batch loop
+        w.dedent()  # for no_grad
         w.line("avg_val_loss = val_loss / len(test_loader.dataset)")
         w.line("")
         w.line(
@@ -298,11 +283,20 @@ class CodeGenerator:
         w.line("break")
         w.dedent()
         w.dedent()
-        w.dedent()
+        w.dedent()  # close if patience
+        w.dedent()  # close for epoch
         w.line("")
         w.line("return model")
-        w.dedent()
+        w.dedent()  # close function
         w.line("")
+
+    def _get_feed_key(self, phase):
+        order = self.flow[f"{phase}_model_order"]
+        if order:
+            src_id = self._find_input_source(order[0])
+            if src_id:
+                return src_id
+        return "input"
 
     def _get_train_feed_key(self):
         train_model = self.flow["train_model_order"]
