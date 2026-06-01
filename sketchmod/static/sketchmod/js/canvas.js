@@ -2324,6 +2324,17 @@ const SketchMod = {
         this._saveToSession();
         this._render();
     },
+    _updateOneHotClasses(input) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof OneHotEncodeNode)) return;
+
+        this._saveUndoState();
+        node.numClasses = parseInt(input.value) || 10;
+        this._saveToSession();
+        this._propagateShapes();
+        this._render();
+    },
     _updateVizProp(prop, value) {
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
@@ -5943,6 +5954,10 @@ class OneHotEncodeNode extends RectNode {
         this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
+        this.maxParamInputs = 1;
+        this.minParamInputs = 0;
+        this.maxParamOutputs = 1;
+        this.minParamOutputs = 0;
         this.addInput();
         this.addOutput();
         this.inputs[0].activationPhases = [
@@ -5988,10 +6003,49 @@ class OneHotEncodeNode extends RectNode {
     }
 
     getPropertiesHTML() {
+        const hasParamIn = this.paramInputs.length > 0;
+        const hasParamOut = this.paramOutputs.length > 0;
+
+        let paramHTML = "";
+        if (hasParamIn || hasParamOut) {
+            paramHTML = `
+        <div class="prop-group">
+            <label>Param Ports</label>
+            <div class="port-legend">
+                ${
+                    hasParamIn
+                        ? `
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <polygon points="5,1 9,5 5,9 1,5" fill="#fbbf24" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Param Input — receives fitted categories
+                </span>`
+                        : ""
+                }
+                ${
+                    hasParamOut
+                        ? `
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <polygon points="5,1 9,5 5,9 1,5" fill="#38bdf8" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Param Output — passes fitted categories
+                </span>`
+                        : ""
+                }
+            </div>
+        </div>`;
+        }
+
         return (
             this._getShapeSummaryHTML() +
-            `<div class="prop-group"><label>Number of Classes</label><input type="number" id="prop-classes" class="prop-input" value="${this.numClasses}" min="2" max="10000"></div>
-            <p class="prop-hint">Converts integer labels to one-hot vectors. Adds a dimension.</p>`
+            paramHTML +
+            `<div class="prop-group"><label>Number of Classes</label>
+            <input type="number" id="prop-classes" class="prop-input" value="${this.numClasses}" min="2" max="10000"
+                   onchange="SketchMod._updateOneHotClasses(this)">
+        </div>
+        <p class="prop-hint">Converts integer labels to one-hot vectors. Adds a dimension.</p>`
         );
     }
 }
