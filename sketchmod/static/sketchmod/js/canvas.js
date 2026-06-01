@@ -1919,6 +1919,7 @@ const SketchMod = {
             nodes: this.nodes.map((n) => n.toJSON()),
             links: this.links.map((l) => l.toJSON()),
             nodeCounter: this.nodeCounter,
+            ports: this.ports.map((p) => p.toJSON()),
         };
         this.undoStack.push(state);
         if (this.undoStack.length > this.maxUndo) {
