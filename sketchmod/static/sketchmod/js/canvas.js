@@ -314,10 +314,7 @@ const SketchMod = {
             });
         document
             .getElementById("btnClearPath")
-            ?.addEventListener("click", () => {
-                this._clearHighlight();
-                document.getElementById("btnClearPath").style.display = "none";
-            });
+            ?.addEventListener("click", () => this._clearHighlight());
         // Undo and redo button
         document
             .getElementById("btnUndo")
@@ -3215,6 +3212,7 @@ const SketchMod = {
 
     _highlightPhase(phase) {
         const graphData = JSON.stringify(this._getGraphData());
+
         fetch("/sketchmod/api/highlight-path/", {
             method: "POST",
             headers: {
@@ -3227,29 +3225,52 @@ const SketchMod = {
             .then((data) => {
                 if (data.success) {
                     this._clearHighlight();
+
+                    // Build node set
                     this._highlightPhaseNodes = new Set();
-                    this._highlightPhaseLinks = new Set();
-                    // Map node ids to actual node objects
                     for (const nid of data.nodes) {
                         const node = this.nodes.find((n) => n.id === nid);
                         if (node) this._highlightPhaseNodes.add(node);
                     }
-                    // Map link keys to Link objects
+
+                    // Build link set and simultaneously collect active ports
+                    this._highlightPhaseLinks = new Set();
+                    const activePorts = new Set();
                     for (const key of data.links) {
+                        const [fromId, toId] = key.split("→");
                         const link = this.links.find(
-                            (l) => l.from.id + "→" + l.to.id === key,
+                            (l) => l.from.id === fromId && l.to.id === toId,
                         );
-                        if (link) this._highlightPhaseLinks.add(link);
+                        if (link) {
+                            this._highlightPhaseLinks.add(link);
+                            activePorts.add(link.from);
+                            activePorts.add(link.to);
+                        }
                     }
-                    // In _highlightPhase, after successfully applying the highlight:
-                    if (data.success) {
-                        // ... existing code ...
-                        const clearBtn =
-                            document.getElementById("btnClearPath");
-                        if (clearBtn) clearBtn.style.display = "flex";
+                    // Also include ports of active nodes that are connected (for nodes with no outgoing links)
+                    for (const node of this._highlightPhaseNodes) {
+                        for (const port of node.inputs) {
+                            if (
+                                port.activationPhases &&
+                                port.activationPhases.includes(phase)
+                            )
+                                activePorts.add(port);
+                        }
+                        for (const port of node.outputs) {
+                            if (
+                                port.activationPhases &&
+                                port.activationPhases.includes(phase)
+                            )
+                                activePorts.add(port);
+                        }
                     }
+                    this._highlightPhasePorts = activePorts;
 
                     this._render();
+
+                    // Show Clear Path button
+                    const btn = document.getElementById("btnClearPath");
+                    if (btn) btn.style.display = "flex";
                 } else {
                     this._showToast(
                         "Highlight failed: " + (data.error || "Unknown error"),
@@ -3265,6 +3286,7 @@ const SketchMod = {
     _clearHighlight() {
         this._highlightPhaseNodes = null;
         this._highlightPhaseLinks = null;
+        this._highlightPhasePorts = null;
         const btn = document.getElementById("btnClearPath");
         if (btn) btn.style.display = "none";
         this._render();
@@ -3335,6 +3357,18 @@ class Port {
         ctx.strokeStyle = "#1a1d2e";
         ctx.lineWidth = 1.5;
         ctx.stroke();
+        if (
+            SketchMod._highlightPhasePorts &&
+            SketchMod._highlightPhasePorts.has(this)
+        ) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+            ctx.strokeStyle = "#4ade80";
+            ctx.lineWidth = 2;
+            ctx.shadowColor = "transparent"; // no glow on ports, just ring
+            ctx.shadowBlur = 0;
+            ctx.stroke();
+        }
     }
 
     drawHighlight(ctx) {
@@ -6928,59 +6962,73 @@ class Link {
     }
 
     draw(ctx, selected) {
+        const linkKey = this.from.id + "→" + this.to.id;
+        const isHL =
+            SketchMod._highlightPhaseLinks &&
+            SketchMod._highlightPhaseLinks.has(this);
+
+        // Always reset shadow first
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+
+        // -------- Choose colours --------
+        let strokeColor, fillColor, lineWidth;
+
+        if (isHL) {
+            strokeColor = "#4ade80";
+            fillColor = "#4ade80";
+            lineWidth = 3;
+            ctx.shadowColor = "#4ade80";
+            ctx.shadowBlur = 6;
+        } else if (SketchMod.errorLinkIds.has(linkKey)) {
+            strokeColor = "#ef4444";
+            fillColor = "#ef4444";
+            lineWidth = 3;
+        } else if (SketchMod.warningLinkIds.has(linkKey)) {
+            strokeColor = "#f59e0b";
+            fillColor = "#f59e0b";
+            lineWidth = 2.5;
+        } else if (selected) {
+            strokeColor = "#000000"; // black, but thicker
+            fillColor = "#000000";
+            lineWidth = 3;
+        } else if (this.hasWeight) {
+            strokeColor = "#000000"; // black, but thicker
+            fillColor = "#000000";
+            lineWidth = 2.5;
+        } else {
+            strokeColor = "#000000"; // plain black
+            fillColor = "#000000";
+            lineWidth = 1.5;
+        }
+
+        // -------- Draw the line --------
         ctx.beginPath();
         ctx.moveTo(this.from.x, this.from.y);
         ctx.lineTo(this.to.x, this.to.y);
-
-        const linkKey = this.from.id + "→" + this.to.id;
-        if (
-            SketchMod._highlightPhaseLinks &&
-            SketchMod._highlightPhaseLinks.has(this)
-        ) {
-            ctx.strokeStyle = "#4ade80";
-            ctx.lineWidth = 3;
-            ctx.shadowColor = "#4ade80";
-            ctx.shadowBlur = 6;
-        } else {
-            if (SketchMod.errorLinkIds.has(linkKey)) {
-                ctx.strokeStyle = "#ef4444";
-                ctx.lineWidth = 3;
-            } else if (SketchMod.warningLinkIds.has(linkKey)) {
-                ctx.strokeStyle = "#f59e0b";
-                ctx.lineWidth = 2.5;
-            } else if (selected) {
-                ctx.strokeStyle = "var(--accent)";
-                ctx.lineWidth = 3;
-            } else if (this.hasWeight) {
-                ctx.strokeStyle = "var(--text-primary)";
-                ctx.lineWidth = 2.5;
-            } else {
-                ctx.strokeStyle = "var(--text-secondary)";
-                ctx.lineWidth = 1.5;
-            }
-        }
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = lineWidth;
         ctx.stroke();
 
-        // Arrow head
+        // Reset shadow immediately after stroke
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+
+        // -------- Arrow head --------
         const dx = this.to.x - this.from.x;
         const dy = this.to.y - this.from.y;
         const totalDistance = Math.hypot(dx, dy);
-
-        // Guard against zero-length links
         if (totalDistance < 0.001) return;
 
-        // Calculate arrow tip position (pulled back from port center)
-        const portOffset = 4; // distance from port center to arrow tip
-        let tipX = this.to.x;
-        let tipY = this.to.y;
-
+        const portOffset = 4;
+        let tipX = this.to.x,
+            tipY = this.to.y;
         if (totalDistance > portOffset) {
             const ratio = (totalDistance - portOffset) / totalDistance;
             tipX = this.from.x + dx * ratio;
             tipY = this.from.y + dy * ratio;
         }
 
-        // Recalculate angle from adjusted tip position
         const angle = Math.atan2(tipY - this.from.y, tipX - this.from.x);
         const size = 8;
         ctx.beginPath();
@@ -6995,27 +7043,11 @@ class Link {
         );
         ctx.lineTo(tipX, tipY);
         ctx.closePath();
-        let fillColor;
-        if (
-            SketchMod._highlightPhaseLinks &&
-            SketchMod._highlightPhaseLinks.has(this)
-        ) {
-            fillColor = "#4ade80";
-        } else {
-            if (SketchMod.errorLinkIds.has(linkKey)) {
-                fillColor = "#ef4444";
-            } else if (SketchMod.warningLinkIds.has(linkKey)) {
-                fillColor = "#f59e0b";
-            } else if (selected) {
-                fillColor = "var(--accent)";
-            } else if (this.hasWeight) {
-                fillColor = "var(--text-primary)";
-            } else {
-                fillColor = "var(--text-secondary)";
-            }
-        }
+
         ctx.fillStyle = fillColor;
         ctx.fill();
+
+        // Final reset (safety)
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
     }
