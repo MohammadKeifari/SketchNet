@@ -2193,7 +2193,7 @@ const SketchMod = {
         if (!input) return [];
         const indices = new Set();
         const parts = input.split(",");
-        const max = maxColumns > 0 ? maxColumns - 1 : Infinity;
+        const max = maxColumns > 0 ? maxColumns - 1 : null; // max valid index
 
         for (const part of parts) {
             const trimmed = part.trim();
@@ -2201,15 +2201,25 @@ const SketchMod = {
 
             if (trimmed.includes(":")) {
                 const [startStr, endStr] = trimmed.split(":");
-                const start = parseInt(startStr) || 0;
+                let start = parseInt(startStr) || 0;
                 let end = parseInt(endStr);
-                if (isNaN(end)) end = maxColumns > 0 ? maxColumns : start + 1;
-                for (let i = Math.max(0, start); i <= Math.min(end, max); i++) {
-                    indices.add(i);
+                if (isNaN(end)) end = max !== null ? max : undefined;
+
+                // Convert negative indices to positive
+                if (start < 0 && max !== null) start = max + 1 + start;
+                if (end < 0 && max !== null) end = max + 1 + end;
+                if (max !== null) {
+                    start = Math.max(0, start);
+                    end = Math.min(max, end);
+                }
+                for (let i = start; i <= end; i++) {
+                    if (max === null || i <= max) indices.add(i);
                 }
             } else {
-                const idx = parseInt(trimmed);
-                if (!isNaN(idx) && idx >= 0 && idx <= max) {
+                let idx = parseInt(trimmed);
+                if (isNaN(idx)) continue;
+                if (idx < 0 && max !== null) idx = max + 1 + idx;
+                if (idx >= 0 && (max === null || idx <= max)) {
                     indices.add(idx);
                 }
             }
@@ -3454,7 +3464,7 @@ class DataPort extends Port {
     }
 
     get connectionLimit() {
-        return 2;
+        return 1;
     }
 
     draw(ctx) {
@@ -5122,6 +5132,7 @@ class ColumnSelectNode extends RectNode {
                    value="${this.columnInput}"
                    onchange="SketchMod._updateColumnInput(this)">
             <p class="prop-hint">Python slice notation: <code>start:end</code>, single indices, comma-separated</p>
+            <p class="prop-hint">Python negative indices supported: <code>-1</code> = last column, <code>0:-1</code> = all except last</p>
         </div>
         <div class="prop-group">
             <label>Selected</label>
