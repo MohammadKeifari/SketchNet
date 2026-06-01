@@ -237,6 +237,37 @@ class OneHotTranslator(BaseTranslator):
         self.var_map[n.id] = out_var
 
 
+class DeOneHotTranslator(BaseTranslator):
+    node_type = "deonehot"
+
+    def data_code(self, w, phase):
+        n = self.node
+        num_classes = n.properties.get("numClasses", 10)
+        in_var = self._get_input_var(n)
+        out_var = f"{n.id}_out"
+
+        # Check if a param input is connected
+        param_input = None
+        if n.paramInputs:
+            for link in self.graph.links:
+                if link.id_to == n.paramInputs[0].id:
+                    param_input = self.var_map.get(link.id_from)
+                    break
+
+        if param_input:
+            # Reuse categories from another onehot encoder
+            w.line(f"categories = {param_input}")
+            w.line(f"{out_var} = torch.argmax({in_var}, dim=-1)")
+            # Optionally map back to original categories if they are not 0..N-1
+            w.line(
+                f"# If categories are not consecutive, you may need to map indices back."
+            )
+        else:
+            w.line(f"{out_var} = torch.argmax({in_var}, dim=-1)")
+
+        self.var_map[n.id] = out_var
+
+
 class TrainTestSplitTranslator(BaseTranslator):
     node_type = "train-test"
 
@@ -478,7 +509,9 @@ class ConcatTranslator(BaseTranslator):
         axis = n.properties.get("axis", -1)
         if len(preds) >= 2:
             ids = ", ".join(f"'{p}'" for p in preds)
-            w.line(f"tensors = [inputs_dict.get(p) for p in [{ids}] if inputs_dict.get(p) is not None]")
+            w.line(
+                f"tensors = [inputs_dict.get(p) for p in [{ids}] if inputs_dict.get(p) is not None]"
+            )
             w.line(f"if len(tensors) > 1:")
             w.indent()
             w.line(f"x = torch.cat(tensors, dim={axis})")
@@ -585,6 +618,7 @@ TRANSLATOR_REGISTRY = {
     "dim-select": DimSelectTranslator,
     "normalize": NormalizeTranslator,
     "onehot": OneHotTranslator,
+    "deonehot": DeOneHotTranslator,
     "train-test": TrainTestSplitTranslator,
     "neuron": NeuronTranslator,
     "layer": LayerTranslator,

@@ -4808,15 +4808,6 @@ class OutputNode extends RectNode {
                 this.height / 2 +
                 (this.height / (totalOut + 1)) * (i + 1);
         });
-        console.log(
-            "OutputNode inputs:",
-            this.inputs.map((p) => ({
-                id: p.id,
-                x: p.x,
-                y: p.y,
-                subType: p.subType,
-            })),
-        );
     }
 
     drawLabel(ctx) {
@@ -6062,6 +6053,96 @@ class OneHotEncodeNode extends RectNode {
         );
     }
 }
+// ========== One‑Hot Decoder ==========
+class DeOneHotNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "deonehot", 110, 55);
+        this.numClasses = 10;
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+
+        // Allow param input/output for sharing the encoding map
+        this.maxParamInputs = 1;
+        this.minParamInputs = 0;
+        this.maxParamOutputs = 0; // only receives, doesn't send
+        this.minParamOutputs = 0;
+
+        this.addInput();
+        this.addOutput();
+    }
+
+    drawLabel(ctx) {
+        ctx.font = "bold 11px Inter, sans-serif";
+        ctx.fillText("DeOneHot", this.x, this.y - 6);
+        ctx.font = "9px Inter, sans-serif";
+        ctx.fillText(this.numClasses + " classes", this.x, this.y + 10);
+    }
+
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        // Input shape: (batch, num_classes) → output shape: (batch,)
+        if (s.shape.length < 2) return this._emptyShapes();
+        return this._makeShapes(
+            [s.shape[0]], // batch dim, last dim removed
+            s.symbolic,
+            true,
+        );
+    }
+
+    toJSON() {
+        return { ...super.toJSON(), numClasses: this.numClasses };
+    }
+
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.numClasses !== undefined) this.numClasses = d.numClasses;
+    }
+
+    getPropertiesHTML() {
+        const hasParamIn = this.paramInputs.length > 0;
+
+        let paramHTML = "";
+        if (hasParamIn) {
+            paramHTML = `
+            <div class="prop-group">
+                <label>Param Ports</label>
+                <div class="port-legend">
+                    <span class="port-legend-item">
+                        <svg width="10" height="10" viewBox="0 0 10 10">
+                            <polygon points="5,1 9,5 5,9 1,5" fill="#fbbf24" stroke="#1a1d2e" stroke-width="1"/>
+                        </svg>
+                        Param Input — receives categories from OneHot encoder
+                    </span>
+                </div>
+            </div>`;
+        }
+
+        return (
+            this._getShapeSummaryHTML() +
+            paramHTML +
+            `<div class="prop-group"><label>Number of Classes</label>
+                <input type="number" id="prop-classes" class="prop-input" value="${this.numClasses}" min="2" max="10000"
+                       onchange="SketchMod._updateDeOneHotClasses(this)">
+            </div>
+            <p class="prop-hint">Converts one-hot vectors back to class indices.</p>`
+        );
+    }
+}
+
+// Update handler
+SketchMod._updateDeOneHotClasses = function (input) {
+    if (this.selectedNodes.length !== 1) return;
+    const node = this.selectedNodes[0];
+    if (!(node instanceof DeOneHotNode)) return;
+    this._saveUndoState();
+    node.numClasses = parseInt(input.value) || 10;
+    this._saveToSession();
+    this._propagateShapes();
+    this._render();
+};
 // ========== CONCATENATE NODE ==========
 class ConcatenateNode extends RectNode {
     constructor(id, x, y) {
@@ -7097,6 +7178,17 @@ SketchMod.registerNode({
         <rect x="10" y="3" width="4" height="18" rx="1"/>
         <rect x="17" y="3" width="4" height="18" rx="1"/>
         <rect x="4" y="8" width="2" height="6" fill="currentColor" opacity="0.3"/></svg>`,
+});
+SketchMod.registerNode({
+    type: "deonehot",
+    label: "DeOneHot",
+    category: "data",
+    class: DeOneHotNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <rect x="7" y="7" width="10" height="4" rx="1"/>
+        <line x1="7" y1="14" x2="17" y2="14"/>
+    </svg>`,
 });
 SketchMod.registerNode({
     type: "concat",
