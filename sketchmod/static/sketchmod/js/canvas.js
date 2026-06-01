@@ -3314,8 +3314,10 @@ const SketchMod = {
         if (btn) btn.style.display = "none";
         this._render();
     },
+    // ---------- Copy ----------
     _copySelected() {
         if (this.selectedNodes.length === 0) return;
+
         const selectedIds = new Set(this.selectedNodes.map((n) => n.id));
         const nodesData = this.selectedNodes.map((n) => n.toJSON());
         const linksData = this.links
@@ -3325,91 +3327,143 @@ const SketchMod = {
                     selectedIds.has(l.to.node.id),
             )
             .map((l) => l.toJSON());
-        this.clipboard = { nodes: nodesData, links: linksData };
+
+        // Store as a STRING so nothing can modify the original
+        this.clipboard = JSON.stringify({ nodes: nodesData, links: linksData });
         this._showToast(`${nodesData.length} node(s) copied`);
     },
-    _pasteClipboard() {
-        if (!this.clipboard) return;
-        this._saveUndoState();
-        const cb = this.clipboard;
 
-        // Find top‑left offset for pasted nodes
-        let minX = Infinity,
-            minY = Infinity;
-        for (const nd of cb.nodes) {
-            if (nd.x < minX) minX = nd.x;
-            if (nd.y < minY) minY = nd.y;
+    // ---------- Paste ----------
+    _pasteClipboard() {
+        console.log("[PASTE] Called. Clipboard exists:", !!this.clipboard);
+        if (!this.clipboard) return;
+
+        let cb;
+        try {
+            cb = JSON.parse(this.clipboard);
+        } catch (e) {
+            console.error("[PASTE] Invalid clipboard JSON:", e);
+            return;
         }
-        const offsetX = 50;
-        const offsetY = 50;
+        console.log(
+            "[PASTE] Clipboard nodes:",
+            cb.nodes.length,
+            "links:",
+            cb.links.length,
+        );
+        if (!cb.nodes || cb.nodes.length === 0) return;
+
+        this._saveUndoState();
+
+        // Increment paste counter so multiple pastes spread out
+        if (!this._pasteCounter) this._pasteCounter = 0;
+        this._pasteCounter++;
+        const baseOffsetX = 50,
+            baseOffsetY = 50;
+        const offsetX = baseOffsetX * this._pasteCounter;
+        const offsetY = baseOffsetY * this._pasteCounter;
 
         const oldToNewId = {};
         const oldPortToNewPort = {};
 
-        // Create new nodes
+        // ---- Create new nodes ----
         for (const nd of cb.nodes) {
             const entry = this.nodeRegistry.find((r) => r.type === nd.type);
-            if (!entry && nd.type !== "input-data" && nd.type !== "output")
+            let NodeClass;
+            if (entry) {
+                NodeClass = entry.class;
+            } else if (nd.type === "input-data") {
+                NodeClass = InputDataNode;
+            } else if (nd.type === "output") {
+                NodeClass = OutputNode;
+            } else {
+                console.warn("[PASTE] Unknown node type:", nd.type);
                 continue;
+            }
+
             const newId = nd.type[0] + ++this.nodeCounter;
             oldToNewId[nd.id] = newId;
-            let node;
-            if (entry) {
-                node = new entry.class(newId, nd.x + offsetX, nd.y + offsetY);
-            } else if (nd.type === "input-data") {
-                node = new InputDataNode(newId, nd.x + offsetX, nd.y + offsetY);
-            } else if (nd.type === "output") {
-                node = new OutputNode(newId, nd.x + offsetX, nd.y + offsetY);
-            }
-            if (!node) continue;
+            console.log(
+                `[PASTE] Creating node ${newId} (from ${nd.id}) at offset ${offsetX},${offsetY}`,
+            );
 
-            // Deep copy properties from the serialised form
+            const node = new NodeClass(newId, nd.x + offsetX, nd.y + offsetY);
             node.fromJSON(nd);
-            // Override id and position
+            // Override whatever fromJSON set for id and position
             node.id = newId;
             node.x = nd.x + offsetX;
             node.y = nd.y + offsetY;
-            // Regenerate port IDs
+
+            // Map ports (old id → new port object)
             node.inputs.forEach((p, i) => {
-                oldPortToNewPort[nd.inputPorts?.[i]?.id] = p; // old id -> new port
+                const oldId = nd.inputPorts?.[i]?.id;
+                if (oldId) oldPortToNewPort[oldId] = p;
                 p.id = `${newId}_input_${i}`;
             });
             node.outputs.forEach((p, i) => {
-                oldPortToNewPort[nd.outputPorts?.[i]?.id] = p;
+                const oldId = nd.outputPorts?.[i]?.id;
+                if (oldId) oldPortToNewPort[oldId] = p;
                 p.id = `${newId}_output_${i}`;
             });
             node.paramInputs.forEach((p, i) => {
-                oldPortToNewPort[nd.paramInputs?.[i]?.id] = p;
+                const oldId = nd.paramInputs?.[i]?.id;
+                if (oldId) oldPortToNewPort[oldId] = p;
                 p.id = `${newId}_param_in_${i}`;
             });
             node.paramOutputs.forEach((p, i) => {
-                oldPortToNewPort[nd.paramOutputs?.[i]?.id] = p;
+                const oldId = nd.paramOutputs?.[i]?.id;
+                if (oldId) oldPortToNewPort[oldId] = p;
                 p.id = `${newId}_param_out_${i}`;
             });
-            node.updatePorts(); // reposition
+
+            node.updatePorts();
             this.nodes.push(node);
         }
 
+        // Refresh port list
         this.ports = this._collectPorts();
+        console.log("[PASTE] Total ports after addition:", this.ports.length);
 
-        // Recreate links between pasted nodes
+        // ---- Recreate links ----
+        let linksCreated = 0;
         for (const ld of cb.links) {
             const newFrom = oldPortToNewPort[ld.from];
             const newTo = oldPortToNewPort[ld.to];
             if (newFrom && newTo) {
                 this.links.push(new Link(newFrom, newTo, ld.weight));
+                linksCreated++;
+            } else {
+                console.warn(
+                    "[PASTE] Link not restored:",
+                    ld.from,
+                    "→",
+                    ld.to,
+                    "from:",
+                    !!newFrom,
+                    "to:",
+                    !!newTo,
+                );
             }
         }
+        console.log("[PASTE] Links created:", linksCreated);
 
-        // Select the pasted nodes
-        this.selectedNodes = this.nodes.filter((n) =>
-            Object.values(oldToNewId).includes(n.id),
-        );
+        // Select new nodes
+        const pastedNodes = Object.values(oldToNewId)
+            .map((nid) => this.nodes.find((n) => n.id === nid))
+            .filter(Boolean);
+        this.selectedNodes = pastedNodes;
         this.selectedLinks = [];
         this.selectedPorts = [];
+        this._hideProperties();
+
         this._saveToSession();
         this._propagateShapes();
         this._render();
+        this._showToast(`${pastedNodes.length} node(s) pasted`);
+        console.log(
+            "[PASTE] Done. Pasted nodes:",
+            pastedNodes.map((n) => n.id),
+        );
     },
 };
 // ========== PORT BASE CLASS ==========
