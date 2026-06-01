@@ -32,6 +32,8 @@ class Node:
     type: str
     inputs: List[Port] = field(default_factory=list)
     outputs: List[Port] = field(default_factory=list)
+    paramInputs: List[Port] = field(default_factory=list)
+    paramOutputs: List[Port] = field(default_factory=list)
     properties: Dict[str, Any] = field(default_factory=dict)
     x: float = 0.0
     y: float = 0.0
@@ -105,6 +107,38 @@ def parse_graph(json_data: dict) -> Graph:
                 bias=p.get("bias", 0),
             )
             node.outputs.append(port)
+            graph.ports[port.id] = port
+
+        # Param input ports
+        for p in n.get("paramInputs", []):
+            port = Port(
+                id=p["id"],
+                node_id=n["id"],
+                type="input",
+                index=p["index"],
+                sub_type=None,
+                port_kind="param",
+                role=None,
+                activation_phases=p.get("activationPhases", []),
+                bias=p.get("bias", 0),
+            )
+            node.paramInputs.append(port)
+            graph.ports[port.id] = port
+
+        # Param output ports
+        for p in n.get("paramOutputs", []):
+            port = Port(
+                id=p["id"],
+                node_id=n["id"],
+                type="output",
+                index=p["index"],
+                sub_type=None,
+                port_kind="param",
+                role=None,
+                activation_phases=p.get("activationPhases", []),
+                bias=p.get("bias", 0),
+            )
+            node.paramOutputs.append(port)
             graph.ports[port.id] = port
 
         graph.add_node(node)
