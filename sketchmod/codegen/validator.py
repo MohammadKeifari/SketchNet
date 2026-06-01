@@ -1,6 +1,17 @@
 from .graph import parse_graph
 from .phase_analyzer import analyze_phases
 
+MODEL_TYPES = {
+    "neuron",
+    "layer",
+    "conv2d",
+    "flatten",
+    "dropout",
+    "batchnorm",
+    "add",
+    "concat",
+}
+
 
 class GraphValidator:
     def __init__(self, graph_data):
@@ -11,12 +22,13 @@ class GraphValidator:
         errors = []
         warnings = []
 
-        # ---------- basic connectivity ----------
+        # --- basic connectivity ---
         self._check_input_output_present(errors)
         self._check_optimizer_connections(errors)
         self._check_link_weights(warnings)
         self._check_multi_port_cardinality(errors)
         self._check_phase_connectivity(warnings)
+        self._check_preprocessing_models(warnings)
 
         return {
             "errors": errors,
@@ -36,7 +48,6 @@ class GraphValidator:
         if not opt:
             errors.append({"message": "Optimizer node is required.", "nodeId": None})
             return
-        # check both input ports are connected
         for port in opt.inputs:
             connected = any(l.id_to == port.id for l in self.graph.links)
             if not connected:
@@ -54,8 +65,8 @@ class GraphValidator:
                 warnings.append(
                     {
                         "message": (
-                            f"Link weight is 0 (will be initialised to 1 in generated code "
-                            f"to avoid dead gradients). Consider setting a non‑zero value in the canvas."
+                            "Link weight is 0 (will be initialised to 1 in generated code "
+                            "to avoid dead gradients). Consider setting a non‑zero value in the canvas."
                         ),
                         "linkKey": f"{link.id_from}→{link.id_to}",
                     }
@@ -91,21 +102,22 @@ class GraphValidator:
                     )
 
     def _check_phase_connectivity(self, warnings):
-        # Warn if a model node has no path during training or evaluation
-        train_set = self.flow.get("train_model_order", [])
-        eval_set = self.flow.get("eval_model_order", [])
-        all_model = set(train_set) | set(eval_set)
+        train_set = set(self.flow["train_order"])
+        eval_set = set(self.flow["eval_order"])
+        all_model = {
+            nid for nid in self.graph.nodes if self.graph.nodes[nid].type in MODEL_TYPES
+        }
         for nid in all_model:
             in_train = nid in train_set
             in_eval = nid in eval_set
             if not in_train and not in_eval:
                 warnings.append(
                     {
-                        "message": f"Model node '{nid}' is not reachable in either phase.",
+                        "message": f"Model node '{nid}' is not reachable in either training or evaluation phase.",
                         "nodeId": nid,
                     }
                 )
-        # Warn if output node's test input is not connected to a test‑phase source
+        # Output node test input warning
         output = next(
             (n for n in self.graph.nodes.values() if n.type == "output"), None
         )
@@ -121,31 +133,25 @@ class GraphValidator:
                             if l.id_to == test_input.id
                         )
                     ]
-                    if src_port.activation_mode == "every_batch":
+                    if (
+                        "training" in src_port.activation_phases
+                        and "evaluation" not in src_port.activation_phases
+                    ):
                         warnings.append(
                             {
-                                "message": "Test input of Output node is fed by a train‑only port (every_batch). "
+                                "message": "Test input of Output node is fed by a train‑only port. "
                                 "Evaluation may not receive separate test data.",
                                 "portId": test_input.id,
                             }
                         )
 
     def _check_preprocessing_models(self, warnings):
-        MODEL_TYPES = {
-            "neuron",
-            "layer",
-            "conv2d",
-            "flatten",
-            "dropout",
-            "batchnorm",
-            "add",
-            "concat",
-        }
         for nid in self.flow["preprocessing_order"]:
             if self.graph.nodes[nid].type in MODEL_TYPES:
                 warnings.append(
                     {
-                        "message": f"Model node '{nid}' is in preprocessing phase and will not be trained.",
+                        "message": f"Model node '{nid}' is in the preprocessing phase and will not be trained. "
+                        "Data will flow through an untrained layer.",
                         "nodeId": nid,
                     }
                 )
