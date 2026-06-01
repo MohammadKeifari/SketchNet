@@ -129,3 +129,23 @@ class GraphValidator:
                                 "portId": test_input.id,
                             }
                         )
+
+    def _check_preprocessing_models(self, warnings):
+        MODEL_TYPES = {
+            "neuron",
+            "layer",
+            "conv2d",
+            "flatten",
+            "dropout",
+            "batchnorm",
+            "add",
+            "concat",
+        }
+        for nid in self.flow["preprocessing_order"]:
+            if self.graph.nodes[nid].type in MODEL_TYPES:
+                warnings.append(
+                    {
+                        "message": f"Model node '{nid}' is in preprocessing phase and will not be trained.",
+                        "nodeId": nid,
+                    }
+                )
