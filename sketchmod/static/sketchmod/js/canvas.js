@@ -3265,7 +3265,14 @@ const SketchMod = {
                     }
 
                     this._highlightPhasePorts = activePorts; // <-- this line is crucial
-
+                    console.log(
+                        "active port objects:",
+                        [...activePorts].map((p) => p.id),
+                    );
+                    console.log(
+                        "all ports on canvas:",
+                        this.ports.map((p) => p.id),
+                    );
                     this._render();
 
                     const btn = document.getElementById("btnClearPath");
@@ -3458,6 +3465,20 @@ class DataPort extends Port {
         ctx.strokeStyle = "#1a1d2e";
         ctx.lineWidth = 1.5;
         ctx.stroke();
+
+        // Highlight ring
+        if (
+            SketchMod._highlightPhasePorts &&
+            SketchMod._highlightPhasePorts.has(this)
+        ) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+            ctx.strokeStyle = "#4ade80";
+            ctx.lineWidth = 2;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.stroke();
+        }
     }
 
     _getColor() {
@@ -3516,6 +3537,20 @@ class MultiPort extends Port {
             ctx.textBaseline = "middle";
             ctx.fillText(count, this.x, this.y + 0.3);
         }
+
+        // Highlight ring
+        if (
+            SketchMod._highlightPhasePorts &&
+            SketchMod._highlightPhasePorts.has(this)
+        ) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+            ctx.strokeStyle = "#4ade80";
+            ctx.lineWidth = 2;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.stroke();
+        }
     }
 
     _getColor() {
@@ -3554,7 +3589,7 @@ class RolePort extends Port {
         return 1;
     }
     draw(ctx) {
-        // Diamond shape — slightly smaller than ParamPort
+        // Diamond shape
         ctx.beginPath();
         ctx.moveTo(this.x, this.y - this.radius - 1);
         ctx.lineTo(this.x + this.radius + 1, this.y);
@@ -3566,6 +3601,20 @@ class RolePort extends Port {
         ctx.strokeStyle = "#1a1d2e";
         ctx.lineWidth = 1.5;
         ctx.stroke();
+
+        // Highlight ring (circle, for visibility)
+        if (
+            SketchMod._highlightPhasePorts &&
+            SketchMod._highlightPhasePorts.has(this)
+        ) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+            ctx.strokeStyle = "#4ade80";
+            ctx.lineWidth = 2;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.stroke();
+        }
     }
     _getPortKind() {
         return "role";
@@ -3603,7 +3652,7 @@ class ParamPort extends Port {
     }
 
     draw(ctx) {
-        // Diamond shape — distinct from circles and RolePort diamonds
+        // Diamond shape (slightly larger)
         const size = this.radius + 0.5;
         ctx.beginPath();
         ctx.moveTo(this.x, this.y - size);
@@ -3616,6 +3665,20 @@ class ParamPort extends Port {
         ctx.strokeStyle = "#1a1d2e";
         ctx.lineWidth = 2;
         ctx.stroke();
+
+        // Highlight ring (circle, for visibility)
+        if (
+            SketchMod._highlightPhasePorts &&
+            SketchMod._highlightPhasePorts.has(this)
+        ) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+            ctx.strokeStyle = "#4ade80";
+            ctx.lineWidth = 2;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.stroke();
+        }
     }
 
     _getColor() {
