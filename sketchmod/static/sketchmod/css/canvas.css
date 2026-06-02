@@ -1177,8 +1177,9 @@
     transform: translateY(-5px);
 }
 #importJsonText {
-    resize: vertical; 
-    min-height: 120px; 
-    max-height: 300px; 
-    
+    width: 100%;
+    max-width: 100%;
+    resize: vertical;
+    min-height: 120px;
+    max-height: 300px;
 }

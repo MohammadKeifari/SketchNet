@@ -3491,6 +3491,7 @@ const SketchMod = {
         document.getElementById("importFileName").textContent =
             "No file chosen";
         document.getElementById("importJsonFile").value = "";
+        setTimeout(() => document.getElementById("importJsonText").focus(), 0);
     },
 
     closeImportModal() {
