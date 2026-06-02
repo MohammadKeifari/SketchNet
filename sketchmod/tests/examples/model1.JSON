@@ -344,59 +344,6 @@
             "datasetId": null
         },
         {
-            "id": "c5",
-            "type": "column-select",
-            "x": 485.12569160087844,
-            "y": 522.8043637020319,
-            "inputPorts": [
-                {
-                    "id": "c5_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": null,
-                    "shape": {
-                        "shape": ["NaN", "3"],
-                        "dtype": "float32",
-                        "known": true,
-                        "symbolic": false
-                    },
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"]
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "c5_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": "labels",
-                    "shape": {
-                        "shape": ["NaN", "1"],
-                        "dtype": "float32",
-                        "known": true,
-                        "symbolic": false
-                    },
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"]
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": false,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "selectedColumns": [2],
-            "columnInput": "2",
-            "availableColumns": [],
-            "columnCount": 0,
-            "datasetId": null
-        },
-        {
             "id": "n6",
             "type": "normalize",
             "x": 508.4443475209257,
@@ -990,13 +937,6 @@
             "hasWeight": false
         },
         {
-            "from": "t1_output_1",
-            "to": "c5_input_0",
-            "weight": 0,
-            "weightShape": null,
-            "hasWeight": false
-        },
-        {
             "from": "c2_output_0",
             "to": "n6_input_0",
             "weight": 0,
@@ -1333,36 +1273,6 @@
         },
         {
             "id": "c4_output_0",
-            "type": "output",
-            "index": 0,
-            "subType": "labels",
-            "shape": {
-                "shape": ["NaN", "1"],
-                "dtype": "float32",
-                "known": true,
-                "symbolic": false
-            },
-            "bias": 0,
-            "portKind": "data",
-            "activationPhases": ["preprocessing"]
-        },
-        {
-            "id": "c5_input_0",
-            "type": "input",
-            "index": 0,
-            "subType": null,
-            "shape": {
-                "shape": ["NaN", "3"],
-                "dtype": "float32",
-                "known": true,
-                "symbolic": false
-            },
-            "bias": 0,
-            "portKind": "data",
-            "activationPhases": ["preprocessing"]
-        },
-        {
-            "id": "c5_output_0",
             "type": "output",
             "index": 0,
             "subType": "labels",
