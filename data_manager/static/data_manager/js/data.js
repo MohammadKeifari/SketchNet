@@ -378,3 +378,116 @@ function showFormatHint(select) {
         hint.style.display = "none";
     }
 }
+
+// ===== CREATE DATASET MODAL =====
+function openCreateModal() {
+    const modal = document.getElementById("createModal");
+    if (modal) {
+        modal.style.display = "flex";
+        document.getElementById("dsName").value = "";
+        updateCreateParams(); // populate default params
+    }
+}
+
+function closeCreateModal() {
+    const modal = document.getElementById("createModal");
+    if (modal) modal.style.display = "none";
+}
+
+// Close modal on overlay click
+document.addEventListener("click", function (e) {
+    if (e.target.id === "createModal") {
+        closeCreateModal();
+    }
+});
+
+// Handle form submit via AJAX
+document
+    .getElementById("createDatasetForm")
+    ?.addEventListener("submit", function (e) {
+        e.preventDefault();
+        const form = this;
+        const btn = document.getElementById("generateBtn");
+        btn.disabled = true;
+        btn.innerHTML = `<span>Generating...</span>`;
+
+        const formData = new FormData(form);
+
+        fetch("/data/generate/", {
+            method: "POST",
+            body: formData,
+            headers: {
+                "X-CSRFToken": formData.get("csrfmiddlewaretoken"),
+            },
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.success) {
+                    showTooltip(
+                        `Dataset "${data.name}" created! Shape: ${data.shape}`,
+                    );
+                    closeCreateModal();
+                    // Reload the page to show the new dataset in the list
+                    location.reload();
+                } else {
+                    alert("Error: " + (data.error || "Unknown error"));
+                }
+            })
+            .catch((err) => {
+                alert("Network error. Check console.");
+                console.error(err);
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = `<span>Generate</span>`;
+            });
+    });
+
+// Dynamic parameters based on dataset type
+function updateCreateParams() {
+    const type = document.getElementById("dsType").value;
+    const container = document.getElementById("paramsContainer");
+    if (!container) return;
+
+    let html = "";
+
+    if (type === "classification") {
+        html = `
+            <div class="form-group"><label>Samples</label><input type="number" name="n_samples" class="form-input" value="100" min="10"></div>
+            <div class="form-group"><label>Features</label><input type="number" name="n_features" class="form-input" value="2" min="1"></div>
+            <div class="form-group"><label>Classes</label><input type="number" name="n_classes" class="form-input" value="2" min="2"></div>
+            <div class="form-group"><label>Informative Features</label><input type="number" name="n_informative" class="form-input" value="2" min="1"></div>
+            <div class="form-group"><label>Redundant Features</label><input type="number" name="n_redundant" class="form-input" value="0" min="0"></div>
+            <div class="form-group"><label>Clusters per Class</label><input type="number" name="n_clusters_per_class" class="form-input" value="1" min="1"></div>
+            <div class="form-group"><label>Label Noise (0-0.5)</label><input type="number" name="flip_y" class="form-input" value="0.0" step="0.01" min="0" max="0.5"></div>
+            <div class="form-group"><label>Random Seed (optional)</label><input type="number" name="random_state" class="form-input" placeholder="42"></div>
+        `;
+    } else if (type === "regression") {
+        html = `
+            <div class="form-group"><label>Samples</label><input type="number" name="n_samples" class="form-input" value="100" min="10"></div>
+            <div class="form-group"><label>Features</label><input type="number" name="n_features" class="form-input" value="1" min="1"></div>
+            <div class="form-group"><label>Informative Features</label><input type="number" name="n_informative" class="form-input" value="1" min="1"></div>
+            <div class="form-group"><label>Noise</label><input type="number" name="noise" class="form-input" value="0.1" step="0.01" min="0"></div>
+            <div class="form-group"><label>Bias</label><input type="number" name="bias" class="form-input" value="0.0" step="0.1"></div>
+            <div class="form-group"><label>Random Seed (optional)</label><input type="number" name="random_state" class="form-input" placeholder="42"></div>
+        `;
+    } else if (type === "clustering") {
+        html = `
+            <div class="form-group"><label>Samples</label><input type="number" name="n_samples" class="form-input" value="100" min="10"></div>
+            <div class="form-group"><label>Features</label><input type="number" name="n_features" class="form-input" value="2" min="1"></div>
+            <div class="form-group"><label>Centers (clusters)</label><input type="number" name="centers" class="form-input" value="3" min="1"></div>
+            <div class="form-group"><label>Cluster Std Dev</label><input type="number" name="cluster_std" class="form-input" value="1.0" step="0.1" min="0.1"></div>
+            <div class="form-group"><label>Random Seed (optional)</label><input type="number" name="random_state" class="form-input" placeholder="42"></div>
+        `;
+    }
+
+    container.innerHTML = html;
+}
+
+// Initialize modal close on escape
+document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+        closeCreateModal();
+        closeUploadModal(); // also close upload if open
+    }
+});

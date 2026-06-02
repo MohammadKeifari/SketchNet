@@ -1,0 +1,51 @@
+<div class="modal-overlay" id="createModal" style="display: none;">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Create Synthetic Dataset</h2>
+            <button class="modal-close" onclick="closeCreateModal()">
+                <svg width="18"
+                     height="18"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <form id="createDatasetForm">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="dsType">Dataset Type</label>
+                    <select id="dsType"
+                            name="type"
+                            class="form-input"
+                            onchange="updateCreateParams()">
+                        <option value="classification">Classification</option>
+                        <option value="regression">Regression</option>
+                        <option value="clustering">Clustering</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="dsName">Name</label>
+                    <input type="text"
+                           id="dsName"
+                           name="name"
+                           class="form-input"
+                           placeholder="e.g., My Synthetic Data">
+                </div>
+                <div id="paramsContainer">
+                    <!-- dynamic parameter fields inserted by JS -->
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-ghost" onclick="closeCreateModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="generateBtn">
+                        <span>Generate</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

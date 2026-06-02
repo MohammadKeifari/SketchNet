@@ -5,17 +5,36 @@
     padding: 32px 20px;
 }
 
+/* ----- Header layout ----- */
 .data-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
+    flex-wrap: nowrap;
     margin-bottom: 32px;
 }
 
 .data-header h1 {
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--text-primary);
+}
+
+.data-header-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+/* ----- Button text variants ----- */
+.btn-text-full {
+    display: inline;
+}
+.btn-text-short {
+    display: none;
 }
 
 .btn {
@@ -632,6 +651,15 @@
     .dataset-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+    .btn-text-full {
+        display: none;
+    }
+    .btn-text-short {
+        display: inline;
+    }
+    .data-header h1 {
+        font-size: 1.25rem;
+    }
 }
 
 @media (max-width: 480px) {
@@ -640,9 +668,29 @@
     }
 
     .data-header {
-        flex-direction: column;
-        gap: 12px;
-        align-items: flex-start;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .btn-text-full,
+    .btn-text-short {
+        display: none;
+    }
+
+    .data-header-actions .btn {
+        padding: 8px;
+        min-width: 40px;
+        justify-content: center;
+    }
+
+    .data-header-actions .btn svg {
+        margin: 0;
+    }
+
+    .data-header h1 {
+        font-size: 1.1rem;
+        flex-shrink: 1;
+        min-width: 0;
     }
 
     .modal {
@@ -986,4 +1034,15 @@
 .current-cover span {
     font-size: 0.8rem;
     color: var(--text-secondary);
+}
+.btn-secondary {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-primary);
+    border-color: var(--accent);
+    color: var(--accent);
 }

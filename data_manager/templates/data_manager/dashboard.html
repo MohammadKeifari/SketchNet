@@ -14,20 +14,36 @@
         <!-- Header -->
         <div class="data-header">
             <h1>Data</h1>
-            {% if user.is_authenticated %}
-                <button class="btn btn-primary" onclick="openUploadModal()">
-                    <svg width="18"
-                         height="18"
-                         viewBox="0 0 24 24"
-                         fill="none"
-                         stroke="currentColor"
-                         stroke-width="2">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    Upload Dataset
-                </button>
-            {% endif %}
+            <div class="data-header-actions">
+                {% if user.is_authenticated %}
+                    <button class="btn btn-primary" onclick="openUploadModal()">
+                        <svg width="18"
+                             height="18"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        <span class="btn-text-full">Upload Dataset</span>
+                        <span class="btn-text-short">Upload</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="openCreateModal()">
+                        <svg width="18"
+                             height="18"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2">
+                            <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
+                            <line x1="12" y1="22" x2="12" y2="15.5" />
+                        </svg>
+                        <span class="btn-text-full">Create Dataset</span>
+                        <span class="btn-text-short">Create</span>
+                    </button>
+                {% endif %}
+            </div>
         </div>
         <!-- My Datasets Section -->
         <section class="data-section">
@@ -186,6 +202,8 @@
     </div>
     <!-- Upload Modal -->
     {% include "data_manager/includes/upload_modal.html" %}
+    <!--create dataset-->
+    {% include "data_manager/includes/create_dataset_modal.html" %}
 {% endblock content %}
 {% block extra_js %}
     <script src="{% static 'data_manager/js/data.js' %}"></script>

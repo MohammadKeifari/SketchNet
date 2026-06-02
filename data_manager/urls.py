@@ -12,6 +12,7 @@ urlpatterns = [
     path("liked/", views.liked_datasets, name="liked"),
     path("all/", views.all_datasets, name="all"),
     path("search-users-global/", views.search_users_global, name="search_users_global"),
+    path("generate/", views.generate_dataset, name="generate"),
     # dynamic
     path("<str:dataset_id>/", views.dataset_detail, name="detail"),
     path("api/<str:dataset_id>/shape/", views.api_dataset_shape, name="api_shape"),

@@ -6,6 +6,10 @@ from django.db.models import Q, Count
 from django.contrib.auth import get_user_model
 from .models import Dataset
 from .forms import DatasetForm, DatasetEditForm
+from django.core.files import File
+
+import tempfile
+import os
 
 User = get_user_model()
 
@@ -395,6 +399,7 @@ def api_dataset_list(request):
 
     return JsonResponse({"datasets": data, "count": len(data)})
 
+
 def api_dataset_shape(request, dataset_id):
     """Return the resolved shape of a dataset."""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
@@ -402,3 +407,109 @@ def api_dataset_shape(request, dataset_id):
         return JsonResponse({"error": "Not allowed"}, status=403)
 
     return JsonResponse({"shape": dataset.resolved_shape or ""})
+
+
+@login_required
+def generate_dataset(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    ds_type = request.POST.get("type", "classification")
+    name = request.POST.get("name", "").strip()
+    if not name:
+        name = f"Synthetic {ds_type.capitalize()}"
+
+    # Convert all other POST params (except csrf, type, name) to numeric kwargs
+    kwargs = {}
+    for key, value in request.POST.items():
+        if key in ("csrfmiddlewaretoken", "type", "name"):
+            continue
+        try:
+            # try to convert to int, then float
+            if "." in value:
+                kwargs[key] = float(value)
+            else:
+                kwargs[key] = int(value)
+        except ValueError:
+            kwargs[key] = value
+
+    try:
+        import pandas as pd
+        from sklearn.datasets import make_classification, make_regression, make_blobs
+    except ImportError as e:
+        return JsonResponse({"error": f"Missing dependency: {e}"}, status=500)
+
+    # Remove keys that are empty or None
+    kwargs = {k: v for k, v in kwargs.items() if v != "" and v is not None}
+
+    # Set defaults for each type
+    if ds_type == "classification":
+        defaults = {
+            "n_samples": 100,
+            "n_features": 2,
+            "n_classes": 2,
+            "n_informative": 2,
+            "n_redundant": 0,
+            "n_clusters_per_class": 1,
+            "flip_y": 0.0,
+            "random_state": None,
+        }
+        kwargs = {**defaults, **kwargs}
+        X, y = make_classification(**kwargs)
+    elif ds_type == "regression":
+        defaults = {
+            "n_samples": 100,
+            "n_features": 1,
+            "n_informative": 1,
+            "noise": 0.1,
+            "bias": 0.0,
+            "random_state": None,
+        }
+        kwargs = {**defaults, **kwargs}
+        X, y = make_regression(**kwargs)
+    elif ds_type == "clustering":
+        defaults = {
+            "n_samples": 100,
+            "n_features": 2,
+            "centers": 3,
+            "cluster_std": 1.0,
+            "random_state": None,
+        }
+        kwargs = {**defaults, **kwargs}
+        X, y = make_blobs(**kwargs)
+    else:
+        return JsonResponse({"error": "Unknown dataset type."}, status=400)
+
+    # Build DataFrame
+    df = pd.DataFrame(X, columns=[f"feature_{i}" for i in range(X.shape[1])])
+    df["target"] = y
+
+    # Write to a temporary CSV file
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+    try:
+        df.to_csv(tmp.name, index=False)
+        tmp.close()
+
+        # Create Dataset object
+        from .models import Dataset
+
+        dataset = Dataset(
+            name=name,
+            format="csv",
+            owner=request.user,
+            is_private=False,
+        )
+        with open(tmp.name, "rb") as f:
+            dataset.file.save(f"{dataset.dataset_id}.csv", File(f))
+        dataset.save()  # this triggers shape inference via save() -> resolve_shape()
+
+        return JsonResponse(
+            {
+                "success": True,
+                "dataset_id": dataset.dataset_id,
+                "name": dataset.name,
+                "shape": dataset.resolved_shape or "",
+            }
+        )
+    finally:
+        os.unlink(tmp.name)
