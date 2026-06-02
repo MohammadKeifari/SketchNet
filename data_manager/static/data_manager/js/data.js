@@ -412,30 +412,44 @@ document
         btn.innerHTML = `<span>Generating...</span>`;
 
         const formData = new FormData(form);
+        const csrfToken = formData.get("csrfmiddlewaretoken");
 
         fetch("/data/generate/", {
             method: "POST",
             body: formData,
             headers: {
-                "X-CSRFToken": formData.get("csrfmiddlewaretoken"),
+                "X-CSRFToken": csrfToken,
             },
         })
-            .then((res) => res.json())
-            .then((data) => {
-                if (data.success) {
-                    showTooltip(
-                        `Dataset "${data.name}" created! Shape: ${data.shape}`,
+            .then(async (res) => {
+                // Try to parse JSON, if fails, read text and throw
+                const text = await res.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (err) {
+                    console.error("Server response (not JSON):", text);
+                    throw new Error(
+                        "Server returned an invalid response. Check console for details.",
                     );
-                    closeCreateModal();
-                    // Reload the page to show the new dataset in the list
-                    location.reload();
-                } else {
-                    alert("Error: " + (data.error || "Unknown error"));
                 }
+
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || "Unknown error");
+                }
+
+                return data;
+            })
+            .then((data) => {
+                showTooltip(
+                    `Dataset "${data.name}" created! Shape: ${data.shape}`,
+                );
+                closeCreateModal();
+                location.reload();
             })
             .catch((err) => {
-                alert("Network error. Check console.");
-                console.error(err);
+                console.error("Create dataset error:", err);
+                alert("Failed to create dataset: " + err.message);
             })
             .finally(() => {
                 btn.disabled = false;

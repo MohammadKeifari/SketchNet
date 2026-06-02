@@ -10,6 +10,7 @@ from django.core.files import File
 
 import tempfile
 import os
+import traceback
 
 User = get_user_model()
 
@@ -415,36 +416,23 @@ def generate_dataset(request):
         return JsonResponse({"error": "POST required"}, status=405)
 
     ds_type = request.POST.get("type", "classification")
-    name = request.POST.get("name", "").strip()
-    if not name:
-        name = f"Synthetic {ds_type.capitalize()}"
+    name = request.POST.get("name", "").strip() or f"Synthetic {ds_type.capitalize()}"
 
-    # Convert all other POST params (except csrf, type, name) to numeric kwargs
+    # Build kwargs from POST data
     kwargs = {}
     for key, value in request.POST.items():
         if key in ("csrfmiddlewaretoken", "type", "name"):
             continue
+        if value == "" or value is None:
+            continue
         try:
-            # try to convert to int, then float
-            if "." in value:
-                kwargs[key] = float(value)
-            else:
-                kwargs[key] = int(value)
+            kwargs[key] = int(value) if "." not in str(value) else float(value)
         except ValueError:
             kwargs[key] = value
 
-    try:
-        import pandas as pd
-        from sklearn.datasets import make_classification, make_regression, make_blobs
-    except ImportError as e:
-        return JsonResponse({"error": f"Missing dependency: {e}"}, status=500)
-
-    # Remove keys that are empty or None
-    kwargs = {k: v for k, v in kwargs.items() if v != "" and v is not None}
-
-    # Set defaults for each type
-    if ds_type == "classification":
-        defaults = {
+    # Default parameters per type
+    defaults = {
+        "classification": {
             "n_samples": 100,
             "n_features": 2,
             "n_classes": 2,
@@ -453,55 +441,82 @@ def generate_dataset(request):
             "n_clusters_per_class": 1,
             "flip_y": 0.0,
             "random_state": None,
-        }
-        kwargs = {**defaults, **kwargs}
-        X, y = make_classification(**kwargs)
-    elif ds_type == "regression":
-        defaults = {
+        },
+        "regression": {
             "n_samples": 100,
             "n_features": 1,
             "n_informative": 1,
             "noise": 0.1,
             "bias": 0.0,
             "random_state": None,
-        }
-        kwargs = {**defaults, **kwargs}
-        X, y = make_regression(**kwargs)
-    elif ds_type == "clustering":
-        defaults = {
+        },
+        "clustering": {
             "n_samples": 100,
             "n_features": 2,
             "centers": 3,
             "cluster_std": 1.0,
             "random_state": None,
-        }
-        kwargs = {**defaults, **kwargs}
-        X, y = make_blobs(**kwargs)
-    else:
+        },
+    }
+
+    if ds_type not in defaults:
         return JsonResponse({"error": "Unknown dataset type."}, status=400)
 
-    # Build DataFrame
-    df = pd.DataFrame(X, columns=[f"feature_{i}" for i in range(X.shape[1])])
-    df["target"] = y
+    # Merge defaults with user kwargs
+    final_kwargs = {**defaults[ds_type], **kwargs}
+    # Remove None values that sklearn might not accept
+    final_kwargs.pop("random_state", None)
 
-    # Write to a temporary CSV file
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
     try:
+        import pandas as pd
+        from sklearn.datasets import make_classification, make_regression, make_blobs
+    except ImportError as e:
+        return JsonResponse(
+            {"error": f"Missing Python package: {e}. Please install scikit-learn."},
+            status=500,
+        )
+
+    try:
+        if ds_type == "classification":
+            X, y = make_classification(**final_kwargs)
+        elif ds_type == "regression":
+            X, y = make_regression(**final_kwargs)
+        elif ds_type == "clustering":
+            X, y = make_blobs(**final_kwargs)
+        else:
+            return JsonResponse({"error": "Unknown dataset type."}, status=400)
+
+        # Create DataFrame
+        df = pd.DataFrame(X, columns=[f"feature_{i}" for i in range(X.shape[1])])
+        df["target"] = y
+
+        # Write to temporary CSV
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
         df.to_csv(tmp.name, index=False)
         tmp.close()
 
         # Create Dataset object
-        from .models import Dataset
-
         dataset = Dataset(
             name=name,
             format="csv",
             owner=request.user,
             is_private=False,
         )
+        # Save first so that dataset.dataset_id is generated
+        dataset.save()
+
+        # Save the file
         with open(tmp.name, "rb") as f:
             dataset.file.save(f"{dataset.dataset_id}.csv", File(f))
-        dataset.save()  # this triggers shape inference via save() -> resolve_shape()
+
+        # Explicitly infer the shape and save again
+        from .services import infer_dataset_shape
+
+        shape, known = infer_dataset_shape(dataset)
+        if shape:
+            dataset.inferred_shape = shape
+            dataset.shape_known = known
+        dataset.save()  # triggers resolve_shape() again
 
         return JsonResponse(
             {
@@ -511,5 +526,12 @@ def generate_dataset(request):
                 "shape": dataset.resolved_shape or "",
             }
         )
+
+    except Exception as e:
+        # Always return JSON, never HTML
+        traceback.print_exc()
+        return JsonResponse({"error": f"Generation failed: {str(e)}"}, status=500)
+
     finally:
-        os.unlink(tmp.name)
+        if "tmp" in locals() and os.path.exists(tmp.name):
+            os.unlink(tmp.name)
