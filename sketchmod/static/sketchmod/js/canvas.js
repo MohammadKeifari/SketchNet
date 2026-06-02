@@ -2868,6 +2868,7 @@ const SketchMod = {
                         this._showToast(`Downloaded ${data.filename}`);
                     }
                 } else {
+                    console.error("Export API error:", data.error);
                     this._showToast(
                         "Export failed: " + (data.error || "Unknown error"),
                     );
