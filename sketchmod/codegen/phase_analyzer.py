@@ -3,43 +3,133 @@ from typing import Set, List, Dict, Any
 
 
 def _is_port_active(port, phase: str) -> bool:
-    """A port is active for a phase if the phase is in its activationPhases list."""
     return phase in port.activation_phases
 
 
-def _active_nodes(graph: Graph, phase: str) -> Set[str]:
-    """
-    Nodes that are fully active in the given phase.
-    A node is active only when **every** connected port (input or output)
-    that has at least one link is active for that phase.
-    """
+def _traverse_preprocessing(graph: Graph) -> Set[str]:
+    """BFS from InputData nodes, following only links where both ports have 'preprocessing'."""
     active = set()
-    for nid, node in graph.nodes.items():
-        # --- inputs ---
-        inputs_ok = True
-        for in_port in node.inputs + node.paramInputs:
-            # ignore ports that have no incoming links
-            if any(link.id_to == in_port.id for link in graph.links):
-                if not _is_port_active(in_port, phase):
-                    inputs_ok = False
-                    break
-        if not inputs_ok:
-            continue
+    queue = []
 
-        # --- outputs ---
+    # start from InputData nodes that have a preprocessing output
+    for nid, node in graph.nodes.items():
+        if node.type == "input-data" and any(
+            _is_port_active(p, "preprocessing") for p in node.outputs
+        ):
+            active.add(nid)
+            queue.append(nid)
+
+    while queue:
+        src_id = queue.pop(0)
+        src_node = graph.nodes[src_id]
+        for out_port in src_node.outputs + src_node.paramOutputs:
+            if not _is_port_active(out_port, "preprocessing"):
+                continue
+            for link in graph.links:
+                if link.id_from == out_port.id:
+                    tgt_port = graph.ports[link.id_to]
+                    tgt_id = tgt_port.node_id
+                    if tgt_id in active:
+                        continue
+                    if _is_port_active(tgt_port, "preprocessing"):
+                        # check if all input ports of tgt_node are satisfied (they will be by this link)
+                        # but we also need to ensure that the target node's own output ports allow it
+                        # We'll add it if its input is reachable and later filter using output condition
+                        active.add(tgt_id)
+                        queue.append(tgt_id)
+
+    # Now filter out nodes that have output ports with links that are not "preprocessing"
+    # (they can't be fully active)
+    final = set()
+    for nid in active:
+        node = graph.nodes[nid]
         outputs_ok = True
         for out_port in node.outputs + node.paramOutputs:
             if any(link.id_from == out_port.id for link in graph.links):
-                if not _is_port_active(out_port, phase):
+                if not _is_port_active(out_port, "preprocessing"):
                     outputs_ok = False
                     break
         if outputs_ok:
-            active.add(nid)
+            final.add(nid)
+    return final
+
+
+def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str]:
+    """
+    Training / Evaluation traversal.
+    Nodes become active if:
+      - All connected input ports have the phase (or are fed by a preprocessing node).
+      - All connected output ports have the phase (except for OutputNode, which only needs at least one active output).
+    We allow links from preprocessing nodes (in pre_set) to satisfy an input even though
+    those nodes are not active in the current phase (their outputs are always available).
+    """
+    
+    active = set()
+    changed = True
+    while changed:
+        changed = False
+        for nid, node in graph.nodes.items():
+            if nid in active:
+                continue
+
+            # ----- Check inputs -----
+            inputs_ok = True
+            for in_port in node.inputs + node.paramInputs:
+                # ignore ports without links
+                if not any(link.id_to == in_port.id for link in graph.links):
+                    continue
+                port_satisfied = False
+                for link in graph.links:
+                    if link.id_to == in_port.id:
+                        src_port = graph.ports[link.id_from]
+                        src_nid = src_port.node_id
+                        # Normal flow: source is active and both ports have the phase
+                        if (
+                            src_nid in active
+                            and _is_port_active(src_port, phase)
+                            and _is_port_active(in_port, phase)
+                        ):
+                            port_satisfied = True
+                            break
+                        # Carry-over from preprocessing: source is in pre_set (not active here)
+                        if src_nid in pre_set and _is_port_active(in_port, phase):
+                            port_satisfied = True
+                            break
+                if not port_satisfied:
+                    inputs_ok = False
+                    break
+            if not inputs_ok:
+                continue
+
+            # ----- Check outputs -----
+            outputs_ok = True
+            if node.type == "output":
+                # OutputNode: only needs at least one output port with a link to be active in this phase
+                any_output_active = False
+                has_linked_output = False
+                for out_port in node.outputs:
+                    if any(link.id_from == out_port.id for link in graph.links):
+                        has_linked_output = True
+                        if _is_port_active(out_port, phase):
+                            any_output_active = True
+                            break
+                outputs_ok = any_output_active if has_linked_output else True
+            else:
+                # All other nodes: every output port with a link must have the phase
+                for out_port in node.outputs + node.paramOutputs:
+                    if any(link.id_from == out_port.id for link in graph.links):
+                        if not _is_port_active(out_port, phase):
+                            outputs_ok = False
+                            break
+
+            if outputs_ok:
+                active.add(nid)
+                changed = True
+
     return active
 
 
 def _topo_sort(nids: Set[str], graph: Graph) -> List[str]:
-    """Kahn's topological sort for the subset of nodes."""
     in_degree = {nid: 0 for nid in nids}
     adj = {nid: [] for nid in nids}
     for nid in nids:
@@ -60,25 +150,18 @@ def _topo_sort(nids: Set[str], graph: Graph) -> List[str]:
 
 
 def analyze_phases(graph: Graph) -> Dict[str, Any]:
-    """
-    Returns the node sets and topological orders for each phase,
-    based purely on the user's activationPhases checkboxes.
-    """
-    pre_set = _active_nodes(graph, "preprocessing")
-    train_set = _active_nodes(graph, "training")
-    eval_set = _active_nodes(graph, "evaluation")
+    pre_set = _traverse_preprocessing(graph)
+    train_set = _traverse_train_eval(graph, "training", pre_set)
+    eval_set = _traverse_train_eval(graph, "evaluation", pre_set)
 
     pre_order = _topo_sort(pre_set, graph)
     train_order = _topo_sort(train_set, graph)
     eval_order = _topo_sort(eval_set, graph)
 
-    # Optimizer is always part of training
     opt_node = next(
         (graph.nodes[nid] for nid in train_set if graph.nodes[nid].type == "optimizer"),
         None,
     )
-
-    # Visualization nodes belong to evaluation
     viz_nodes = [
         graph.nodes[nid] for nid in eval_set if graph.nodes[nid].type == "visualization"
     ]
@@ -93,18 +176,30 @@ def analyze_phases(graph: Graph) -> Dict[str, Any]:
 
 
 def highlight_path(graph_data: dict, phase: str) -> dict:
-    """
-    API helper – returns the list of active nodes and highlighted links
-    for the chosen phase, using the same checkbox rules.
-    """
     graph = parse_graph(graph_data)
-    active_nodes = _active_nodes(graph, phase)
+    pre_set = _traverse_preprocessing(graph)
+
+    if phase == "preprocessing":
+        active_nodes = pre_set
+    else:
+        active_nodes = _traverse_train_eval(graph, phase, pre_set)
 
     highlighted_links = []
     for link in graph.links:
-        src_port = graph.ports[link.id_from]
-        tgt_port = graph.ports[link.id_to]
-        if _is_port_active(src_port, phase) and _is_port_active(tgt_port, phase):
-            highlighted_links.append(f"{link.id_from}→{link.id_to}")
-
+        src = graph.ports[link.id_from]
+        tgt = graph.ports[link.id_to]
+        if phase == "preprocessing":
+            if (
+                _is_port_active(src, "preprocessing")
+                and _is_port_active(tgt, "preprocessing")
+                and src.node_id in active_nodes
+            ):
+                highlighted_links.append(f"{link.id_from}→{link.id_to}")
+        else:
+            # link is highlighted if target port has the phase and (source is active or source is preprocessing)
+            if _is_port_active(tgt, phase):
+                if src.node_id in active_nodes and _is_port_active(src, phase):
+                    highlighted_links.append(f"{link.id_from}→{link.id_to}")
+                elif src.node_id in pre_set:  # carry-over from preprocessing
+                    highlighted_links.append(f"{link.id_from}→{link.id_to}")
     return {"nodes": list(active_nodes), "links": highlighted_links}

@@ -155,3 +155,19 @@ class GraphValidator:
                         "nodeId": nid,
                     }
                 )
+
+    def _check_data_flow_phases(self, warnings):
+        """Warn if a node's input port lacks a phase that its source output has."""
+        from .phase_analyzer import _is_port_active
+
+        for link in self.graph.links:
+            src = self.graph.ports[link.id_from]
+            tgt = self.graph.ports[link.id_to]
+            for phase in ("preprocessing", "training", "evaluation"):
+                if _is_port_active(src, phase) and not _is_port_active(tgt, phase):
+                    warnings.append(
+                        {
+                            "message": f"Port {tgt.id} receives data from a '{phase}' port but is not active in that phase.",
+                            "portId": tgt.id,
+                        }
+                    )
