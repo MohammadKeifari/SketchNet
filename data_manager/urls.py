@@ -14,6 +14,7 @@ urlpatterns = [
     path("search-users-global/", views.search_users_global, name="search_users_global"),
     # dynamic
     path("<str:dataset_id>/", views.dataset_detail, name="detail"),
+    path("api/<str:dataset_id>/shape/", views.api_dataset_shape, name="api_shape"),
     path("<str:dataset_id>/edit/", views.edit_dataset, name="edit"),
     path("<str:dataset_id>/delete/", views.delete_dataset, name="delete"),
     path("<str:dataset_id>/download/", views.download_dataset, name="download"),

@@ -1824,17 +1824,29 @@ const SketchMod = {
             datasetName;
         document.getElementById("datasetPicker").style.display = "none";
 
-        // Update the selected node
         if (
             this.selectedNodes.length === 1 &&
             this.selectedNodes[0] instanceof InputDataNode
         ) {
-            this.selectedNodes[0].datasetId = datasetId;
-            this.selectedNodes[0].datasetName = datasetName;
-            this._fetchDatasetShape(this.selectedNodes[0]);
-            this._showProperties(this.selectedNodes[0]);
-            this._propagateShapes();
-            this._saveToSession();
+            const node = this.selectedNodes[0];
+            node.datasetId = datasetId;
+            node.datasetName = datasetName;
+
+            // Fetch the dataset shape from the new API
+            fetch(`/data/api/${datasetId}/shape/`)
+                .then((res) => res.json())
+                .then((data) => {
+                    const shape = data.shape || "";
+                    node.dataShape = shape;
+                    const shapeInput =
+                        document.getElementById("prop-manual-shape");
+                    if (shapeInput) shapeInput.value = shape;
+                    this._propagateShapes();
+                    this._saveToSession();
+                })
+                .catch(() => {
+                    // If the shape API fails, keep the existing shape
+                });
         }
     },
 
@@ -2143,23 +2155,6 @@ const SketchMod = {
             .catch(() => {});
     },
     //=========== toggle and manual shape for dataset ==============
-    _toggleDatasetSource(mode) {
-        document.getElementById("datasetPickerSection").style.display =
-            mode === "select" ? "block" : "none";
-        document.getElementById("manualShapeSection").style.display =
-            mode === "none" ? "block" : "none";
-
-        if (mode === "none" && this.selectedNodes.length === 1) {
-            const node = this.selectedNodes[0];
-            if (node instanceof InputDataNode) {
-                this._saveUndoState();
-                node.datasetId = null;
-                node.datasetName = null;
-                this._saveToSession();
-            }
-        }
-    },
-
     _updateManualShape(input) {
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
@@ -4975,55 +4970,35 @@ class InputDataNode extends RectNode {
             this._getShapeSummaryHTML() +
             `
         <div class="prop-group">
-            <label>Dataset Source</label>
-            <div class="radio-group">
-                <label class="radio-label"> 
-                    <input type="radio" name="dataset-source" value="none" 
-                           ${!this.datasetId ? "checked" : ""} 
-                           onchange="SketchMod._toggleDatasetSource('none')">
-                    No dataset (manual shape)
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="dataset-source" value="select" 
-                           ${this.datasetId ? "checked" : ""} 
-                           onchange="SketchMod._toggleDatasetSource('select')">
-                    Select dataset
-                </label>
-            </div>
-        </div>
-        <div id="datasetPickerSection" style="display: ${this.datasetId ? "block" : "none"};">
-            <div class="prop-group">
-                <label>Dataset</label>
-                <div class="dataset-selector" id="datasetSelector">
-                    <div class="dataset-select-display" id="datasetSelectDisplay" onclick="SketchMod._toggleDatasetPicker()">
-                        <span id="selectedDatasetName">${this.datasetName || "Select a dataset..."}</span>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="6 9 12 15 18 9"/>
-                        </svg>
+            <label>Dataset</label>
+            <div class="dataset-selector" id="datasetSelector">
+                <div class="dataset-select-display" id="datasetSelectDisplay" onclick="SketchMod._toggleDatasetPicker()">
+                    <span id="selectedDatasetName">${this.datasetName || "Select a dataset..."}</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="dataset-picker" id="datasetPicker" style="display: none;">
+                    <div class="dataset-picker-tabs">
+                        <button class="dataset-tab active" data-section="all">All</button>
+                        <button class="dataset-tab" data-section="mine">My</button>
+                        <button class="dataset-tab" data-section="liked">Liked</button>
                     </div>
-                    <div class="dataset-picker" id="datasetPicker" style="display: none;">
-                        <div class="dataset-picker-tabs">
-                            <button class="dataset-tab active" data-section="all">All</button>
-                            <button class="dataset-tab" data-section="mine">My</button>
-                            <button class="dataset-tab" data-section="liked">Liked</button>
-                        </div>
-                        <input type="text" class="prop-input dataset-search" id="datasetSearch" placeholder="Search datasets...">
-                        <div class="dataset-list" id="datasetList">
-                            <div class="dataset-loading">Loading...</div>
-                        </div>
+                    <input type="text" class="prop-input dataset-search" id="datasetSearch" placeholder="Search datasets...">
+                    <div class="dataset-list" id="datasetList">
+                        <div class="dataset-loading">Loading...</div>
                     </div>
                 </div>
             </div>
             ${this.datasetId ? `<div class="prop-group"><label>Dataset ID</label><p class="prop-hint" style="font-family: monospace;">${this.datasetId}</p></div>` : ""}
         </div>
-        <div id="manualShapeSection" style="display: ${!this.datasetId ? "block" : "none"};">
-            <div class="prop-group">
-                <label>Shape (optional)</label>
-                <input type="text" id="prop-manual-shape" class="prop-input" 
-                       placeholder="e.g. (None, 28, 28)" 
-                       value="${this.dataShape || ""}"
-                       onchange="SketchMod._updateManualShape(this)">
-            </div>
+        <div class="prop-group">
+            <label>Shape</label>
+            <input type="text" id="prop-manual-shape" class="prop-input" 
+                   placeholder="e.g. (None, 28, 28)" 
+                   value="${this.dataShape || ""}"
+                   onchange="SketchMod._updateManualShape(this)">
+            <p class="prop-hint">You can override the dataset shape manually.</p>
         </div>
     `
         );

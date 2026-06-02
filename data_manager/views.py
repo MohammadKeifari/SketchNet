@@ -394,3 +394,11 @@ def api_dataset_list(request):
         )
 
     return JsonResponse({"datasets": data, "count": len(data)})
+
+def api_dataset_shape(request, dataset_id):
+    """Return the resolved shape of a dataset."""
+    dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
+    if not dataset.is_visible_to(request.user):
+        return JsonResponse({"error": "Not allowed"}, status=403)
+
+    return JsonResponse({"shape": dataset.resolved_shape or ""})
