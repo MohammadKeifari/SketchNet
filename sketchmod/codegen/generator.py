@@ -105,66 +105,58 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _get_var_for_first_model_input(self, phase):
-        """Variable name that feeds the first model node in the given phase.
-        Prefers a source that is active in the phase itself."""
+        """Variable that feeds the first model node in `phase`."""
         order = self.flow[f"{phase}_order"]
         phase_set = self.flow.get(f"{phase}_set", set())
+        sources = []
         for nid in order:
             if self.graph.nodes[nid].type in MODEL_TYPES:
-                # look at all input ports of this first model node
                 for in_port in self.graph.nodes[nid].inputs:
                     for link in self.graph.links:
                         if link.id_to == in_port.id:
                             src_id = self.graph.ports[link.id_from].node_id
-                            # prefer source if it is active in this phase
-                            if src_id in phase_set and src_id in self.var_map:
-                                return self.var_map[src_id]
-                # fallback: return any source that has a variable
-                for in_port in self.graph.nodes[nid].inputs:
-                    for link in self.graph.links:
-                        if link.id_to == in_port.id:
-                            src_id = self.graph.ports[link.id_from].node_id
-                            if src_id in self.var_map:
-                                return self.var_map[src_id]
+                            in_phase = src_id in phase_set
+                            has_var = src_id in self.var_map
+                            sources.append((in_phase, has_var, src_id))
+                break
+        for in_phase, has_var, src_id in sources:
+            if in_phase and has_var:
+                return self.var_map[src_id]
+        for in_phase, has_var, src_id in sources:
+            if has_var:
+                return self.var_map[src_id]
         return "None"
 
     def _get_var_for_eval_labels(self):
-        """Find a label tensor for the evaluation phase.
-        Searches nodes in eval_order and preprocessing_order that feed
-        into non‑model evaluation targets."""
-        candidates = set(self.flow["eval_order"] + self.flow["preprocessing_order"])
-        eval_targets = set(self.flow["eval_order"])
-
-        for nid in candidates:
-            node = self.graph.nodes[nid]
+        """Look for test labels, unwrapping one‑hot nodes."""
+        eval_set = self.flow.get("eval_set", set())
+        for nid, node in self.graph.nodes.items():
             if node.type not in DATA_TRANSFORM_TYPES and node.type not in (
                 "onehot",
                 "deonehot",
             ):
                 continue
+            # Skip nodes whose output feeds a model node
+            feeds_model = False
             for out_port in node.outputs:
-                links = [l for l in self.graph.links if l.id_from == out_port.id]
-                if not links:
-                    continue
-                # does this output go to any model node?
-                goes_to_model = False
-                for l in links:
-                    tgt_id = self.graph.ports[l.id_to].node_id
-                    if self.graph.nodes[tgt_id].type in MODEL_TYPES:
-                        goes_to_model = True
-                        break
-                if goes_to_model:
-                    continue
-                # the output goes to something else – it's a candidate label
-                # prefer if the target is actually in eval_order
-                for l in links:
-                    tgt_id = self.graph.ports[l.id_to].node_id
-                    if tgt_id in eval_targets:
-                        if nid in self.var_map:
-                            return self.var_map[nid]
-                # fallback – return the node even if the target isn't in eval_order
-                if nid in self.var_map:
-                    return self.var_map[nid]
+                for link in self.graph.links:
+                    if link.id_from == out_port.id:
+                        tgt_id = self.graph.ports[link.id_to].node_id
+                        if self.graph.nodes[tgt_id].type in MODEL_TYPES:
+                            feeds_model = True
+                            break
+            if feeds_model:
+                continue
+            # If this node is a onehot, use its raw input instead
+            actual_nid = nid
+            if node.type == "onehot":
+                for in_port in node.inputs:
+                    for link in self.graph.links:
+                        if link.id_to == in_port.id:
+                            actual_nid = self.graph.ports[link.id_from].node_id
+                            break
+            if actual_nid in self.var_map:
+                return self.var_map[actual_nid]
         return "None"
 
     def _get_var_for_optimizer_labels(self):
@@ -174,9 +166,18 @@ class CodeGenerator:
         labels_port = opt.inputs[1] if len(opt.inputs) > 1 else None
         if not labels_port:
             return "None"
+        # Find the node that feeds the labels port
         for link in self.graph.links:
             if link.id_to == labels_port.id:
                 src_id = self.graph.ports[link.id_from].node_id
+                # If the source is a onehot node, use its input (the raw labels) instead
+                if self.graph.nodes[src_id].type == "onehot":
+                    for in_port in self.graph.nodes[src_id].inputs:
+                        for link2 in self.graph.links:
+                            if link2.id_to == in_port.id:
+                                raw_src = self.graph.ports[link2.id_from].node_id
+                                if raw_src in self.var_map:
+                                    return self.var_map[raw_src]
                 if src_id in self.var_map:
                     return self.var_map[src_id]
         return "None"
@@ -245,13 +246,21 @@ class CodeGenerator:
         w.line("loss_type = config.get('loss_type', 'mse')")
         w.line("")
         w.line("train_dataset = TensorDataset(X_train, y_train)")
-        w.line("test_dataset = TensorDataset(X_test, y_test)")
         w.line(
             "train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=config.get('shuffle', True))"
         )
+        w.line("")
+        w.line("if y_test is not None:")
+        w.indent()
+        w.line("test_dataset = TensorDataset(X_test, y_test)")
         w.line(
             "test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)"
         )
+        w.dedent()
+        w.line("else:")
+        w.indent()
+        w.line("test_loader = None")
+        w.dedent()
         w.line("")
         # Loss
         w.line("if loss_type == 'mse':")
@@ -325,11 +334,13 @@ class CodeGenerator:
             )
         w.line("optimizer.step()")
         w.line("total_loss += loss.item() * batch_X.size(0)")
-        w.dedent()
+        w.dedent()  # end batch loop
         w.line("avg_train_loss = total_loss / len(train_loader.dataset)")
         w.line("")
         # Validation
         w.line("model.eval()")
+        w.line("if test_loader is not None:")
+        w.indent()
         w.line("val_loss = 0.0")
         w.line("with torch.no_grad():")
         w.indent()
@@ -344,8 +355,8 @@ class CodeGenerator:
             w.line("pred = list(outputs.values())[0]")
         w.line("loss = criterion(pred, batch_y)")
         w.line("val_loss += loss.item() * batch_X.size(0)")
-        w.dedent()
-        w.dedent()
+        w.dedent()  # end test batch loop
+        w.dedent()  # end no_grad
         w.line("avg_val_loss = val_loss / len(test_loader.dataset)")
         w.line("")
         w.line(
@@ -368,22 +379,37 @@ class CodeGenerator:
         w.line("break")
         w.dedent()
         w.dedent()
+        w.dedent()  # end if patience
+        w.dedent()  # end if test_loader
+        w.line("else:")
+        w.indent()
+        w.line('print("No validation data – training only.")')
         w.dedent()
-        w.dedent()
+        w.dedent()  # end epoch loop
         w.line("")
         w.line("return model")
-        w.dedent()
+        w.dedent()  # end function
         w.line("")
 
     def _get_feed_key(self, phase):
-        """Returns the node id that should be passed as key to the model forward dict."""
+        """Returns the node id that should be passed as key to the model forward dict,
+        preferring a source active in the given phase."""
         order = self.flow[f"{phase}_order"]
-        if order:
-            for nid in order:
-                if self.graph.nodes[nid].type in MODEL_TYPES:
-                    src_id = self._find_input_source(nid)
-                    if src_id:
-                        return src_id
+        phase_set = self.flow.get(f"{phase}_set", set())
+        for nid in order:
+            if self.graph.nodes[nid].type in MODEL_TYPES:
+                # look for an input source that is active in this phase
+                for in_port in self.graph.nodes[nid].inputs:
+                    for link in self.graph.links:
+                        if link.id_to == in_port.id:
+                            src_id = self.graph.ports[link.id_from].node_id
+                            if src_id in phase_set:
+                                return src_id
+                # fallback: any connected source
+                for in_port in self.graph.nodes[nid].inputs:
+                    for link in self.graph.links:
+                        if link.id_to == in_port.id:
+                            return self.graph.ports[link.id_from].node_id
         return "input"
 
     def _get_loss_port_id(self):
@@ -400,6 +426,11 @@ class CodeGenerator:
     def _write_evaluation(self, w):
         w.line("def evaluate(model, X_test, y_test):")
         w.indent()
+        w.line("if y_test is None:")
+        w.indent()
+        w.line('print("No test labels – skipping evaluation.")')
+        w.line("return None, None")
+        w.dedent()
         w.line("model.eval()")
         w.line("with torch.no_grad():")
         w.indent()
@@ -435,22 +466,22 @@ class CodeGenerator:
         w.dedent()
         w.dedent()
         w.line("")
-
         # Visualization
+        w.line("def visualize(predictions, y_test, eval_values):")
+        w.indent()
+        w.line("if predictions is None or y_test is None:")
+        w.indent()
+        w.line('print("Skipping visualization (no data).")')
+        w.line("return")
+        w.dedent()
         viz_nodes = self.flow.get("visualizations", [])
         if viz_nodes:
-            w.line("def visualize(predictions, y_test, eval_values):")
-            w.indent()
             for viz in viz_nodes:
                 self.translators[viz.id].visualization_code(w)
-            w.dedent()
-            w.line("")
         else:
-            w.line("def visualize(predictions, y_test, eval_values):")
-            w.indent()
             w.line("pass")
-            w.dedent()
-            w.line("")
+        w.dedent()
+        w.line("")
 
     # ------------------------------------------------------------------
     def _write_main(self, w):

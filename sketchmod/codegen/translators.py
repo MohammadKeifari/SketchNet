@@ -354,8 +354,8 @@ class NeuronTranslator(BaseTranslator):
 
     def forward_code(self, w):
         n = self.node
-        w.line(f"# --- Neuron {n.id} ---")
-        # Collect all incoming tensor names and corresponding weight parameters
+        w.line(f"# --- {n.type} {n.id} ---")
+        # Collect source node IDs and weights
         terms = []
         for port in n.inputs:
             for link in self.graph.links:
@@ -367,17 +367,19 @@ class NeuronTranslator(BaseTranslator):
         if not terms:
             w.line(f"outputs['{n.id}'] = None  # no input connected")
             return
-        # Build weighted sum
+
+        # Build weighted sum using values from `outputs` (internal nodes) or `inputs_dict` (first layer)
         w.line(f"x = None")
         for src_id, wgt in terms:
-            w.line(f"if '{src_id}' in inputs_dict:")
+            w.line(f"if '{src_id}' in outputs or '{src_id}' in inputs_dict:")
             w.indent()
-            w.line(f"if x is None: x = {wgt} * inputs_dict['{src_id}']")
-            w.line(f"else: x = x + {wgt} * inputs_dict['{src_id}']")
+            w.line(f"val = outputs.get('{src_id}', inputs_dict.get('{src_id}'))")
+            w.line(f"if x is None: x = {wgt} * val")
+            w.line(f"else: x = x + {wgt} * val")
             w.dedent()
         w.line("if x is None:")
         w.indent()
-        w.line(f'raise ValueError("No input for neuron {n.id}")')
+        w.line(f'raise ValueError("No input for {n.type} {n.id}")')
         w.dedent()
         activation = n.properties.get("activation", "relu")
         w.line(f"x = self.fc_{n.id}(x)")
@@ -564,21 +566,26 @@ class OutputTranslator(BaseTranslator):
 
     def forward_code(self, w):
         n = self.node
+        # The output node receives its input from the last model layer.
+        # We read from the internal 'outputs' dict, not from 'inputs_dict'.
+        src_id = None
         for port in n.inputs:
-            src_id = None
             for link in self.graph.links:
                 if link.id_to == port.id:
                     src_id = self.graph.ports[link.id_from].node_id
                     break
             if src_id:
-                w.line(f"if '{src_id}' in inputs_dict:")
-                w.indent()
-                w.line(f"x = inputs_dict['{src_id}']")
-                for out_port in n.outputs:
-                    w.line(f"outputs['{out_port.id}'] = x")
-                w.dedent()
-        # Always store the node id as a fallback
-        w.line(f"if 'x' in locals(): outputs['{n.id}'] = x")
+                break
+        if src_id:
+            w.line(f"if '{src_id}' in outputs:")
+            w.indent()
+            w.line(f"x = outputs['{src_id}']")
+            for out_port in n.outputs:
+                w.line(f"outputs['{out_port.id}'] = x")
+            w.line(f"outputs['{n.id}'] = x")
+            w.dedent()
+        else:
+            w.line(f"outputs['{n.id}'] = None  # no input connected")
 
 
 # ---------------------------------------------------------------------------

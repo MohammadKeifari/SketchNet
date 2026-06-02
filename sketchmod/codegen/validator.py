@@ -11,7 +11,6 @@ MODEL_TYPES = {
     "add",
     "concat",
 }
-
 DATA_TRANSFORM_TYPES = {
     "column-select",
     "row-select",
@@ -32,13 +31,13 @@ class GraphValidator:
         errors = []
         warnings = []
 
-        # --- basic connectivity ---
         self._check_input_output_present(errors)
         self._check_optimizer_connections(errors)
         self._check_link_weights(warnings)
         self._check_multi_port_cardinality(errors)
         self._check_phase_connectivity(warnings)
         self._check_preprocessing_models(warnings)
+        self._check_label_encoding(warnings)
 
         return {
             "errors": errors,
@@ -112,99 +111,63 @@ class GraphValidator:
                     )
 
     def _check_phase_connectivity(self, warnings):
-        train_set = set(self.flow["train_order"])
-        eval_set = set(self.flow["eval_order"])
-        all_model = {
-            nid for nid in self.graph.nodes if self.graph.nodes[nid].type in MODEL_TYPES
-        }
-        for nid in all_model:
-            in_train = nid in train_set
-            in_eval = nid in eval_set
-            if not in_train and not in_eval:
-                warnings.append(
-                    {
-                        "message": f"Model node '{nid}' is not reachable in either training or evaluation phase.",
-                        "nodeId": nid,
-                    }
-                )
-        # Output node test input warning
-        output = next(
-            (n for n in self.graph.nodes.values() if n.type == "output"), None
-        )
-        if output:
-            test_input = next((p for p in output.inputs if p.sub_type == "test"), None)
-            if test_input:
-                connected = any(l.id_to == test_input.id for l in self.graph.links)
-                if connected:
-                    src_port = self.graph.ports[
-                        next(
-                            l.id_from
-                            for l in self.graph.links
-                            if l.id_to == test_input.id
-                        )
-                    ]
-                    if (
-                        "training" in src_port.activation_phases
-                        and "evaluation" not in src_port.activation_phases
-                    ):
-                        warnings.append(
-                            {
-                                "message": "Test input of Output node is fed by a train‑only port. "
-                                "Evaluation may not receive separate test data.",
-                                "portId": test_input.id,
-                            }
-                        )
-
-    def _check_preprocessing_models(self, warnings):
-        for nid in self.flow["preprocessing_order"]:
-            if self.graph.nodes[nid].type in MODEL_TYPES:
-                warnings.append(
-                    {
-                        "message": f"Model node '{nid}' is in the preprocessing phase and will not be trained. "
-                        "Data will flow through an untrained layer.",
-                        "nodeId": nid,
-                    }
-                )
-
-    def _check_data_flow_phases(self, warnings):
-        """Warn if a node's input port lacks a phase that its source output has."""
-        from .phase_analyzer import _is_port_active
-
+        """Warn only about real data‑flow problems: a link where source port has a phase
+        but the target port is completely missing that phase."""
         for link in self.graph.links:
             src = self.graph.ports[link.id_from]
             tgt = self.graph.ports[link.id_to]
             for phase in ("preprocessing", "training", "evaluation"):
-                if _is_port_active(src, phase) and not _is_port_active(tgt, phase):
+                if (
+                    phase in src.activation_phases
+                    and phase not in tgt.activation_phases
+                ):
+                    src_node = self.graph.nodes[src.node_id]
+                    tgt_node = self.graph.nodes[tgt.node_id]
                     warnings.append(
                         {
-                            "message": f"Port {tgt.id} receives data from a '{phase}' port but is not active in that phase.",
+                            "message": (
+                                f"{src_node.type.capitalize()} '{src.node_id}' "
+                                f"output {src.index} sends data in '{phase}' phase, "
+                                f"but {tgt_node.type.capitalize()} '{tgt.node_id}' "
+                                f"input {tgt.index} is not active in that phase."
+                            ),
                             "portId": tgt.id,
                         }
                     )
 
-    def _check_eval_labels_phase(self, warnings):
-        """Warn if test labels appear to be missing from evaluation phase."""
-        # Find a node that looks like test labels (output goes to visualization but not model)
-        for nid, node in self.graph.nodes.items():
-            if node.type not in DATA_TRANSFORM_TYPES:
-                continue
-            for out_port in node.outputs:
-                links = [l for l in self.graph.links if l.id_from == out_port.id]
-                if not links:
-                    continue
-                goes_to_model = any(
-                    self.graph.ports[l.id_to].node_id in self.graph.nodes
-                    and self.graph.nodes[self.graph.ports[l.id_to].node_id].type
-                    in MODEL_TYPES
-                    for l in links
+    def _check_preprocessing_models(self, warnings):
+        for nid in self.flow["preprocessing_order"]:
+            node = self.graph.nodes[nid]
+            if node.type in MODEL_TYPES:
+                warnings.append(
+                    {
+                        "message": (
+                            f"Model node '{node.type}' ({nid}) is in the preprocessing phase "
+                            "and will not be trained. Data will flow through an untrained layer."
+                        ),
+                        "nodeId": nid,
+                    }
                 )
-                if goes_to_model:
-                    continue
-                # Check if this port has "evaluation" phase
-                if "evaluation" not in out_port.activation_phases:
+
+    def _check_label_encoding(self, warnings):
+        opt = self.flow.get("optimizer")
+        if not opt or len(opt.inputs) < 2:
+            return
+        labels_port = opt.inputs[1]
+        for link in self.graph.links:
+            if link.id_to == labels_port.id:
+                src_node = self.graph.nodes[self.graph.ports[link.id_from].node_id]
+                if (
+                    src_node.type == "onehot"
+                    and opt.properties.get("lossType") == "cross_entropy"
+                ):
                     warnings.append(
                         {
-                            "message": f"Port {out_port.id} seems to be test labels but is not active in evaluation phase.",
-                            "portId": out_port.id,
+                            "message": (
+                                "CrossEntropyLoss expects integer class indices, but the labels "
+                                "come through a OneHot node. Connect raw labels directly or switch "
+                                "the loss to BCEWithLogitsLoss."
+                            ),
+                            "portId": labels_port.id,
                         }
                     )
