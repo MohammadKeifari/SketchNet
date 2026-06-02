@@ -1861,6 +1861,10 @@ const SketchMod = {
             modelName: this._currentModelName,
         };
         sessionStorage.setItem("sketchmod-graph", JSON.stringify(data));
+        sessionStorage.setItem(
+            "sketchmod-active-model-id",
+            this._currentModelId || "",
+        );
     },
 
     _loadFromSession() {
@@ -2723,6 +2727,7 @@ const SketchMod = {
 
             // Clear session storage
             sessionStorage.removeItem("sketchmod-graph");
+            sessionStorage.removeItem("sketchmod-active-model-id");
 
             // Create fresh default nodes
             this._createDefaultNodes();

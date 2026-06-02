@@ -123,3 +123,15 @@
         </div>
     </div>
 {% endblock content %}
+{% block extra_js %}
+    <script>
+        (function() {
+            const deletedModelId = "{{ model.model_id }}";  // rendered by Django
+            const activeModelId = sessionStorage.getItem("sketchmod-active-model-id");
+            if (activeModelId === deletedModelId) {
+                sessionStorage.removeItem("sketchmod-graph");
+                sessionStorage.removeItem("sketchmod-active-model-id");
+            }
+        })();
+    </script>
+{% endblock extra_js %}
