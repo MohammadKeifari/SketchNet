@@ -58,12 +58,11 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
     """
     Training / Evaluation traversal.
     Nodes become active if:
-      - All connected input ports have the phase (or are fed by a preprocessing node).
-      - All connected output ports have the phase (except for OutputNode, which only needs at least one active output).
-    We allow links from preprocessing nodes (in pre_set) to satisfy an input even though
-    those nodes are not active in the current phase (their outputs are always available).
+      - For 'output', 'optimizer', 'visualization': at least one connected input port is satisfied.
+      - For all other nodes: every connected input port must be satisfied.
+      - All connected output ports must have the phase (OutputNode only needs at least one active output).
+    Links from preprocessing nodes (in pre_set) always satisfy the target input if the target port has the phase.
     """
-    
     active = set()
     changed = True
     while changed:
@@ -72,39 +71,59 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
             if nid in active:
                 continue
 
-            # ----- Check inputs -----
-            inputs_ok = True
-            for in_port in node.inputs + node.paramInputs:
-                # ignore ports without links
-                if not any(link.id_to == in_port.id for link in graph.links):
-                    continue
-                port_satisfied = False
-                for link in graph.links:
-                    if link.id_to == in_port.id:
-                        src_port = graph.ports[link.id_from]
-                        src_nid = src_port.node_id
-                        # Normal flow: source is active and both ports have the phase
-                        if (
-                            src_nid in active
-                            and _is_port_active(src_port, phase)
-                            and _is_port_active(in_port, phase)
-                        ):
-                            port_satisfied = True
-                            break
-                        # Carry-over from preprocessing: source is in pre_set (not active here)
-                        if src_nid in pre_set and _is_port_active(in_port, phase):
-                            port_satisfied = True
-                            break
-                if not port_satisfied:
-                    inputs_ok = False
-                    break
+            # ----- Determine how strict the input check should be -----
+            strict_inputs = node.type not in ("output", "optimizer", "visualization")
+
+            if strict_inputs:
+                inputs_ok = True
+                for in_port in node.inputs + node.paramInputs:
+                    if not any(link.id_to == in_port.id for link in graph.links):
+                        continue
+                    port_satisfied = False
+                    for link in graph.links:
+                        if link.id_to == in_port.id:
+                            src_port = graph.ports[link.id_from]
+                            src_nid = src_port.node_id
+                            if (
+                                src_nid in active
+                                and _is_port_active(src_port, phase)
+                                and _is_port_active(in_port, phase)
+                            ) or (
+                                src_nid in pre_set and _is_port_active(in_port, phase)
+                            ):
+                                port_satisfied = True
+                                break
+                    if not port_satisfied:
+                        inputs_ok = False
+                        break
+            else:
+                # Relaxed: only need ONE connected input to be satisfied
+                inputs_ok = False
+                for in_port in node.inputs + node.paramInputs:
+                    if not any(link.id_to == in_port.id for link in graph.links):
+                        continue
+                    for link in graph.links:
+                        if link.id_to == in_port.id:
+                            src_port = graph.ports[link.id_from]
+                            src_nid = src_port.node_id
+                            if (
+                                src_nid in active
+                                and _is_port_active(src_port, phase)
+                                and _is_port_active(in_port, phase)
+                            ) or (
+                                src_nid in pre_set and _is_port_active(in_port, phase)
+                            ):
+                                inputs_ok = True
+                                break
+                    if inputs_ok:
+                        break
+
             if not inputs_ok:
                 continue
 
             # ----- Check outputs -----
             outputs_ok = True
             if node.type == "output":
-                # OutputNode: only needs at least one output port with a link to be active in this phase
                 any_output_active = False
                 has_linked_output = False
                 for out_port in node.outputs:
@@ -115,7 +134,6 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
                             break
                 outputs_ok = any_output_active if has_linked_output else True
             else:
-                # All other nodes: every output port with a link must have the phase
                 for out_port in node.outputs + node.paramOutputs:
                     if any(link.id_from == out_port.id for link in graph.links):
                         if not _is_port_active(out_port, phase):
