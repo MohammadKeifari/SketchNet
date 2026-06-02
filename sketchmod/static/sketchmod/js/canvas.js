@@ -3286,14 +3286,6 @@ const SketchMod = {
                     }
 
                     this._highlightPhasePorts = activePorts; // <-- this line is crucial
-                    console.log(
-                        "active port objects:",
-                        [...activePorts].map((p) => p.id),
-                    );
-                    console.log(
-                        "all ports on canvas:",
-                        this.ports.map((p) => p.id),
-                    );
                     this._render();
 
                     const btn = document.getElementById("btnClearPath");
