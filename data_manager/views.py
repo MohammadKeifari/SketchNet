@@ -535,3 +535,12 @@ def generate_dataset(request):
     finally:
         if "tmp" in locals() and os.path.exists(tmp.name):
             os.unlink(tmp.name)
+
+def api_dataset_info(request, dataset_id):
+    dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
+    if not dataset.is_visible_to(request.user):
+        return JsonResponse({"error": "Not allowed"}, status=403)
+    return JsonResponse({
+        "filename": dataset.file.name.split("/")[-1],  # actual file name
+        "format": dataset.format,
+    })

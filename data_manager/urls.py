@@ -33,4 +33,5 @@ urlpatterns = [
         name="remove_user",
     ),
     path("api/list/", views.api_dataset_list, name="api_dataset_list"),
+    path("api/<str:dataset_id>/info/", views.api_dataset_info, name="api_info"),
 ]

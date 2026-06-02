@@ -1832,7 +1832,7 @@ const SketchMod = {
             node.datasetId = datasetId;
             node.datasetName = datasetName;
 
-            // Fetch the dataset shape from the new API
+            // 1. Fetch dataset shape
             fetch(`/data/api/${datasetId}/shape/`)
                 .then((res) => res.json())
                 .then((data) => {
@@ -1844,9 +1844,17 @@ const SketchMod = {
                     this._propagateShapes();
                     this._saveToSession();
                 })
-                .catch(() => {
-                    // If the shape API fails, keep the existing shape
-                });
+                .catch(() => {});
+
+            // 2. Fetch dataset file info (name + format)
+            fetch(`/data/api/${datasetId}/info/`)
+                .then((res) => res.json())
+                .then((data) => {
+                    node.datasetFile = data.filename || "";
+                    node.datasetFormat = data.format || "";
+                    this._saveToSession();
+                })
+                .catch(() => {});
         }
     },
 
@@ -5016,6 +5024,8 @@ class InputDataNode extends RectNode {
             datasetId: this.datasetId,
             datasetName: this.datasetName,
             dataShape: this.dataShape,
+            datasetFile: this.datasetFile,
+            datasetFormat: this.datasetFormat,
         };
     }
     fromJSON(d) {
@@ -5023,6 +5033,8 @@ class InputDataNode extends RectNode {
         if (d.datasetId) this.datasetId = d.datasetId;
         if (d.datasetName) this.datasetName = d.datasetName;
         if (d.dataShape) this.dataShape = d.dataShape;
+        if (d.datasetFile) this.datasetFile = d.datasetFile;
+        if (d.datasetFormat) this.datasetFormat = d.datasetFormat;
     }
 }
 

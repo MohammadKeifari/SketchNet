@@ -60,18 +60,48 @@ class InputDataTranslator(BaseTranslator):
     def data_code(self, w, phase):
         n = self.node
         ds = n.properties.get("dataShape")
-        if ds:
+        dataset_id = n.properties.get("datasetId")
+        dataset_file = n.properties.get("datasetFile", "")
+        dataset_format = n.properties.get("datasetFormat", "")
+
+        if dataset_id and dataset_file:
+            # Real dataset – generate loading code
+            ext = dataset_format or dataset_file.rsplit(".", 1)[-1]
+            if ext in ("csv", "xlsx", "json", "parquet"):
+                if ext == "csv":
+                    w.line(f"import pandas as pd")
+                    w.line(f"df = pd.read_csv('data/{dataset_file}')")
+                elif ext == "xlsx":
+                    w.line(f"import pandas as pd")
+                    w.line(f"df = pd.read_excel('data/{dataset_file}')")
+                elif ext == "json":
+                    w.line(f"import pandas as pd")
+                    w.line(f"df = pd.read_json('data/{dataset_file}')")
+                elif ext == "parquet":
+                    w.line(f"import pandas as pd")
+                    w.line(f"df = pd.read_parquet('data/{dataset_file}')")
+                w.line("raw_data = torch.tensor(df.values, dtype=torch.float32)")
+            else:
+                w.line(f"# Unsupported format '{ext}' – loading random data instead")
+                w.line("raw_data = torch.randn(200, 10)")
+            self.var_map[n.id] = "raw_data"
+        elif ds:
+            # Manual shape
             parts = ds.strip("()").split(",")
-            row_sym = parts[0].strip()
+            row_str = parts[0].strip()
             cols = [int(p.strip()) for p in parts[1:]]
-            w.line(f"# InputData '{n.id}': manual shape {ds}")
-            w.line(f"num_rows = 200  # placeholder for '{row_sym}'")
-            w.line(
-                f"raw_data = torch.randn(num_rows, {', '.join(str(c) for c in cols)})"
-            )
+            if row_str.isdigit():
+                w.line(
+                    f"raw_data = torch.randn({row_str}, {', '.join(str(c) for c in cols)})"
+                )
+            else:
+                w.line(f"# Manual shape {ds}")
+                w.line(f"num_rows = 200  # placeholder for '{row_str}'")
+                w.line(
+                    f"raw_data = torch.randn(num_rows, {', '.join(str(c) for c in cols)})"
+                )
             self.var_map[n.id] = "raw_data"
         else:
-            w.line("# No shape or dataset provided – creating random data")
             w.line("raw_data = torch.randn(200, 10)")
             self.var_map[n.id] = "raw_data"
 
@@ -291,7 +321,6 @@ class TrainTestSplitTranslator(BaseTranslator):
         test_port = next(p for p in n.outputs if p.sub_type == "test")
         self.var_map[train_port.id] = "train_data"
         self.var_map[test_port.id] = "test_data"
-        self.var_map[n.id] = "train_data"  # default fallback
 
     def _get_input_var(self, node):
         return ColumnSelectTranslator._get_input_var(self, node)
