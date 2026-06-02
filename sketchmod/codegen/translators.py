@@ -38,6 +38,18 @@ class BaseTranslator:
         """Generate visualization code."""
         pass
 
+    def _get_input_var(self, node):
+        for port in node.inputs + node.paramInputs:
+            for link in self.graph.links:
+                if link.id_to == port.id:
+                    src_id = self.graph.ports[link.id_from].node_id
+                    if src_id in self.var_map:
+                        return self.var_map[src_id]
+                    src_port = self.graph.ports[link.id_from]
+                    if src_port.id in self.var_map:
+                        return self.var_map[src_port.id]
+        return "raw_data"
+
 
 # ---------------------------------------------------------------------------
 # DATA NODES
@@ -523,22 +535,21 @@ class OutputTranslator(BaseTranslator):
 
     def forward_code(self, w):
         n = self.node
-        seen_sources = set()
         for port in n.inputs:
             src_id = None
             for link in self.graph.links:
                 if link.id_to == port.id:
                     src_id = self.graph.ports[link.id_from].node_id
                     break
-            if src_id and src_id not in seen_sources:
-                seen_sources.add(src_id)
+            if src_id:
                 w.line(f"if '{src_id}' in inputs_dict:")
                 w.indent()
                 w.line(f"x = inputs_dict['{src_id}']")
                 for out_port in n.outputs:
                     w.line(f"outputs['{out_port.id}'] = x")
                 w.dedent()
-        w.line(f"if seen_sources: outputs['{n.id}'] = x")
+        # Always store the node id as a fallback
+        w.line(f"if 'x' in locals(): outputs['{n.id}'] = x")
 
 
 # ---------------------------------------------------------------------------
@@ -599,7 +610,7 @@ class VisualizationTranslator(BaseTranslator):
             w.line("ax.scatter(y_test, predictions, eval_values)")
         if color_port and n.properties.get("colorMode") in ("discrete", "continuous"):
             w.line("# Color mapping would go here (omitted for brevity)")
-        w.line("plt.title(f'Visualization {n.id}')")
+        w.line(f"plt.title('Visualization {self.node.id}')")
         w.line("plt.grid(True)")
         w.line("plt.show()")
 

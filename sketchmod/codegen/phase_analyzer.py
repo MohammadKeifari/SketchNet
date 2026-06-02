@@ -31,15 +31,34 @@ def _traverse_preprocessing(graph: Graph) -> Set[str]:
                     tgt_id = tgt_port.node_id
                     if tgt_id in active:
                         continue
-                    if _is_port_active(tgt_port, "preprocessing"):
-                        # check if all input ports of tgt_node are satisfied (they will be by this link)
-                        # but we also need to ensure that the target node's own output ports allow it
-                        # We'll add it if its input is reachable and later filter using output condition
+                    # Target port must have "preprocessing"
+                    if not _is_port_active(tgt_port, "preprocessing"):
+                        continue
+                    # All input ports of the target node must be satisfied by active preprocessing nodes
+                    tgt_node = graph.nodes[tgt_id]
+                    all_inputs_satisfied = True
+                    for in_port in tgt_node.inputs + tgt_node.paramInputs:
+                        if not any(link2.id_to == in_port.id for link2 in graph.links):
+                            continue
+                        port_ok = False
+                        for link2 in graph.links:
+                            if link2.id_to == in_port.id:
+                                src2 = graph.ports[link2.id_from]
+                                if (
+                                    src2.node_id in active
+                                    and _is_port_active(src2, "preprocessing")
+                                    and _is_port_active(in_port, "preprocessing")
+                                ):
+                                    port_ok = True
+                                    break
+                        if not port_ok:
+                            all_inputs_satisfied = False
+                            break
+                    if all_inputs_satisfied:
                         active.add(tgt_id)
                         queue.append(tgt_id)
 
     # Now filter out nodes that have output ports with links that are not "preprocessing"
-    # (they can't be fully active)
     final = set()
     for nid in active:
         node = graph.nodes[nid]
