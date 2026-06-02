@@ -12,6 +12,16 @@ MODEL_TYPES = {
     "concat",
 }
 
+DATA_TRANSFORM_TYPES = {
+    "column-select",
+    "row-select",
+    "dim-select",
+    "normalize",
+    "onehot",
+    "deonehot",
+    "train-test",
+}
+
 
 class GraphValidator:
     def __init__(self, graph_data):
@@ -169,5 +179,32 @@ class GraphValidator:
                         {
                             "message": f"Port {tgt.id} receives data from a '{phase}' port but is not active in that phase.",
                             "portId": tgt.id,
+                        }
+                    )
+
+    def _check_eval_labels_phase(self, warnings):
+        """Warn if test labels appear to be missing from evaluation phase."""
+        # Find a node that looks like test labels (output goes to visualization but not model)
+        for nid, node in self.graph.nodes.items():
+            if node.type not in DATA_TRANSFORM_TYPES:
+                continue
+            for out_port in node.outputs:
+                links = [l for l in self.graph.links if l.id_from == out_port.id]
+                if not links:
+                    continue
+                goes_to_model = any(
+                    self.graph.ports[l.id_to].node_id in self.graph.nodes
+                    and self.graph.nodes[self.graph.ports[l.id_to].node_id].type
+                    in MODEL_TYPES
+                    for l in links
+                )
+                if goes_to_model:
+                    continue
+                # Check if this port has "evaluation" phase
+                if "evaluation" not in out_port.activation_phases:
+                    warnings.append(
+                        {
+                            "message": f"Port {out_port.id} seems to be test labels but is not active in evaluation phase.",
+                            "portId": out_port.id,
                         }
                     )

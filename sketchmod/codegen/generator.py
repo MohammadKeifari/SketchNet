@@ -105,16 +105,66 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _get_var_for_first_model_input(self, phase):
-        """Variable name that feeds the first model node in the given phase."""
+        """Variable name that feeds the first model node in the given phase.
+        Prefers a source that is active in the phase itself."""
         order = self.flow[f"{phase}_order"]
-        if not order:
-            return "None"
-        # find the first node that is actually a model node
+        phase_set = self.flow.get(f"{phase}_set", set())
         for nid in order:
             if self.graph.nodes[nid].type in MODEL_TYPES:
-                src_id = self._find_input_source(nid)
-                if src_id and src_id in self.var_map:
-                    return self.var_map[src_id]
+                # look at all input ports of this first model node
+                for in_port in self.graph.nodes[nid].inputs:
+                    for link in self.graph.links:
+                        if link.id_to == in_port.id:
+                            src_id = self.graph.ports[link.id_from].node_id
+                            # prefer source if it is active in this phase
+                            if src_id in phase_set and src_id in self.var_map:
+                                return self.var_map[src_id]
+                # fallback: return any source that has a variable
+                for in_port in self.graph.nodes[nid].inputs:
+                    for link in self.graph.links:
+                        if link.id_to == in_port.id:
+                            src_id = self.graph.ports[link.id_from].node_id
+                            if src_id in self.var_map:
+                                return self.var_map[src_id]
+        return "None"
+
+    def _get_var_for_eval_labels(self):
+        """Find a label tensor for the evaluation phase.
+        Searches nodes in eval_order and preprocessing_order that feed
+        into non‑model evaluation targets."""
+        candidates = set(self.flow["eval_order"] + self.flow["preprocessing_order"])
+        eval_targets = set(self.flow["eval_order"])
+
+        for nid in candidates:
+            node = self.graph.nodes[nid]
+            if node.type not in DATA_TRANSFORM_TYPES and node.type not in (
+                "onehot",
+                "deonehot",
+            ):
+                continue
+            for out_port in node.outputs:
+                links = [l for l in self.graph.links if l.id_from == out_port.id]
+                if not links:
+                    continue
+                # does this output go to any model node?
+                goes_to_model = False
+                for l in links:
+                    tgt_id = self.graph.ports[l.id_to].node_id
+                    if self.graph.nodes[tgt_id].type in MODEL_TYPES:
+                        goes_to_model = True
+                        break
+                if goes_to_model:
+                    continue
+                # the output goes to something else – it's a candidate label
+                # prefer if the target is actually in eval_order
+                for l in links:
+                    tgt_id = self.graph.ports[l.id_to].node_id
+                    if tgt_id in eval_targets:
+                        if nid in self.var_map:
+                            return self.var_map[nid]
+                # fallback – return the node even if the target isn't in eval_order
+                if nid in self.var_map:
+                    return self.var_map[nid]
         return "None"
 
     def _get_var_for_optimizer_labels(self):
@@ -408,9 +458,9 @@ class CodeGenerator:
         w.indent()
         w.line("X_train, y_train, X_test, y_test = load_and_preprocess()")
         w.line("X_train = X_train.float()")
-        w.line("y_train = y_train.float()")
+        w.line("if y_train is not None: y_train = y_train.float()")
         w.line("X_test = X_test.float()")
-        w.line("y_test = y_test.float()")
+        w.line("if y_test is not None: y_test = y_test.float()")
         w.line("")
         opt_node = self.flow.get("optimizer")
         if opt_node:
