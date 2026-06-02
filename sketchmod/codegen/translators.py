@@ -242,11 +242,10 @@ class DeOneHotTranslator(BaseTranslator):
 
     def data_code(self, w, phase):
         n = self.node
-        num_classes = n.properties.get("numClasses", 10)
         in_var = self._get_input_var(n)
         out_var = f"{n.id}_out"
 
-        # Check if a param input is connected
+        # Check if a param input is connected (for shared encoding)
         param_input = None
         if n.paramInputs:
             for link in self.graph.links:
@@ -255,13 +254,8 @@ class DeOneHotTranslator(BaseTranslator):
                     break
 
         if param_input:
-            # Reuse categories from another onehot encoder
             w.line(f"categories = {param_input}")
             w.line(f"{out_var} = torch.argmax({in_var}, dim=-1)")
-            # Optionally map back to original categories if they are not 0..N-1
-            w.line(
-                f"# If categories are not consecutive, you may need to map indices back."
-            )
         else:
             w.line(f"{out_var} = torch.argmax({in_var}, dim=-1)")
 

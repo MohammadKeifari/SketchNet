@@ -6349,32 +6349,26 @@ class DeOneHotNode extends RectNode {
     }
 
     getPropertiesHTML() {
-        const hasParamIn = this.paramInputs.length > 0;
-
         let paramHTML = "";
-        if (hasParamIn) {
+        if (this.paramInputs.length > 0) {
             paramHTML = `
-            <div class="prop-group">
-                <label>Param Ports</label>
-                <div class="port-legend">
-                    <span class="port-legend-item">
-                        <svg width="10" height="10" viewBox="0 0 10 10">
-                            <polygon points="5,1 9,5 5,9 1,5" fill="#fbbf24" stroke="#1a1d2e" stroke-width="1"/>
-                        </svg>
-                        Param Input — receives categories from OneHot encoder
-                    </span>
-                </div>
-            </div>`;
+        <div class="prop-group">
+            <label>Param Ports</label>
+            <div class="port-legend">
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <polygon points="5,1 9,5 5,9 1,5" fill="#fbbf24" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Param Input — receives categories from OneHot encoder
+                </span>
+            </div>
+        </div>`;
         }
 
         return (
             this._getShapeSummaryHTML() +
             paramHTML +
-            `<div class="prop-group"><label>Number of Classes</label>
-                <input type="number" id="prop-classes" class="prop-input" value="${this.numClasses}" min="2" max="10000"
-                       onchange="SketchMod._updateDeOneHotClasses(this)">
-            </div>
-            <p class="prop-hint">Converts one-hot vectors back to class indices.</p>`
+            `<p class="prop-hint">Converts one-hot vectors back to class indices.</p>`
         );
     }
 }
