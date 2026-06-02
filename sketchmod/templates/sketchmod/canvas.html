@@ -328,6 +328,25 @@
             <div class="sidebar-section"
                  style="border-top: 1px solid var(--border);
                         padding-top: 12px">
+                <!-- Import JSON Button -->
+                <button class="sidebar-btn"
+                        id="btnImportJson"
+                        title="Import model from JSON file">
+                    <svg width="16"
+                         height="16"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="12" y1="18" x2="12" y2="12" />
+                        <line x1="9" y1="15" x2="15" y2="15" />
+                    </svg>
+                    <span>Import JSON</span>
+                </button>
+                <!-- Hidden file input -->
+                <input type="file" id="importJsonInput" accept=".json" style="display: none">
                 <button class="sidebar-btn new-model-btn"
                         id="btnNewModel"
                         title="Start a new model">
@@ -607,6 +626,63 @@
                         <button type="submit" class="btn btn-primary">Save Model</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+    <!-- Import Modal -->
+    <div class="modal-overlay" id="importModal" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Import Model</h2>
+                <button class="modal-close" onclick="SketchMod.closeImportModal()">
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Paste JSON</label>
+                    <textarea id="importJsonText"
+                              class="form-input"
+                              rows="8"
+                              placeholder='{"nodes": [...], "links": [...]}'></textarea>
+                </div>
+                <div style="text-align: center;
+                            margin: 16px 0;
+                            color: var(--text-secondary);
+                            font-size: 0.85rem">— or —</div>
+                <div class="form-group">
+                    <label>Upload JSON File</label>
+                    <div class="cover-upload-wrapper">
+                        <label class="cover-upload-label" for="importJsonFile">
+                            <svg width="20"
+                                 height="20"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                            </svg>
+                            <span id="importFileLabel">Choose file</span>
+                        </label>
+                        <input type="file" id="importJsonFile" accept=".json" style="display: none;">
+                        <span id="importFileName" class="cover-file-name">No file chosen</span>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button"
+                            class="btn btn-ghost"
+                            onclick="SketchMod.closeImportModal()">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="btnImportSubmit">Import</button>
+                </div>
             </div>
         </div>
     </div>

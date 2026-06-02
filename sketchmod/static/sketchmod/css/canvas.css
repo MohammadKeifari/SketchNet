@@ -1172,3 +1172,13 @@
         gap: 8px;
     }
 }
+#importFileLabel {
+    display: inline-block;
+    transform: translateY(-5px);
+}
+#importJsonText {
+    resize: vertical; 
+    min-height: 120px; 
+    max-height: 300px; 
+    
+}

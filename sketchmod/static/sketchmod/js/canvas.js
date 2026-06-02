@@ -342,6 +342,23 @@ const SketchMod = {
         document
             .getElementById("btnClearValidation")
             ?.addEventListener("click", () => this._clearValidation());
+        // Import JSON button opens modal
+        document
+            .getElementById("btnImportJson")
+            ?.addEventListener("click", () => this.openImportModal());
+
+        // File input change
+        document
+            .getElementById("importJsonFile")
+            ?.addEventListener("change", (e) => {
+                const name = e.target.files[0]?.name || "No file chosen";
+                document.getElementById("importFileName").textContent = name;
+            });
+
+        // Import submit
+        document
+            .getElementById("btnImportSubmit")
+            ?.addEventListener("click", () => this._handleImportSubmit());
         // Toolbar
         this._buildToolbar();
 
@@ -919,7 +936,9 @@ const SketchMod = {
         // Block all canvas keyboard shortcuts when a modal is open
         if (
             document.getElementById("saveModal")?.style.display === "flex" ||
-            document.getElementById("validationModal")?.style.display === "flex"
+            document.getElementById("validationModal")?.style.display ===
+                "flex" ||
+            document.getElementById("importModal")?.style.display === "flex"
         ) {
             return;
         }
@@ -3465,6 +3484,123 @@ const SketchMod = {
             "[PASTE] Done. Pasted nodes:",
             pastedNodes.map((n) => n.id),
         );
+    },
+    openImportModal() {
+        document.getElementById("importModal").style.display = "flex";
+        document.getElementById("importJsonText").value = "";
+        document.getElementById("importFileName").textContent =
+            "No file chosen";
+        document.getElementById("importJsonFile").value = "";
+    },
+
+    closeImportModal() {
+        document.getElementById("importModal").style.display = "none";
+    },
+    _handleImportSubmit() {
+        const text = document.getElementById("importJsonText").value.trim();
+        const file = document.getElementById("importJsonFile").files[0];
+
+        if (!text && !file) {
+            this._showToast("Paste JSON or choose a file.");
+            return;
+        }
+
+        if (text) {
+            // Paste method
+            try {
+                const graph = JSON.parse(text);
+                this._importGraphFromJSON(graph);
+                this.closeImportModal();
+            } catch (err) {
+                console.error("Invalid JSON:", err);
+                this._showToast("Invalid JSON format.");
+            }
+            return;
+        }
+
+        if (file) {
+            // File method
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const graph = JSON.parse(ev.target.result);
+                    this._importGraphFromJSON(graph);
+                    this.closeImportModal();
+                } catch (err) {
+                    console.error("Invalid JSON file:", err);
+                    this._showToast("Invalid JSON file.");
+                }
+            };
+            reader.readAsText(file);
+        }
+    },
+    _importGraphFromJSON(graph) {
+        if (!graph.nodes || !graph.links) {
+            this._showToast('JSON must contain "nodes" and "links".');
+            return;
+        }
+
+        // Clear the current graph
+        this.nodes = [];
+        this.links = [];
+        this.ports = [];
+        this._currentModelId = null;
+        this._currentModelName = null;
+        this.nodeCounter = graph.nodeCounter || 0;
+
+        for (const nd of graph.nodes) {
+            const entry = this.nodeRegistry.find((r) => r.type === nd.type);
+            let node;
+            if (entry) {
+                node = new entry.class(nd.id, nd.x, nd.y);
+            } else if (nd.type === "input-data") {
+                node = new InputDataNode(nd.id, nd.x, nd.y);
+            } else if (nd.type === "output") {
+                node = new OutputNode(nd.id, nd.x, nd.y);
+            } else {
+                console.warn("Unknown node type:", nd.type);
+                continue;
+            }
+            node.fromJSON(nd);
+            this.nodes.push(node);
+        }
+
+        this.ports = this._collectPorts();
+
+        for (const ld of graph.links) {
+            const from = this.ports.find((p) => p.id === ld.from);
+            const to = this.ports.find((p) => p.id === ld.to);
+            if (from && to) {
+                const link = new Link(from, to, ld.weight);
+                if (ld.weightShape) link.weightShape = ld.weightShape;
+                if (ld.hasWeight !== undefined) link.hasWeight = ld.hasWeight;
+                this.links.push(link);
+            }
+        }
+
+        // Restore port shapes & phases
+        if (graph.ports) {
+            for (const p of graph.ports) {
+                const port = this.ports.find((pp) => pp.id === p.id);
+                if (port && p.shape) {
+                    port.setShape(
+                        p.shape.shape,
+                        p.shape.dtype,
+                        p.shape.known,
+                        p.shape.symbolic,
+                    );
+                }
+                if (port && p.activationPhases) {
+                    port.activationPhases = p.activationPhases;
+                }
+            }
+        }
+
+        this._saveToSession();
+        this._propagateShapes();
+        this._zoomFit();
+        this._render();
+        this._showToast("Model imported successfully.");
     },
 };
 // ========== PORT BASE CLASS ==========
