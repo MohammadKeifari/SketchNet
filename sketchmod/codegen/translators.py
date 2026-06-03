@@ -241,42 +241,22 @@ class OneHotTranslator(BaseTranslator):
         in_var = self._get_input_var(n)
         out_var = f"{n.id}_out"
 
-        # Check if a ParamInput is connected – we can reuse fitted categories
+        # Check if a param input is connected (for sharing encoding)
         param_input = None
-        if n.paramInputs:
-            for link in self.graph.links:
-                if link.id_to == n.paramInputs[0].id:
-                    param_input = self.var_map.get(link.id_from)  # source variable name
-                    break
+        if n.paramOutputs:
+            param_input = f"{n.id}_categories"
 
-        if param_input:
-            # Use the pre‑fitted categories (e.g., from a training branch node)
-            w.line(f"categories = {param_input}")
-            w.line(f"# Ensure categories is a tensor of shape ({num_classes},)")
-            w.line(
-                f"{out_var} = torch.nn.functional.one_hot({in_var}.long(), num_classes=len(categories)).float()"
-            )
-            # If categories length might differ from num_classes, we'll just use the tensor directly
-            # Simplified: assume categories is a tensor of class indices
-            w.line(
-                f"# Assuming categories is a 1D tensor of class indices, map labels to these categories"
-            )
-            w.line(f"# This is a placeholder – adjust as needed")
-        else:
-            # Compute categories from data (unique values or fixed range)
-            w.line(
-                f"categories = torch.arange({num_classes})  # assume consecutive 0..{num_classes-1}"
-            )
-            w.line(
-                f"{out_var} = torch.nn.functional.one_hot({in_var}.long(), num_classes={num_classes}).float()"
-            )
-            # If this node has a param output, we can store the categories for later use
-            if n.paramOutputs:
-                # Store the categories variable in var_map under the param output port id
-                # so that another onehot node can reuse it.
-                self.var_map[n.paramOutputs[0].id] = "categories"
-
+        w.line(f"# OneHot encode – squeeze last dim if needed")
+        w.line(f"{in_var}_squeezed = {in_var}.squeeze(-1).long()")
+        w.line(
+            f"{out_var} = torch.nn.functional.one_hot({in_var}_squeezed, num_classes={num_classes}).float()"
+        )
         self.var_map[n.id] = out_var
+
+        # Store categories for sharing via param output
+        if n.paramOutputs:
+            w.line(f"categories = torch.arange({num_classes})")
+            self.var_map[n.paramOutputs[0].id] = "categories"
 
 
 class DeOneHotTranslator(BaseTranslator):
