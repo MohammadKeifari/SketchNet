@@ -48,6 +48,7 @@ class CodeGenerator:
         self._write_load_and_preprocess(w)
         self._write_model_class(w)
         self._write_training(w)
+        self._write_evaluate_function(w)
         self._write_evaluation(w)
         self._write_main(w)
         return str(w)
