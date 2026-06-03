@@ -6432,7 +6432,6 @@ class OneHotEncodeNode extends RectNode {
 class DeOneHotNode extends RectNode {
     constructor(id, x, y) {
         super(id, x, y, "deonehot", 110, 55);
-        this.numClasses = 10;
         this.maxInputs = 1;
         this.minInputs = 1;
         this.maxOutputs = 1;
@@ -6452,9 +6451,7 @@ class DeOneHotNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 11px Inter, sans-serif";
-        ctx.fillText("DeOneHot", this.x, this.y - 6);
-        ctx.font = "9px Inter, sans-serif";
-        ctx.fillText(this.numClasses + " classes", this.x, this.y + 10);
+        ctx.fillText("DeOneHot", this.x, this.y);
     }
 
     computeOutputShapes() {
@@ -6470,12 +6467,11 @@ class DeOneHotNode extends RectNode {
     }
 
     toJSON() {
-        return { ...super.toJSON(), numClasses: this.numClasses };
+        return { ...super.toJSON() };
     }
 
     fromJSON(d) {
         super.fromJSON(d);
-        if (d.numClasses !== undefined) this.numClasses = d.numClasses;
     }
 
     getPropertiesHTML() {
