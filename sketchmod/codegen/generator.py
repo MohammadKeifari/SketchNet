@@ -525,7 +525,7 @@ class CodeGenerator:
         w.line("if y_test is None:")
         w.indent()
         w.line('print("No test labels – skipping evaluation.")')
-        w.line("return None, None")
+        w.line("return None, None, X_test")  # ← return X_test too
         w.dedent()
         w.line("model.eval()")
         w.line("with torch.no_grad():")
@@ -563,12 +563,12 @@ class CodeGenerator:
         w.dedent()
         w.line("")
 
-        # Visualization function – always called, handles missing data internally
-        w.line("def visualize(predictions, y_test, eval_values, viz_data):")
+        # Visualization
+        w.line("def visualize(predictions, y_test, eval_values, X_test):")
         w.indent()
-        w.line("if not viz_data:")
+        w.line("if predictions is None:")
         w.indent()
-        w.line('print("No visualization data connected.")')
+        w.line('print("No predictions – skipping visualization.")')
         w.line("return")
         w.dedent()
         viz_nodes = self.flow.get("visualizations", [])
