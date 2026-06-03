@@ -3442,7 +3442,6 @@ const SketchMod = {
     // ---------- Copy ----------
     _copySelected() {
         if (this.selectedNodes.length === 0) return;
-
         const selectedIds = new Set(this.selectedNodes.map((n) => n.id));
         const nodesData = this.selectedNodes.map((n) => n.toJSON());
         const linksData = this.links
@@ -3453,14 +3452,13 @@ const SketchMod = {
             )
             .map((l) => l.toJSON());
 
-        // Store as a STRING so nothing can modify the original
         this.clipboard = JSON.stringify({ nodes: nodesData, links: linksData });
+        this._pasteCounter = 0; // ← reset counter for a fresh copy
         this._showToast(`${nodesData.length} node(s) copied`);
     },
 
     // ---------- Paste ----------
     _pasteClipboard() {
-        console.log("[PASTE] Called. Clipboard exists:", !!this.clipboard);
         if (!this.clipboard) return;
 
         let cb;
@@ -3470,31 +3468,23 @@ const SketchMod = {
             console.error("[PASTE] Invalid clipboard JSON:", e);
             return;
         }
-        console.log(
-            "[PASTE] Clipboard nodes:",
-            cb.nodes.length,
-            "links:",
-            cb.links.length,
-        );
         if (!cb.nodes || cb.nodes.length === 0) return;
 
         this._saveUndoState();
 
-        // Increment paste counter so multiple pastes spread out
+        // Increase paste offset each time
         if (!this._pasteCounter) this._pasteCounter = 0;
         this._pasteCounter++;
-        const baseOffsetX = 50,
-            baseOffsetY = 50;
-        const offsetX = baseOffsetX * this._pasteCounter;
-        const offsetY = baseOffsetY * this._pasteCounter;
+        const offsetX = 50 * this._pasteCounter;
+        const offsetY = 50 * this._pasteCounter;
 
-        const oldToNewId = {};
-        const oldPortToNewPort = {};
+        const oldToNewId = {}; // old node id → new node id
+        const oldPortToNewPort = {}; // old port id → new Port object
 
-        // ---- Create new nodes ----
+        // ---- Create new nodes with UNIQUE ids ----
         for (const nd of cb.nodes) {
-            const entry = this.nodeRegistry.find((r) => r.type === nd.type);
             let NodeClass;
+            const entry = this.nodeRegistry.find((r) => r.type === nd.type);
             if (entry) {
                 NodeClass = entry.class;
             } else if (nd.type === "input-data") {
@@ -3506,77 +3496,64 @@ const SketchMod = {
                 continue;
             }
 
-            const newId = nd.type[0] + ++this.nodeCounter;
-            oldToNewId[nd.id] = newId;
-            console.log(
-                `[PASTE] Creating node ${newId} (from ${nd.id}) at offset ${offsetX},${offsetY}`,
-            );
+            // Force a unique ID: use a prefix that includes the paste counter to avoid any collision
+            const uniqueId =
+                nd.type[0] + this._pasteCounter + "_" + ++this.nodeCounter;
+            oldToNewId[nd.id] = uniqueId;
 
-            const node = new NodeClass(newId, nd.x + offsetX, nd.y + offsetY);
+            const node = new NodeClass(
+                uniqueId,
+                nd.x + offsetX,
+                nd.y + offsetY,
+            );
             node.fromJSON(nd);
+
             // Override whatever fromJSON set for id and position
-            node.id = newId;
+            node.id = uniqueId;
             node.x = nd.x + offsetX;
             node.y = nd.y + offsetY;
 
-            // Map ports (old id → new port object)
+            // Map old ports → new ports
             node.inputs.forEach((p, i) => {
                 const oldId = nd.inputPorts?.[i]?.id;
+                p.id = `${uniqueId}_input_${i}`;
                 if (oldId) oldPortToNewPort[oldId] = p;
-                p.id = `${newId}_input_${i}`;
             });
             node.outputs.forEach((p, i) => {
                 const oldId = nd.outputPorts?.[i]?.id;
+                p.id = `${uniqueId}_output_${i}`;
                 if (oldId) oldPortToNewPort[oldId] = p;
-                p.id = `${newId}_output_${i}`;
             });
             node.paramInputs.forEach((p, i) => {
                 const oldId = nd.paramInputs?.[i]?.id;
+                p.id = `${uniqueId}_param_in_${i}`;
                 if (oldId) oldPortToNewPort[oldId] = p;
-                p.id = `${newId}_param_in_${i}`;
             });
             node.paramOutputs.forEach((p, i) => {
                 const oldId = nd.paramOutputs?.[i]?.id;
+                p.id = `${uniqueId}_param_out_${i}`;
                 if (oldId) oldPortToNewPort[oldId] = p;
-                p.id = `${newId}_param_out_${i}`;
             });
 
             node.updatePorts();
             this.nodes.push(node);
         }
 
-        // Refresh port list
         this.ports = this._collectPorts();
-        console.log("[PASTE] Total ports after addition:", this.ports.length);
 
-        // ---- Recreate links ----
-        let linksCreated = 0;
+        // ---- Recreate links between pasted nodes ----
         for (const ld of cb.links) {
             const newFrom = oldPortToNewPort[ld.from];
             const newTo = oldPortToNewPort[ld.to];
             if (newFrom && newTo) {
                 this.links.push(new Link(newFrom, newTo, ld.weight));
-                linksCreated++;
-            } else {
-                console.warn(
-                    "[PASTE] Link not restored:",
-                    ld.from,
-                    "→",
-                    ld.to,
-                    "from:",
-                    !!newFrom,
-                    "to:",
-                    !!newTo,
-                );
             }
         }
-        console.log("[PASTE] Links created:", linksCreated);
 
-        // Select new nodes
-        const pastedNodes = Object.values(oldToNewId)
-            .map((nid) => this.nodes.find((n) => n.id === nid))
-            .filter(Boolean);
-        this.selectedNodes = pastedNodes;
+        // Select the newly pasted nodes
+        this.selectedNodes = this.nodes.filter((n) =>
+            Object.values(oldToNewId).includes(n.id),
+        );
         this.selectedLinks = [];
         this.selectedPorts = [];
         this._hideProperties();
@@ -3584,11 +3561,7 @@ const SketchMod = {
         this._saveToSession();
         this._propagateShapes();
         this._render();
-        this._showToast(`${pastedNodes.length} node(s) pasted`);
-        console.log(
-            "[PASTE] Done. Pasted nodes:",
-            pastedNodes.map((n) => n.id),
-        );
+        this._showToast(`${cb.nodes.length} node(s) pasted`);
     },
     openImportModal() {
         document.getElementById("importModal").style.display = "flex";
