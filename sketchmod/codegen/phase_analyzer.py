@@ -102,6 +102,7 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
     - Links from preprocessing nodes (in pre_set) are allowed even if the source
       port lacks the phase (carry‑over).
     - OutputNode only needs one active input and one active output.
+    - Param ports from preprocessing nodes are always satisfied (carry‑over).
     """
     active = set()
     changed = True
@@ -143,6 +144,7 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
                         if link.id_to == in_port.id:
                             src_port = graph.ports[link.id_from]
                             src_nid = src_port.node_id
+                            # Normal flow
                             if (
                                 src_nid in active
                                 and _is_port_active(src_port, phase)
@@ -150,6 +152,10 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
                             ) or (
                                 src_nid in pre_set and _is_port_active(in_port, phase)
                             ):
+                                port_satisfied = True
+                                break
+                            # Param port carry‑over: ignore phase if source is preprocessing
+                            if in_port.port_kind == "param" and src_nid in pre_set:
                                 port_satisfied = True
                                 break
                     if not port_satisfied:

@@ -214,7 +214,6 @@ class CodeGenerator:
             node = self.graph.nodes[nid]
             if node.type in MODEL_TYPES or nid in pre_set:
                 continue
-            self.translators[nid].data_code(w, "eval")
             w.line(f"# Processing evaluation node {nid} ({node.type})")
             self.translators[nid].data_code(w, "eval")
 
