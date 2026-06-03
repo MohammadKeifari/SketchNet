@@ -5879,7 +5879,7 @@ class TrainTestSplitNode extends RectNode {
 
         const batch = s.shape[0];
         const trainRows = batch.isNumber()
-            ? new ShapeExpr(Math.floor(batch.value * this.trainRatio))
+            ? new ShapeExpr(Math.floor(batch.toNumber() * this.trainRatio))
             : batch.multiply(this.trainRatio);
         const testRows = batch.isNumber()
             ? batch.subtract(trainRows)
