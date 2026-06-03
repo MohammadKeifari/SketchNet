@@ -619,14 +619,15 @@ class VisualizationTranslator(BaseTranslator):
             w.line(f"{var} = viz_data.get('{port.id}')")
             var_names.append(var)
 
+        # Determine if we have a colour source
         if color_port:
             w.line(f"colors = viz_data.get('{color_port.id}')")
         else:
             w.line("colors = None")
 
-        # Build a custom colormap from the user's palette if discrete mode
-        discrete = n.properties.get("colorMode") == "discrete" and color_port
-        if discrete:
+        # Build a custom colormap from the user's palette only for discrete mode
+        color_mode = n.properties.get("colorMode", "none")
+        if color_mode == "discrete" and color_port:
             palette = n.properties.get("colorPalette", [])
             if palette:
                 w.line("from matplotlib.colors import ListedColormap")
@@ -635,40 +636,50 @@ class VisualizationTranslator(BaseTranslator):
                 cmap_name = "custom_cmap"
             else:
                 cmap_name = "'tab10'"
+        elif color_mode == "continuous" and color_port:
+            # use a default continuous map, or the user's min/max colours
+            w.line(f"from matplotlib.colors import LinearSegmentedColormap")
+            min_c = n.properties.get("continuousMinColor", "#3b82f6")
+            max_c = n.properties.get("continuousMaxColor", "#ef4444")
+            w.line(
+                f"custom_cmap = LinearSegmentedColormap.from_list('cust', ['{min_c}', '{max_c}'])"
+            )
+            cmap_name = "custom_cmap"
         else:
-            cmap_name = "'tab10'"
+            cmap_name = "None"
 
-        # Draw the scatter
+        # Draw the scatter plot
         if len(coord_ports) == 1:
             w.line(f"plt.hist({var_names[0]}.flatten(), bins=20)")
         elif len(coord_ports) == 2:
-            if color_port:
-                w.line(f"plt.scatter({var_names[0]}.flatten(), {var_names[1]}.flatten(), "
-                    f"c=colors.flatten(), alpha=0.5, cmap={cmap_name})")
-                if discrete:
-                    w.line("cbar = plt.colorbar(ticks=range(len(custom_cmap.colors)))")
-                    w.line("cbar.set_label('Class')")
-                else:
+            if color_port and cmap_name != "None":
+                w.line(
+                    f"plt.scatter({var_names[0]}.flatten(), {var_names[1]}.flatten(), "
+                    f"c=colors.flatten(), alpha=0.5, cmap={cmap_name})"
+                )
+                # Only add color bar for continuous mode
+                if color_mode == "continuous":
                     w.line("cbar = plt.colorbar()")
-                    w.line("cbar.set_label('Class')")
+                    w.line("cbar.set_label('Value')")
             else:
-                w.line(f"plt.scatter({var_names[0]}.flatten(), {var_names[1]}.flatten(), alpha=0.5)")
+                w.line(
+                    f"plt.scatter({var_names[0]}.flatten(), {var_names[1]}.flatten(), alpha=0.5)"
+                )
         elif len(coord_ports) == 3:
             w.line("fig = plt.figure()")
             w.line("ax = fig.add_subplot(111, projection='3d')")
-            if color_port:
-                w.line(f"ax.scatter({var_names[0]}, {var_names[1]}, {var_names[2]}, "
-                    f"c=colors.flatten(), alpha=0.5, cmap={cmap_name})")
-                # 3D colour bar is rarely used, but we can still add a discrete one
-                if discrete:
-                    w.line("cbar = plt.colorbar(ax.collections[0], ticks=range(len(custom_cmap.colors)))")
-                    w.line("cbar.set_label('Class')")
+            if color_port and cmap_name != "None":
+                w.line(
+                    f"ax.scatter({var_names[0]}, {var_names[1]}, {var_names[2]}, "
+                    f"c=colors.flatten(), alpha=0.5, cmap={cmap_name})"
+                )
             else:
                 w.line(f"ax.scatter({var_names[0]}, {var_names[1]}, {var_names[2]})")
 
         w.line(f"plt.title('Visualization {n.id}')")
         w.line("plt.grid(True)")
         w.line("plt.show()")
+
 
 # Registry mapping node type -> translator class
 TRANSLATOR_REGISTRY = {
