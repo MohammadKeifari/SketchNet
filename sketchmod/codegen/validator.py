@@ -39,6 +39,7 @@ class GraphValidator:
         self._check_preprocessing_models(warnings)
         self._check_label_encoding(warnings)
         self._check_loss_label_compatibility(errors, warnings)
+        self._check_accuracy_inputs(warnings)
 
         return {
             "errors": errors,
@@ -228,3 +229,17 @@ class GraphValidator:
                         "portId": labels_port.id,
                     }
                 )
+
+    def _check_accuracy_inputs(self, warnings):
+        for node in self.graph.nodes.values():
+            if node.type == "accuracy":
+                connected = sum(
+                    1 for p in node.inputs for l in self.graph.links if l.id_to == p.id
+                )
+                if connected < 2:
+                    warnings.append(
+                        {
+                            "message": f"Accuracy node '{node.id}' expects 2 inputs (predictions, labels).",
+                            "nodeId": node.id,
+                        }
+                    )
