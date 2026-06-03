@@ -615,18 +615,35 @@ class VisualizationTranslator(BaseTranslator):
         if len(coord_ports) == 1:
             w.line("plt.hist(predictions.flatten(), bins=20)")
         elif len(coord_ports) == 2:
+            w.line("if y_test is not None:")
+            w.indent()
             w.line(
                 "plt.scatter(y_test.numpy().flatten(), predictions.flatten(), alpha=0.5)"
             )
-            w.line("plt.xlabel('True labels')")
+            w.dedent()
+            w.line("else:")
+            w.indent()
+            w.line("# No test labels; plotting predictions vs index")
+            w.line(
+                "plt.scatter(range(len(predictions)), predictions.flatten(), alpha=0.5)"
+            )
+            w.dedent()
+            w.line("plt.xlabel('Sample index')")
             w.line("plt.ylabel('Predictions')")
         elif len(coord_ports) == 3:
             w.line("fig = plt.figure()")
             w.line("ax = fig.add_subplot(111, projection='3d')")
+            w.line("if y_test is not None:")
+            w.indent()
             w.line("ax.scatter(y_test, predictions, eval_values)")
+            w.dedent()
+            w.line("else:")
+            w.indent()
+            w.line("ax.scatter(range(len(predictions)), predictions, eval_values)")
+            w.dedent()
         if color_port and n.properties.get("colorMode") in ("discrete", "continuous"):
             w.line("# Color mapping would go here (omitted for brevity)")
-        w.line(f"plt.title('Visualization {self.node.id}')")
+        w.line("plt.title(f'Visualization {n.id}')")
         w.line("plt.grid(True)")
         w.line("plt.show()")
 
