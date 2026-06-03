@@ -619,24 +619,51 @@ class VisualizationTranslator(BaseTranslator):
             w.line(f"{var} = viz_data.get('{port.id}')")
             var_names.append(var)
 
+        # Determine if we have a colour source
+        if color_port:
+            w.line(f"colors = viz_data.get('{color_port.id}')")
+        else:
+            w.line("colors = None")
+
+        # Build a custom colormap from the user's palette if discrete mode
+        if n.properties.get("colorMode") == "discrete" and color_port:
+            palette = n.properties.get("colorPalette", [])
+            if palette:
+                w.line("from matplotlib.colors import ListedColormap")
+                hex_list = ", ".join(f"'{c}'" for c in palette)
+                w.line(f"custom_cmap = ListedColormap([{hex_list}])")
+                cmap_name = "custom_cmap"
+            else:
+                cmap_name = "'tab10'"
+        else:
+            cmap_name = "'tab10'"
+
+        # Draw the scatter plot
         if len(coord_ports) == 1:
             w.line(f"plt.hist({var_names[0]}.flatten(), bins=20)")
         elif len(coord_ports) == 2:
-            w.line(
-                f"plt.scatter({var_names[0]}.flatten(), {var_names[1]}.flatten(), alpha=0.5)"
-            )
+            if color_port:
+                w.line(
+                    f"plt.scatter({var_names[0]}.flatten(), {var_names[1]}.flatten(), "
+                    f"c=colors.flatten(), alpha=0.5, cmap={cmap_name})"
+                )
+                w.line("cbar = plt.colorbar()")
+                w.line("cbar.set_label('Class')")
+            else:
+                w.line(
+                    f"plt.scatter({var_names[0]}.flatten(), {var_names[1]}.flatten(), alpha=0.5)"
+                )
         elif len(coord_ports) == 3:
             w.line("fig = plt.figure()")
             w.line("ax = fig.add_subplot(111, projection='3d')")
-            w.line(f"ax.scatter({var_names[0]}, {var_names[1]}, {var_names[2]})")
-        if color_port:
-            w.line(f"colors = viz_data.get('{color_port.id}')")
-            w.line("if colors is not None:")
-            w.indent()
-            w.line(
-                f"plt.scatter({var_names[0]}.flatten(), {var_names[1]}.flatten(), c=colors.flatten(), alpha=0.5, cmap='tab10')"
-            )
-            w.dedent()
+            if color_port:
+                w.line(
+                    f"ax.scatter({var_names[0]}, {var_names[1]}, {var_names[2]}, "
+                    f"c=colors.flatten(), alpha=0.5, cmap={cmap_name})"
+                )
+            else:
+                w.line(f"ax.scatter({var_names[0]}, {var_names[1]}, {var_names[2]})")
+
         w.line(f"plt.title('Visualization {n.id}')")
         w.line("plt.grid(True)")
         w.line("plt.show()")
