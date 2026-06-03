@@ -2456,6 +2456,36 @@ const SketchMod = {
         this._saveToSession();
     },
 
+    _updatePrintLabel(input) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof PrintNode)) return;
+        this._saveUndoState();
+        node.label = input.value;
+        this._saveToSession();
+        this._render();
+    },
+
+    _updateDeOneHotClasses(input) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof DeOneHotNode)) return;
+        this._saveUndoState();
+        node.numClasses = parseInt(input.value) || 10;
+        this._saveToSession();
+        this._propagateShapes();
+        this._render();
+    },
+    _updateAccuracyConfusion(checkbox) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof AccuracyNode)) return;
+        this._saveUndoState();
+        node.showConfusion = checkbox.checked;
+        this._saveToSession();
+        this._render();
+    },
+
     _removeVizPaletteColor(index) {
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
@@ -6713,17 +6743,116 @@ class DeOneHotNode extends RectNode {
     }
 }
 
-// Update handler
-SketchMod._updateDeOneHotClasses = function (input) {
-    if (this.selectedNodes.length !== 1) return;
-    const node = this.selectedNodes[0];
-    if (!(node instanceof DeOneHotNode)) return;
-    this._saveUndoState();
-    node.numClasses = parseInt(input.value) || 10;
-    this._saveToSession();
-    this._propagateShapes();
-    this._render();
-};
+class PrintNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "print", 80, 50);
+        this.label = ""; // optional label prepended to output
+        this.maxInputs = 1; // can have multiple inputs
+        this.minInputs = 0;
+        this.maxOutputs = 0;
+        this.minOutputs = 0;
+        // start with one input
+        this.addInput();
+        this.updatePorts();
+    }
+
+    drawLabel(ctx) {
+        ctx.fillText("Print", this.x, this.y);
+    }
+
+    canAddInput(subType) {
+        return true;
+    }
+    canRemoveInput() {
+        return this.inputs.length > 0;
+    }
+
+    // no shape computation needed
+    computeOutputShapes() {
+        return [];
+    }
+
+    getPropertiesHTML() {
+        return `
+            <div class="prop-group">
+                <label>Label</label>
+                <input type="text" id="prop-print-label" class="prop-input"
+                       value="${this.label || ""}"
+                       placeholder="e.g. Shape of X"
+                       onchange="SketchMod._updatePrintLabel(this)">
+            </div>
+            <div class="prop-group">
+                <label>Input Ports</label>
+                <p class="prop-hint">${this.inputs.length} input(s)</p>
+            </div>
+        `;
+    }
+
+    toJSON() {
+        return { ...super.toJSON(), label: this.label };
+    }
+
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.label) this.label = d.label;
+    }
+}
+class AccuracyNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "accuracy", 90, 60);
+        this.showConfusion = false;
+        this.maxInputs = 2;
+        this.minInputs = 2;
+        this.maxOutputs = 0;
+        this.minOutputs = 0;
+        // Two inputs: predictions, labels
+        this.addInput(); // predictions
+        this.addInput(); // labels
+        this.updatePorts();
+    }
+
+    drawLabel(ctx) {
+        ctx.fillText("Accuracy", this.x, this.y);
+    }
+
+    canAddInput(subType) {
+        return false;
+    }
+    canRemoveInput() {
+        return false;
+    }
+
+    computeOutputShapes() {
+        return [];
+    }
+
+    getPropertiesHTML() {
+        return `
+            <div class="prop-group">
+                <label>Show Confusion Matrix</label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="prop-show-confusion"
+                           ${this.showConfusion ? "checked" : ""}
+                           onchange="SketchMod._updateAccuracyConfusion(this)">
+                    Plot confusion matrix
+                </label>
+            </div>
+            <div class="prop-group">
+                <label>Input Ports</label>
+                <p class="prop-hint">Predictions (port 0) / Labels (port 1)</p>
+            </div>
+        `;
+    }
+
+    toJSON() {
+        return { ...super.toJSON(), showConfusion: this.showConfusion };
+    }
+
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.showConfusion !== undefined) this.showConfusion = d.showConfusion;
+    }
+}
 // ========== CONCATENATE NODE ==========
 class ConcatenateNode extends RectNode {
     constructor(id, x, y) {
@@ -7831,6 +7960,25 @@ SketchMod.registerNode({
         <line x1="6" y1="8" x2="6" y2="16"/><line x1="18" y1="8" x2="18" y2="16"/>
         <line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="18" x2="16" y2="18"/>
     </svg>`,
+});
+SketchMod.registerNode({
+    type: "print",
+    label: "Print",
+    category: "data",
+    class: PrintNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 12H4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2h-2"/>
+        <rect x="6" y="14" width="12" height="8"/></svg>`,
+});
+
+SketchMod.registerNode({
+    type: "accuracy",
+    label: "Accuracy",
+    category: "data",
+    class: AccuracyNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/></svg>`,
 });
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
