@@ -4,7 +4,6 @@ from .phase_analyzer import analyze_phases
 from .writer import CodeWriter
 from .translators import get_translator
 
-# Node type categories
 MODEL_TYPES = {
     "neuron",
     "layer",
@@ -23,6 +22,7 @@ DATA_TRANSFORM_TYPES = {
     "dim-select",
     "normalize",
     "onehot",
+    "deonehot",
     "train-test",
 }
 
@@ -31,7 +31,7 @@ class CodeGenerator:
     def __init__(self, graph_data: dict):
         self.graph = parse_graph(graph_data)
         self.flow = analyze_phases(self.graph)
-        self.var_map = {}  # node id -> variable name (for the output of that node)
+        self.var_map = {}  # node/port id -> variable name
         self.translators = {}  # node id -> translator instance
 
         for nid, node in self.graph.nodes.items():
@@ -48,6 +48,19 @@ class CodeGenerator:
         return str(w)
 
     # ------------------------------------------------------------------
+    def _node_active_strict(self, nid, phase):
+        """Return True if every connected port of nid has `phase` in activationPhases."""
+        node = self.graph.nodes[nid]
+        for p in node.inputs + node.paramInputs:
+            if any(l.id_to == p.id for l in self.graph.links):
+                if phase not in p.activation_phases:
+                    return False
+        for p in node.outputs + node.paramOutputs:
+            if any(l.id_from == p.id for l in self.graph.links):
+                if phase not in p.activation_phases:
+                    return False
+        return True
+
     def _write_header(self, w):
         w.line("import torch")
         w.line("import torch.nn as nn")
@@ -64,36 +77,75 @@ class CodeGenerator:
         w.line("def load_and_preprocess():")
         w.indent()
 
-        # 1. Preprocessing nodes (user‑defined phase)
+        # 1. InputData nodes (preprocessing)
         for nid in self.flow["preprocessing_order"]:
-            self.translators[nid].data_code(w, "pre")
+            node = self.graph.nodes[nid]
+            if node.type == "input-data":
+                self.translators[nid].data_code(w, "pre")
 
-        # 2. Train‑branch data transforms (non‑model nodes in train_order not yet seen)
-        train_data = [
+        # 2. Preprocessing nodes (strict execution)
+        for nid in self.flow["preprocessing_order"]:
+            node = self.graph.nodes[nid]
+            if node.type != "input-data":
+                self.translators[nid].data_code(w, "pre")
+
+        # 3. Train branch data transforms (strict execution; if not active, pass through)
+        train_data_nodes = [
             nid
             for nid in self.flow["train_order"]
             if nid not in self.flow["preprocessing_order"]
             and self.graph.nodes[nid].type not in MODEL_TYPES
         ]
-        for nid in train_data:
-            self.translators[nid].data_code(w, "train")
+        w.line("")
+        w.line("# --- Train branch data transforms ---")
+        for nid in train_data_nodes:
+            if self._node_active_strict(nid, "training"):
+                self.translators[nid].data_code(w, "train")
+            else:
+                node = self.graph.nodes[nid]
+                src_id = None
+                for link in self.graph.links:
+                    if link.id_to in {p.id for p in node.inputs}:
+                        src_id = self.graph.ports[link.id_from].node_id
+                        break
+                if src_id and src_id in self.var_map:
+                    self.var_map[nid] = self.var_map[src_id]
+                    w.line(
+                        f"# {nid} is not active in training; reusing {self.var_map[src_id]}"
+                    )
+                    w.line(f"{nid}_out = {self.var_map[src_id]}")
 
-        # 3. Eval‑branch data transforms
-        eval_data = [
+        # 4. Eval branch data transforms (strict execution; if not active, pass through)
+        eval_data_nodes = [
             nid
             for nid in self.flow["eval_order"]
             if nid not in self.flow["preprocessing_order"]
             and self.graph.nodes[nid].type not in MODEL_TYPES
         ]
-        for nid in eval_data:
-            self.translators[nid].data_code(w, "eval")
+        w.line("")
+        w.line("# --- Test branch data transforms ---")
+        for nid in eval_data_nodes:
+            if self._node_active_strict(nid, "evaluation"):
+                self.translators[nid].data_code(w, "eval")
+            else:
+                node = self.graph.nodes[nid]
+                src_id = None
+                for link in self.graph.links:
+                    if link.id_to in {p.id for p in node.inputs}:
+                        src_id = self.graph.ports[link.id_from].node_id
+                        break
+                if src_id and src_id in self.var_map:
+                    self.var_map[nid] = self.var_map[src_id]
+                    w.line(
+                        f"# {nid} is not active in evaluation; reusing {self.var_map[src_id]}"
+                    )
+                    w.line(f"{nid}_out = {self.var_map[src_id]}")
 
-        # 4. Determine variable names for the return
+        # 5. Determine variable names for the return
         train_feed = self._get_var_for_first_model_input("train")
         train_labels = self._get_var_for_optimizer_labels()
         test_feed = self._get_var_for_first_model_input("eval")
-        # test labels: try to get from eval data pipeline (often not needed)
-        test_labels = "None"
+        test_labels = self._get_var_for_eval_labels()
 
         w.line(f"X_train = {train_feed}")
         w.line(f"y_train = {train_labels}")
@@ -108,23 +160,36 @@ class CodeGenerator:
         """Variable that feeds the first model node in `phase`."""
         order = self.flow[f"{phase}_order"]
         phase_set = self.flow.get(f"{phase}_set", set())
-        sources = []
         for nid in order:
             if self.graph.nodes[nid].type in MODEL_TYPES:
                 for in_port in self.graph.nodes[nid].inputs:
                     for link in self.graph.links:
                         if link.id_to == in_port.id:
                             src_id = self.graph.ports[link.id_from].node_id
-                            in_phase = src_id in phase_set
-                            has_var = src_id in self.var_map
-                            sources.append((in_phase, has_var, src_id))
-                break
-        for in_phase, has_var, src_id in sources:
-            if in_phase and has_var:
-                return self.var_map[src_id]
-        for in_phase, has_var, src_id in sources:
-            if has_var:
-                return self.var_map[src_id]
+                            if src_id in phase_set and src_id in self.var_map:
+                                return self.var_map[src_id]
+                # fallback: any connected source with a variable
+                for in_port in self.graph.nodes[nid].inputs:
+                    for link in self.graph.links:
+                        if link.id_to == in_port.id:
+                            src_id = self.graph.ports[link.id_from].node_id
+                            if src_id in self.var_map:
+                                return self.var_map[src_id]
+        return "None"
+
+    def _get_var_for_optimizer_labels(self):
+        opt = self.flow.get("optimizer")
+        if not opt:
+            return "None"
+        labels_port = opt.inputs[1] if len(opt.inputs) > 1 else None
+        if not labels_port:
+            return "None"
+
+        for link in self.graph.links:
+            if link.id_to == labels_port.id:
+                src_id = self.graph.ports[link.id_from].node_id
+                if src_id in self.var_map:
+                    return self.var_map[src_id]
         return "None"
 
     def _get_var_for_eval_labels(self):
@@ -136,7 +201,7 @@ class CodeGenerator:
                 "deonehot",
             ):
                 continue
-            # Skip nodes whose output feeds a model node
+            # Skip if output feeds a model node
             feeds_model = False
             for out_port in node.outputs:
                 for link in self.graph.links:
@@ -145,9 +210,10 @@ class CodeGenerator:
                         if self.graph.nodes[tgt_id].type in MODEL_TYPES:
                             feeds_model = True
                             break
+                if feeds_model:
+                    break
             if feeds_model:
                 continue
-            # If this node is a onehot, use its raw input instead
             actual_nid = nid
             if node.type == "onehot":
                 for in_port in node.inputs:
@@ -159,31 +225,7 @@ class CodeGenerator:
                 return self.var_map[actual_nid]
         return "None"
 
-    def _get_var_for_optimizer_labels(self):
-        opt = self.flow.get("optimizer")
-        if not opt:
-            return "None"
-        labels_port = opt.inputs[1] if len(opt.inputs) > 1 else None
-        if not labels_port:
-            return "None"
-        # Find the node that feeds the labels port
-        for link in self.graph.links:
-            if link.id_to == labels_port.id:
-                src_id = self.graph.ports[link.id_from].node_id
-                # If the source is a onehot node, use its input (the raw labels) instead
-                if self.graph.nodes[src_id].type == "onehot":
-                    for in_port in self.graph.nodes[src_id].inputs:
-                        for link2 in self.graph.links:
-                            if link2.id_to == in_port.id:
-                                raw_src = self.graph.ports[link2.id_from].node_id
-                                if raw_src in self.var_map:
-                                    return self.var_map[raw_src]
-                if src_id in self.var_map:
-                    return self.var_map[src_id]
-        return "None"
-
     def _find_input_source(self, node_id):
-        """Return the node id that feeds the first input port of a node."""
         node = self.graph.nodes[node_id]
         if not node.inputs:
             return None
@@ -200,15 +242,11 @@ class CodeGenerator:
         w.line("def __init__(self):")
         w.indent()
         w.line("super().__init__()")
-
-        # Collect model nodes from both training and evaluation orders (unique)
         model_nodes = set()
         for phase in ("train_order", "eval_order"):
             for nid in self.flow.get(phase, []):
                 if self.graph.nodes[nid].type in MODEL_TYPES:
                     model_nodes.add(nid)
-
-        # Topological sort: use the order from the flow (they are already topo sorted)
         ordered = []
         for nid in self.flow["train_order"]:
             if nid in model_nodes and nid not in ordered:
@@ -216,10 +254,8 @@ class CodeGenerator:
         for nid in self.flow["eval_order"]:
             if nid in model_nodes and nid not in ordered:
                 ordered.append(nid)
-
         for nid in ordered:
             self.translators[nid].init_code(w)
-
         w.dedent()
         w.line("")
         w.line("def forward(self, inputs_dict):")
@@ -392,20 +428,17 @@ class CodeGenerator:
         w.line("")
 
     def _get_feed_key(self, phase):
-        """Returns the node id that should be passed as key to the model forward dict,
-        preferring a source active in the given phase."""
         order = self.flow[f"{phase}_order"]
         phase_set = self.flow.get(f"{phase}_set", set())
         for nid in order:
             if self.graph.nodes[nid].type in MODEL_TYPES:
-                # look for an input source that is active in this phase
                 for in_port in self.graph.nodes[nid].inputs:
                     for link in self.graph.links:
                         if link.id_to == in_port.id:
                             src_id = self.graph.ports[link.id_from].node_id
                             if src_id in phase_set:
                                 return src_id
-                # fallback: any connected source
+                # fallback
                 for in_port in self.graph.nodes[nid].inputs:
                     for link in self.graph.links:
                         if link.id_to == in_port.id:

@@ -35,14 +35,17 @@ class GraphValidator:
         self._check_optimizer_connections(errors)
         self._check_link_weights(warnings)
         self._check_multi_port_cardinality(errors)
-        self._check_phase_connectivity(warnings)
+        self._check_model_connectivity(warnings)
         self._check_preprocessing_models(warnings)
         self._check_label_encoding(warnings)
+        self._check_loss_label_compatibility(errors)
 
         return {
             "errors": errors,
             "warnings": warnings,
         }
+
+    # ---------- Errors ----------
 
     def _check_input_output_present(self, errors):
         has_input = any(n.type == "input-data" for n in self.graph.nodes.values())
@@ -65,19 +68,6 @@ class GraphValidator:
                     {
                         "message": f"Optimizer input '{role}' is not connected.",
                         "portId": port.id,
-                    }
-                )
-
-    def _check_link_weights(self, warnings):
-        for link in self.graph.links:
-            if link.weight == 0.0:
-                warnings.append(
-                    {
-                        "message": (
-                            "Link weight is 0 (will be initialised to 1 in generated code "
-                            "to avoid dead gradients). Consider setting a non‑zero value in the canvas."
-                        ),
-                        "linkKey": f"{link.id_from}→{link.id_to}",
                     }
                 )
 
@@ -110,28 +100,32 @@ class GraphValidator:
                         }
                     )
 
-    def _check_phase_connectivity(self, warnings):
-        """Warn only about real data‑flow problems: a link where source port has a phase
-        but the target port is completely missing that phase."""
+    # ---------- Warnings ----------
+
+    def _check_link_weights(self, warnings):
         for link in self.graph.links:
-            src = self.graph.ports[link.id_from]
-            tgt = self.graph.ports[link.id_to]
-            for phase in ("preprocessing", "training", "evaluation"):
-                if (
-                    phase in src.activation_phases
-                    and phase not in tgt.activation_phases
-                ):
-                    src_node = self.graph.nodes[src.node_id]
-                    tgt_node = self.graph.nodes[tgt.node_id]
+            if link.weight == 0.0:
+                warnings.append(
+                    {
+                        "message": (
+                            "Link weight is 0 (will be initialised to 1 in generated code "
+                            "to avoid dead gradients). Consider setting a non‑zero value in the canvas."
+                        ),
+                        "linkKey": f"{link.id_from}→{link.id_to}",
+                    }
+                )
+
+    def _check_model_connectivity(self, warnings):
+        """Warn only if a model node is not reachable in any phase."""
+        train_set = set(self.flow["train_order"])
+        eval_set = set(self.flow["eval_order"])
+        for nid, node in self.graph.nodes.items():
+            if node.type in MODEL_TYPES:
+                if nid not in train_set and nid not in eval_set:
                     warnings.append(
                         {
-                            "message": (
-                                f"{src_node.type.capitalize()} '{src.node_id}' "
-                                f"output {src.index} sends data in '{phase}' phase, "
-                                f"but {tgt_node.type.capitalize()} '{tgt.node_id}' "
-                                f"input {tgt.index} is not active in that phase."
-                            ),
-                            "portId": tgt.id,
+                            "message": f"Model node '{node.type}' ({nid}) is not reachable in training or evaluation.",
+                            "nodeId": nid,
                         }
                     )
 
@@ -171,3 +165,75 @@ class GraphValidator:
                             "portId": labels_port.id,
                         }
                     )
+
+    def _check_loss_label_compatibility(self, errors):
+        """Error if the label tensor shape is incompatible with the chosen loss."""
+        opt = self.flow.get("optimizer")
+        if not opt or len(opt.inputs) < 2:
+            return
+        loss_type = opt.properties.get("lossType", "mse")
+        labels_port = opt.inputs[1]
+
+        # Find the node feeding the labels port
+        src_node = None
+        for link in self.graph.links:
+            if link.id_to == labels_port.id:
+                src_node = self.graph.nodes[self.graph.ports[link.id_from].node_id]
+                break
+        if src_node is None:
+            return
+
+        # Determine if the label source produces one‑hot vectors.
+        # Heuristic: a onehot node always produces one‑hot. A column-select that selects
+        # multiple columns from a one‑hot result is also one‑hot (we can't know for sure,
+        # but we'll flag it as potentially incompatible).
+        is_onehot = src_node.type == "onehot"
+
+        # For column‑select / row‑select / dim‑select after a one‑hot, we can't
+        # easily decide – we'll warn rather than error.
+        if not is_onehot and src_node.type in DATA_TRANSFORM_TYPES:
+            # Try to see if the input to this node is a one‑hot
+            for in_port in src_node.inputs:
+                for link in self.graph.links:
+                    if link.id_to == in_port.id:
+                        upstream = self.graph.nodes[
+                            self.graph.ports[link.id_from].node_id
+                        ]
+                        if upstream.type == "onehot":
+                            warnings.append(
+                                {
+                                    "message": (
+                                        f"Labels pass through a {src_node.type} node after OneHot. "
+                                        "The validator cannot verify shape compatibility. "
+                                        "Ensure the loss function matches the final label tensor shape."
+                                    ),
+                                    "nodeId": src_node.id,
+                                }
+                            )
+                            return
+
+        # One‑hot labels require BCE or MSE; integer labels require CrossEntropy or NLL.
+        if is_onehot:
+            if loss_type not in ("bce", "mse", "l1", "huber"):
+                errors.append(
+                    {
+                        "message": (
+                            "Labels are one‑hot encoded, but the loss function expects "
+                            f"class indices. Use BCEWithLogitsLoss or MSELoss for one‑hot labels."
+                        ),
+                        "portId": labels_port.id,
+                    }
+                )
+        else:
+            # Not a one‑hot node – assume integer labels
+            if loss_type in ("bce",):
+                errors.append(
+                    {
+                        "message": (
+                            "Labels appear to be integer class indices, but "
+                            "BCEWithLogitsLoss expects one‑hot targets. "
+                            "Connect the OneHot node output instead, or switch to CrossEntropyLoss."
+                        ),
+                        "portId": labels_port.id,
+                    }
+                )
