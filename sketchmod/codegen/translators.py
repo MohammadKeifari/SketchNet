@@ -343,7 +343,6 @@ class NeuronTranslator(BaseTranslator):
                     src_id = self.graph.ports[link.id_from].node_id
                     weight_name = f"self.weight_{link.id_from}_{link.id_to}"
                     terms.append((src_id, weight_name))
-                    break
         if not terms:
             w.line(f"outputs['{n.id}'] = None  # no input connected")
             return
