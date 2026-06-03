@@ -1730,3 +1730,221 @@ class Conv2DTranslatorTest(SimpleTestCase, BaseGraphMixin):
         self.assertIn("kernel_size=3", code)
         self.assertIn("stride=2", code)
         self.assertIn("padding=1", code)
+
+
+class PrintTranslatorTest(SimpleTestCase, BaseGraphMixin):
+    def test_data_code(self):
+        node = {
+            "id": "p1",
+            "type": "print",
+            "x": 0,
+            "y": 0,
+            "inputPorts": [
+                {
+                    "id": "p1_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                }
+            ],
+            "outputPorts": [],
+            "numInputs": 1,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": False,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "label": "Test print",
+        }
+        graph_data = {
+            "nodes": [
+                {
+                    "id": "src",
+                    "type": "input-data",
+                    "x": 0,
+                    "y": 0,
+                    "inputPorts": [],
+                    "outputPorts": [
+                        {
+                            "id": "src_output_0",
+                            "type": "output",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["evaluation"],
+                        }
+                    ],
+                    "numInputs": 0,
+                    "numOutputs": 1,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "datasetId": None,
+                    "datasetName": None,
+                    "dataShape": None,
+                },
+                node,
+            ],
+            "links": [
+                {
+                    "from": "src_output_0",
+                    "to": "p1_input_0",
+                    "weight": 1.0,
+                    "weightShape": None,
+                    "hasWeight": False,
+                }
+            ],
+            "nodeCounter": 2,
+        }
+        g = parse_graph(graph_data)
+        var_map = {"src": "some_tensor"}
+        t = get_translator(g.nodes["p1"], g, var_map)
+        w = CodeWriter()
+        t.data_code(w, "eval")
+        code = str(w)
+        self.assertIn("print", code)
+        self.assertIn("Test print", code)
+
+
+class AccuracyTranslatorTest(SimpleTestCase, BaseGraphMixin):
+    def test_data_code(self):
+        node = {
+            "id": "a1",
+            "type": "accuracy",
+            "x": 0,
+            "y": 0,
+            "inputPorts": [
+                {
+                    "id": "a1_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                },
+                {
+                    "id": "a1_input_1",
+                    "type": "input",
+                    "index": 1,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                },
+            ],
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": False,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "showConfusion": True,
+        }
+        graph_data = {
+            "nodes": [
+                {
+                    "id": "pred",
+                    "type": "input-data",
+                    "x": 0,
+                    "y": 0,
+                    "inputPorts": [],
+                    "outputPorts": [
+                        {
+                            "id": "pred_output_0",
+                            "type": "output",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["evaluation"],
+                        }
+                    ],
+                    "numInputs": 0,
+                    "numOutputs": 1,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "datasetId": None,
+                    "datasetName": None,
+                    "dataShape": None,
+                },
+                {
+                    "id": "labels",
+                    "type": "input-data",
+                    "x": 0,
+                    "y": 0,
+                    "inputPorts": [],
+                    "outputPorts": [
+                        {
+                            "id": "labels_output_0",
+                            "type": "output",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["evaluation"],
+                        }
+                    ],
+                    "numInputs": 0,
+                    "numOutputs": 1,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "datasetId": None,
+                    "datasetName": None,
+                    "dataShape": None,
+                },
+                node,
+            ],
+            "links": [
+                {
+                    "from": "pred_output_0",
+                    "to": "a1_input_0",
+                    "weight": 1.0,
+                    "weightShape": None,
+                    "hasWeight": False,
+                },
+                {
+                    "from": "labels_output_0",
+                    "to": "a1_input_1",
+                    "weight": 1.0,
+                    "weightShape": None,
+                    "hasWeight": False,
+                },
+            ],
+            "nodeCounter": 3,
+        }
+        g = parse_graph(graph_data)
+        var_map = {"pred": "preds", "labels": "labels"}
+        t = get_translator(g.nodes["a1"], g, var_map)
+        w = CodeWriter()
+        t.data_code(w, "eval")
+        code = str(w)
+        self.assertIn("argmax", code)
+        self.assertIn("Accuracy:", code)
+        self.assertIn("confusion_matrix", code)
