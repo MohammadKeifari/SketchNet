@@ -3,6 +3,7 @@ from .graph import parse_graph, Graph, Node
 from .phase_analyzer import analyze_phases
 from .writer import CodeWriter
 from .translators import get_translator
+import re
 
 MODEL_TYPES = {
     "neuron",
@@ -36,6 +37,10 @@ class CodeGenerator:
 
         for nid, node in self.graph.nodes.items():
             self.translators[nid] = get_translator(node, self.graph, self.var_map)
+
+    def _sanitize_id(self, id_str):
+        """Replace any non‑alphanumeric (except underscore) with '_'."""
+        return re.sub(r"[^a-zA-Z0-9_]", "_", id_str)
 
     def generate(self) -> str:
         w = CodeWriter()
@@ -520,8 +525,7 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _write_evaluation(self, w):
-        # No evaluate function – evaluation is inlined in main.
-        w.line("def visualize(predictions, viz_data):")
+        w.line("def visualize(viz_data):")
         w.indent()
         w.line("if not viz_data:")
         w.indent()
@@ -559,26 +563,29 @@ class CodeGenerator:
             "model = train_model(model, X_train, y_train, X_test, y_test, opt_config)"
         )
         w.line('print("Training complete.")')
+        w.line("")
 
         # ---- Inline evaluation ----
-        w.line("")
         w.line("model.eval()")
         w.line("with torch.no_grad():")
         w.indent()
         eval_feed = self._get_feed_key("eval")
         w.line(f"outputs = model({{'{eval_feed}': X_test.to(device)}})")
-        # Store model outputs in var_map so downstream translators find them
+        # Store model outputs with sanitised variable names
         output_node = next(
             (n for n in self.graph.nodes.values() if n.type == "output"), None
         )
         if output_node:
             for port in output_node.outputs:
-                w.line(f"{port.id}_tensor = outputs['{port.id}']")
-                self.var_map[port.id] = f"{port.id}_tensor"
+                var_name = f"{self._sanitize_id(port.id)}_tensor"
+                w.line(f"{var_name} = outputs['{port.id}']")
+                self.var_map[port.id] = var_name
             if output_node.outputs:
-                self.var_map[output_node.id] = f"{output_node.outputs[0].id}_tensor"
+                self.var_map[output_node.id] = (
+                    f"{self._sanitize_id(output_node.outputs[0].id)}_tensor"
+                )
 
-        # Execute remaining eval data nodes
+        # Execute remaining eval data nodes (DeOneHot etc.)
         eval_order = self.flow["eval_order"]
         pre_set = self.flow.get("preprocessing_set", set())
         for nid in eval_order:
@@ -587,7 +594,7 @@ class CodeGenerator:
                 continue
             self.translators[nid].data_code(w, "eval")
 
-        # Collect visualization data
+        # Collect visualisation data
         w.line("viz_data = {}")
         for viz in self.flow.get("visualizations", []):
             for port in viz.inputs:
@@ -597,7 +604,8 @@ class CodeGenerator:
                         if src_id in self.var_map:
                             w.line(f"viz_data['{port.id}'] = {self.var_map[src_id]}")
                         break
-        # Predictions for evaluate and visualize
+
+        # Predictions (only for optional MSE print)
         pred_port_id = None
         if output_node:
             pred_port = next(
@@ -606,12 +614,14 @@ class CodeGenerator:
             if pred_port:
                 pred_port_id = pred_port.id
         if pred_port_id:
-            w.line(f"predictions = {pred_port_id}_tensor.cpu().numpy()")
+            w.line(
+                f"predictions = {self._sanitize_id(pred_port_id)}_tensor.cpu().numpy()"
+            )
         else:
             w.line("predictions = outputs[list(outputs.keys())[0]].cpu().numpy()")
         w.dedent()  # end no_grad
 
-        # Optional: evaluate if y_test is present
+        # Optional evaluation
         w.line("if y_test is not None:")
         w.indent()
         w.line("mse = np.mean((predictions - y_test.numpy())**2)")
@@ -622,5 +632,5 @@ class CodeGenerator:
         w.line('print("No test labels – skipping evaluation.")')
         w.dedent()
 
-        w.line("visualize(predictions, viz_data)")
+        w.line("visualize(viz_data)")
         w.dedent()
