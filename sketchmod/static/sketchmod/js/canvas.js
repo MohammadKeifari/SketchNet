@@ -304,7 +304,11 @@ const SketchMod = {
             .forEach((item) => {
                 item.addEventListener("click", () => {
                     const phase = item.dataset.phase;
-                    this._highlightPhase(phase);
+                    if (phase === "all") {
+                        this._showAllPhases();
+                    } else {
+                        this._highlightPhase(phase);
+                    }
                     document
                         .getElementById("highlightMenu")
                         ?.classList.remove("open");
@@ -3325,11 +3329,112 @@ const SketchMod = {
                 this._showToast("Highlight failed. Check console.");
             });
     },
+    _showAllPhases() {
+        this._clearHighlight();
 
+        const phases = ["preprocessing", "training", "evaluation"];
+
+        // ---- 1. Fetch node & link info from API (unchanged) ----
+        const phaseLinkSets = new Map();
+        const phaseNodeSets = new Map();
+
+        const fetchPromises = phases.map((phase) => {
+            const graphData = JSON.stringify(this._getGraphData());
+            return fetch("/sketchmod/api/highlight-path/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": this._getCsrfToken(),
+                },
+                body: JSON.stringify({ graph: graphData, phase: phase }),
+            })
+                .then((res) => res.json())
+                .then((data) => {
+                    if (!data.success) {
+                        console.warn(`ShowAll: phase '${phase}' failed`, data);
+                        return;
+                    }
+                    phaseNodeSets.set(phase, new Set(data.nodes));
+                    phaseLinkSets.set(phase, new Set(data.links));
+                })
+                .catch((err) =>
+                    console.error(`ShowAll fetch error (${phase}):`, err),
+                );
+        });
+
+        Promise.all(fetchPromises).then(() => {
+            // ---- 2. Build link & node maps from API results ----
+            this._showAllLinks = new Map();
+            this._showAllNodes = new Map();
+
+            for (const [phase, linkSet] of phaseLinkSets) {
+                for (const key of linkSet) {
+                    const [fromId, toId] = key.split("→");
+                    const link = this.links.find(
+                        (l) => l.from.id === fromId && l.to.id === toId,
+                    );
+                    if (!link) continue;
+                    if (!this._showAllLinks.has(link))
+                        this._showAllLinks.set(link, new Set());
+                    this._showAllLinks.get(link).add(phase);
+                }
+            }
+            for (const [phase, nodeSet] of phaseNodeSets) {
+                for (const nid of nodeSet) {
+                    const node = this.nodes.find((n) => n.id === nid);
+                    if (!node) continue;
+                    if (!this._showAllNodes.has(node))
+                        this._showAllNodes.set(node, new Set());
+                    this._showAllNodes.get(node).add(phase);
+                }
+            }
+
+            // ---- 3. Build port map DIRECTLY from user checkboxes ----
+            this._showAllPorts = new Map();
+            for (const port of this.ports) {
+                if (port.activationPhases && port.activationPhases.length > 0) {
+                    this._showAllPorts.set(
+                        port,
+                        new Set(port.activationPhases),
+                    );
+                }
+            }
+
+            this._render();
+            const btn = document.getElementById("btnClearPath");
+            if (btn) btn.style.display = "flex";
+        });
+    },
+    _getShowAllColor: function (phases) {
+        const map = {
+            1: {
+                preprocessing: "#ef4444",
+                training: "#3b82f6",
+                evaluation: "#eab308",
+            },
+            2: {
+                "preprocessing,training": "#8b5cf6",
+                "evaluation,preprocessing": "#f97316",
+                "evaluation,training": "#22c55e",
+            },
+            3: "#ffffff",
+        };
+        if (phases.size === 1) {
+            return map[1][[...phases][0]] || "#ffffff";
+        } else if (phases.size === 2) {
+            const key = [...phases].sort().join(",");
+            return map[2][key] || "#ffffff";
+        } else {
+            return map[3];
+        }
+    },
     _clearHighlight() {
         this._highlightPhaseNodes = null;
         this._highlightPhaseLinks = null;
         this._highlightPhasePorts = null;
+        this._showAllLinks = null;
+        this._showAllNodes = null;
+        this._showAllPorts = null;
         const btn = document.getElementById("btnClearPath");
         if (btn) btn.style.display = "none";
         this._render();
@@ -3669,6 +3774,23 @@ class Port {
         ctx.strokeStyle = "#1a1d2e";
         ctx.lineWidth = 1.5;
         ctx.stroke();
+
+        // Show‑All ring
+        if (SketchMod._showAllPorts && SketchMod._showAllPorts.has(this)) {
+            try {
+                const phases = SketchMod._showAllPorts.get(this);
+                const c = SketchMod._getShowAllColor(phases);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+                ctx.strokeStyle = c;
+                ctx.lineWidth = 2;
+                ctx.shadowColor = "transparent";
+                ctx.shadowBlur = 0;
+                ctx.stroke();
+            } catch (e) {}
+        }
+
+        // Single‑phase highlight ring
         if (
             SketchMod._highlightPhasePorts &&
             SketchMod._highlightPhasePorts.has(this)
@@ -3677,14 +3799,13 @@ class Port {
             ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
             ctx.strokeStyle = "#4ade80";
             ctx.lineWidth = 2;
-            ctx.shadowColor = "transparent"; // no glow on ports, just ring
+            ctx.shadowColor = "transparent";
             ctx.shadowBlur = 0;
             ctx.stroke();
         }
     }
 
     drawHighlight(ctx) {
-        // Check for error/warning first
         if (SketchMod.errorPortIds.has(this.id)) {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
@@ -3705,7 +3826,6 @@ class Port {
             ctx.stroke();
             return;
         }
-        // Default selection highlight
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.hoverRadius, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
@@ -3776,7 +3896,22 @@ class DataPort extends Port {
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Highlight ring
+        // Show‑All ring
+        if (SketchMod._showAllPorts && SketchMod._showAllPorts.has(this)) {
+            try {
+                const phases = SketchMod._showAllPorts.get(this);
+                const c = SketchMod._getShowAllColor(phases);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+                ctx.strokeStyle = c;
+                ctx.lineWidth = 2;
+                ctx.shadowColor = "transparent";
+                ctx.shadowBlur = 0;
+                ctx.stroke();
+            } catch (e) {}
+        }
+
+        // Single‑phase highlight ring
         if (
             SketchMod._highlightPhasePorts &&
             SketchMod._highlightPhasePorts.has(this)
@@ -3838,7 +3973,6 @@ class MultiPort extends Port {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Connection count badge
         const count = this.getConnectionCount();
         if (count > 1) {
             ctx.fillStyle = "#ffffff";
@@ -3848,7 +3982,22 @@ class MultiPort extends Port {
             ctx.fillText(count, this.x, this.y + 0.3);
         }
 
-        // Highlight ring
+        // Show‑All ring
+        if (SketchMod._showAllPorts && SketchMod._showAllPorts.has(this)) {
+            try {
+                const phases = SketchMod._showAllPorts.get(this);
+                const c = SketchMod._getShowAllColor(phases);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+                ctx.strokeStyle = c;
+                ctx.lineWidth = 2;
+                ctx.shadowColor = "transparent";
+                ctx.shadowBlur = 0;
+                ctx.stroke();
+            } catch (e) {}
+        }
+
+        // Single‑phase highlight ring
         if (
             SketchMod._highlightPhasePorts &&
             SketchMod._highlightPhasePorts.has(this)
@@ -3899,7 +4048,6 @@ class RolePort extends Port {
         return 1;
     }
     draw(ctx) {
-        // Diamond shape
         ctx.beginPath();
         ctx.moveTo(this.x, this.y - this.radius - 1);
         ctx.lineTo(this.x + this.radius + 1, this.y);
@@ -3912,7 +4060,22 @@ class RolePort extends Port {
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Highlight ring (circle, for visibility)
+        // Show‑All ring (circle for visibility)
+        if (SketchMod._showAllPorts && SketchMod._showAllPorts.has(this)) {
+            try {
+                const phases = SketchMod._showAllPorts.get(this);
+                const c = SketchMod._getShowAllColor(phases);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+                ctx.strokeStyle = c;
+                ctx.lineWidth = 2;
+                ctx.shadowColor = "transparent";
+                ctx.shadowBlur = 0;
+                ctx.stroke();
+            } catch (e) {}
+        }
+
+        // Single‑phase highlight ring
         if (
             SketchMod._highlightPhasePorts &&
             SketchMod._highlightPhasePorts.has(this)
@@ -3962,7 +4125,6 @@ class ParamPort extends Port {
     }
 
     draw(ctx) {
-        // Diamond shape (slightly larger)
         const size = this.radius + 0.5;
         ctx.beginPath();
         ctx.moveTo(this.x, this.y - size);
@@ -3976,7 +4138,22 @@ class ParamPort extends Port {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Highlight ring (circle, for visibility)
+        // Show‑All ring (circle for visibility)
+        if (SketchMod._showAllPorts && SketchMod._showAllPorts.has(this)) {
+            try {
+                const phases = SketchMod._showAllPorts.get(this);
+                const c = SketchMod._getShowAllColor(phases);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+                ctx.strokeStyle = c;
+                ctx.lineWidth = 2;
+                ctx.shadowColor = "transparent";
+                ctx.shadowBlur = 0;
+                ctx.stroke();
+            } catch (e) {}
+        }
+
+        // Single‑phase highlight ring
         if (
             SketchMod._highlightPhasePorts &&
             SketchMod._highlightPhasePorts.has(this)
@@ -3990,7 +4167,6 @@ class ParamPort extends Port {
             ctx.stroke();
         }
     }
-
     _getColor() {
         if (this.type === "input") return "#fbbf24"; // Bright amber
         if (this.type === "output") return "#38bdf8"; // Sky blue
@@ -4726,7 +4902,7 @@ class RectNode extends BaseNode {
         const x = this.x - this.width / 2;
         const y = this.y - this.height / 2;
 
-        // Error outline
+        // Error / Warning outlines
         if (SketchMod.errorNodeIds.has(this.id)) {
             ctx.beginPath();
             ctx.roundRect(x - 3, y - 3, this.width + 6, this.height + 6, 10);
@@ -4745,6 +4921,7 @@ class RectNode extends BaseNode {
             ctx.stroke();
         }
 
+        // Selection glow
         if (selected) {
             ctx.beginPath();
             ctx.roundRect(x - 1, y - 1, this.width + 2, this.height + 2, 8);
@@ -4752,29 +4929,7 @@ class RectNode extends BaseNode {
             ctx.fill();
         }
 
-        // Highlight path (green glow)
-        if (
-            SketchMod._highlightPhaseNodes &&
-            SketchMod._highlightPhaseNodes.has(this)
-        ) {
-            ctx.beginPath();
-            // For RectNode
-            if (this.getBounds) {
-                const b = this.getBounds();
-                ctx.roundRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8, 10);
-            } else {
-                // CircleNode
-                ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
-            }
-            ctx.strokeStyle = "#4ade80";
-            ctx.lineWidth = 3;
-            // ctx.shadowColor = "#4ade80";
-            // ctx.shadowBlur = 10;
-            ctx.stroke();
-            // ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
-        }
-
+        // Main body
         ctx.beginPath();
         ctx.roundRect(x, y, this.width, this.height, 7);
         ctx.fillStyle = color.fill;
@@ -4783,16 +4938,50 @@ class RectNode extends BaseNode {
         ctx.lineWidth = selected ? 2.5 : 1.5;
         ctx.stroke();
 
+        // Show‑All outline (drawn on top, never throws)
+        if (SketchMod._showAllNodes && SketchMod._showAllNodes.has(this)) {
+            try {
+                const phases = SketchMod._showAllNodes.get(this);
+                const sc = SketchMod._getShowAllColor(phases);
+                ctx.beginPath();
+                ctx.roundRect(
+                    x - 4,
+                    y - 4,
+                    this.width + 8,
+                    this.height + 8,
+                    10,
+                );
+                ctx.strokeStyle = sc;
+                ctx.lineWidth = 3;
+                ctx.shadowColor = "transparent";
+                ctx.shadowBlur = 0;
+                ctx.stroke();
+            } catch (e) {}
+        }
+
+        // Single‑phase highlight
+        if (
+            SketchMod._highlightPhaseNodes &&
+            SketchMod._highlightPhaseNodes.has(this)
+        ) {
+            ctx.beginPath();
+            ctx.roundRect(x - 4, y - 4, this.width + 8, this.height + 8, 10);
+            ctx.strokeStyle = "#4ade80";
+            ctx.lineWidth = 3;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.stroke();
+        }
+
+        // Label
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 13px Inter, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         this.drawLabel(ctx);
     }
-
     drawLabel(ctx) {
-        // Override in subclass
-        ctx.fillText(this.type, this.x, this.y);
+        ctx.fillText("?", this.x, this.y);
     }
 }
 
@@ -4867,7 +5056,6 @@ class CircleNode extends BaseNode {
     draw(ctx, selected) {
         const color = SketchMod._getNodeColor();
 
-        // Error outline
         if (SketchMod.errorNodeIds.has(this.id)) {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius + 4, 0, Math.PI * 2);
@@ -4893,21 +5081,6 @@ class CircleNode extends BaseNode {
             ctx.fill();
         }
 
-        if (
-            SketchMod._highlightPhaseNodes &&
-            SketchMod._highlightPhaseNodes.has(this)
-        ) {
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius + 6, 0, Math.PI * 2);
-            ctx.strokeStyle = "#4ade80";
-            ctx.lineWidth = 3;
-            ctx.shadowColor = "#4ade80";
-            ctx.shadowBlur = 10;
-            ctx.stroke();
-            ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
-        }
-
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = color.fill;
@@ -4916,13 +5089,39 @@ class CircleNode extends BaseNode {
         ctx.lineWidth = selected ? 2.5 : 1.5;
         ctx.stroke();
 
+        if (SketchMod._showAllNodes && SketchMod._showAllNodes.has(this)) {
+            try {
+                const phases = SketchMod._showAllNodes.get(this);
+                const sc = SketchMod._getShowAllColor(phases);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+                ctx.strokeStyle = sc;
+                ctx.lineWidth = 3;
+                ctx.shadowColor = "transparent";
+                ctx.shadowBlur = 0;
+                ctx.stroke();
+            } catch (e) {}
+        }
+
+        if (
+            SketchMod._highlightPhaseNodes &&
+            SketchMod._highlightPhaseNodes.has(this)
+        ) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = "#4ade80";
+            ctx.lineWidth = 3;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.stroke();
+        }
+
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 15px Inter, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         this.drawLabel(ctx);
     }
-
     drawLabel(ctx) {
         ctx.fillText("?", this.x, this.y);
     }
@@ -7333,44 +7532,56 @@ class Link {
         const isHL =
             SketchMod._highlightPhaseLinks &&
             SketchMod._highlightPhaseLinks.has(this);
+        const isShowAll =
+            SketchMod._showAllLinks && SketchMod._showAllLinks.has(this);
 
-        // Always reset shadow first
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
 
-        // -------- Choose colours --------
         let strokeColor, fillColor, lineWidth;
 
-        if (isHL) {
-            strokeColor = "#4ade80";
-            fillColor = "#4ade80";
-            lineWidth = 2.5;
-            // lineWidth = 3;
-            // ctx.shadowColor = "#4ade80";
-            // ctx.shadowBlur = 6;
-        } else if (SketchMod.errorLinkIds.has(linkKey)) {
-            strokeColor = "#ef4444";
-            fillColor = "#ef4444";
-            lineWidth = 3;
-        } else if (SketchMod.warningLinkIds.has(linkKey)) {
-            strokeColor = "#f59e0b";
-            fillColor = "#f59e0b";
-            lineWidth = 2.5;
-        } else if (selected) {
-            strokeColor = "#000000"; // black, but thicker
-            fillColor = "#000000";
-            lineWidth = 3;
-        } else if (this.hasWeight) {
-            strokeColor = "#000000"; // black, but thicker
-            fillColor = "#000000";
-            lineWidth = 2.5;
-        } else {
-            strokeColor = "#000000"; // plain black
-            fillColor = "#000000";
-            lineWidth = 1.5;
+        if (isShowAll) {
+            try {
+                const phases = SketchMod._showAllLinks.get(this);
+                const c = SketchMod._getShowAllColor(phases);
+                strokeColor = c;
+                fillColor = c;
+                lineWidth = 3;
+            } catch (e) {
+                isShowAll = false;
+            }
         }
 
-        // -------- Draw the line --------
+        if (!isShowAll) {
+            if (isHL) {
+                strokeColor = "#4ade80";
+                fillColor = "#4ade80";
+                lineWidth = 3;
+                ctx.shadowColor = "#4ade80";
+                ctx.shadowBlur = 6;
+            } else if (SketchMod.errorLinkIds.has(linkKey)) {
+                strokeColor = "#ef4444";
+                fillColor = "#ef4444";
+                lineWidth = 3;
+            } else if (SketchMod.warningLinkIds.has(linkKey)) {
+                strokeColor = "#f59e0b";
+                fillColor = "#f59e0b";
+                lineWidth = 2.5;
+            } else if (selected) {
+                strokeColor = "#ffffff";
+                fillColor = "#ffffff";
+                lineWidth = 3;
+            } else if (this.hasWeight) {
+                strokeColor = "#000000";
+                fillColor = "#000000";
+                lineWidth = 2.5;
+            } else {
+                strokeColor = "#000000";
+                fillColor = "#000000";
+                lineWidth = 1.5;
+            }
+        }
+
         ctx.beginPath();
         ctx.moveTo(this.from.x, this.from.y);
         ctx.lineTo(this.to.x, this.to.y);
@@ -7378,11 +7589,10 @@ class Link {
         ctx.lineWidth = lineWidth;
         ctx.stroke();
 
-        // // Reset shadow immediately after stroke
-        // ctx.shadowColor = "transparent";
-        // ctx.shadowBlur = 0;
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
 
-        // -------- Arrow head --------
+        // Arrowhead
         const dx = this.to.x - this.from.x;
         const dy = this.to.y - this.from.y;
         const totalDistance = Math.hypot(dx, dy);
@@ -7409,15 +7619,13 @@ class Link {
             tipX - size * Math.cos(angle + 0.5),
             tipY - size * Math.sin(angle + 0.5),
         );
-        ctx.lineTo(tipX, tipY);
         ctx.closePath();
 
         ctx.fillStyle = fillColor;
         ctx.fill();
 
-        // // Final reset (safety)
-        // ctx.shadowColor = "transparent";
-        // ctx.shadowBlur = 0;
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
     }
 
     hitTest(px, py) {
