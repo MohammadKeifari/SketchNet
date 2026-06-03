@@ -292,59 +292,24 @@ class CodeGenerator:
 
     def _get_var_for_eval_labels(self):
         """
-        Return the variable for test labels, or 'None' if not found.
-        A label node must:
-        - be a data‑transform or onehot/deonehot node
-        - NOT feed any model node (directly)
-        - feed the OutputNode's test input, or a visualization
+        Return the variable name for test labels, or 'None' if not found.
+        Only considers nodes that feed the OutputNode's test input port.
         """
         output_node = next(
             (n for n in self.graph.nodes.values() if n.type == "output"), None
         )
-
-        # Collect allowed target port ids
-        allowed_targets = set()
-        if output_node:
-            test_input = next(
-                (p for p in output_node.inputs if p.sub_type == "test"), None
-            )
-            if test_input:
-                allowed_targets.add(test_input.id)
-        for viz in self.flow.get("visualizations", []):
-            for p in viz.inputs:
-                allowed_targets.add(p.id)
-
-        if not allowed_targets:
+        if not output_node:
+            return "None"
+        test_input = next((p for p in output_node.inputs if p.sub_type == "test"), None)
+        if not test_input:
             return "None"
 
-        for nid, node in self.graph.nodes.items():
-            if node.type not in DATA_TRANSFORM_TYPES and node.type not in (
-                "onehot",
-                "deonehot",
-            ):
-                continue
-
-            # 1. Must not feed any model node
-            feeds_model = False
-            for out_port in node.outputs:
-                for link in self.graph.links:
-                    if link.id_from == out_port.id:
-                        tgt_id = self.graph.ports[link.id_to].node_id
-                        if self.graph.nodes[tgt_id].type in MODEL_TYPES:
-                            feeds_model = True
-                            break
-                if feeds_model:
-                    break
-            if feeds_model:
-                continue
-
-            # 2. Must feed an allowed target
-            for out_port in node.outputs:
-                for link in self.graph.links:
-                    if link.id_from == out_port.id and link.id_to in allowed_targets:
-                        if nid in self.var_map:
-                            return self.var_map[nid]
-
+        # Find the node that feeds the test input
+        for link in self.graph.links:
+            if link.id_to == test_input.id:
+                src_id = self.graph.ports[link.id_from].node_id
+                if src_id in self.var_map:
+                    return self.var_map[src_id]
         return "None"
 
     def _find_input_source(self, node_id):
