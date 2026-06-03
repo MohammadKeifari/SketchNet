@@ -327,6 +327,61 @@ class CodeGenerator:
         w.dedent()
         w.line("")
 
+    def _write_eval_pipeline(self, w):
+        """
+        Write a function that runs the model and then executes any remaining
+        evaluation‑phase data nodes (like DeOneHot) that depend on model outputs.
+        Returns predictions and a dict of tensors connected to visualization inputs.
+        """
+        w.line("def eval_pipeline(model, X_test):")
+        w.indent()
+        w.line("model.eval()")
+        w.line("with torch.no_grad():")
+        w.indent()
+        eval_feed = self._get_feed_key("eval")
+        w.line(f"outputs = model({{'{eval_feed}': X_test.to(device)}})")
+        pred_port_id = None
+        output_node = next(
+            (n for n in self.graph.nodes.values() if n.type == "output"), None
+        )
+        if output_node:
+            pred_port = next(
+                (p for p in output_node.outputs if p.role == "prediction"), None
+            )
+            if pred_port:
+                pred_port_id = pred_port.id
+        if pred_port_id:
+            w.line(f"predictions = outputs['{pred_port_id}']")
+        else:
+            w.line("predictions = list(outputs.values())[0]")
+        w.line("predictions = predictions.cpu().numpy()")
+
+        # Execute any eval data nodes that are downstream of the model
+        eval_order = self.flow["eval_order"]
+        pre_set = self.flow.get("preprocessing_set", set())
+        for nid in eval_order:
+            node = self.graph.nodes[nid]
+            if node.type in MODEL_TYPES or nid in pre_set:
+                continue
+            # This node is in eval order but not yet computed; run its translator
+            # Use a special phase "post_model" to indicate it runs after model
+            self.translators[nid].data_code(w, "eval")
+
+        # Collect visualization data
+        w.line("viz_data = {}")
+        for viz in self.flow.get("visualizations", []):
+            for port in viz.inputs:
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src_id = self.graph.ports[link.id_from].node_id
+                        if src_id in self.var_map:
+                            w.line(f"viz_data['{port.id}'] = {self.var_map[src_id]}")
+                        break
+        w.line("return predictions, viz_data")
+        w.dedent()
+        w.dedent()
+        w.line("")
+
     # ------------------------------------------------------------------
     def _write_training(self, w):
         opt_node = self.flow.get("optimizer")
@@ -520,55 +575,30 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _write_evaluation(self, w):
+        self._write_eval_pipeline(w)
+
         w.line("def evaluate(model, X_test, y_test):")
         w.indent()
-        w.line("if y_test is None:")
+        w.line("predictions, viz_data = eval_pipeline(model, X_test)")
+        w.line("if y_test is not None:")
         w.indent()
-        w.line('print("No test labels – skipping evaluation.")')
-        w.line("return None, None, X_test")  # ← return X_test too
-        w.dedent()
-        w.line("model.eval()")
-        w.line("with torch.no_grad():")
-        w.indent()
-        eval_feed = self._get_feed_key("eval")
-        w.line(f"outputs = model({{'{eval_feed}': X_test.to(device)}})")
-        pred_port_id = None
-        eval_port_id = None
-        output_node = next(
-            (n for n in self.graph.nodes.values() if n.type == "output"), None
-        )
-        if output_node:
-            pred_port = next(
-                (p for p in output_node.outputs if p.role == "prediction"), None
-            )
-            eval_port = next(
-                (p for p in output_node.outputs if p.role == "evaluation"), None
-            )
-            if pred_port:
-                pred_port_id = pred_port.id
-            if eval_port:
-                eval_port_id = eval_port.id
-        if pred_port_id:
-            w.line(f"predictions = outputs['{pred_port_id}'].cpu().numpy()")
-        else:
-            w.line("predictions = list(outputs.values())[0].cpu().numpy()")
-        if eval_port_id:
-            w.line(f"eval_values = outputs['{eval_port_id}'].cpu().numpy()")
-        else:
-            w.line("eval_values = predictions")
         w.line("mse = np.mean((predictions - y_test.numpy())**2)")
         w.line('print(f"Test MSE: {mse:.6f}")')
-        w.line("return predictions, eval_values, X_test")
+        w.dedent()
+        w.line("else:")
+        w.indent()
+        w.line('print("No test labels – skipping evaluation.")')
+        w.dedent()
+        w.line("return predictions, viz_data")
         w.dedent()
         w.dedent()
         w.line("")
 
-        # Visualization
-        w.line("def visualize(predictions, y_test, eval_values, X_test):")
+        w.line("def visualize(predictions, y_test, viz_data):")
         w.indent()
-        w.line("if predictions is None:")
+        w.line("if not viz_data:")
         w.indent()
-        w.line('print("No predictions – skipping visualization.")')
+        w.line('print("No visualization data connected.")')
         w.line("return")
         w.dedent()
         viz_nodes = self.flow.get("visualizations", [])
@@ -602,6 +632,6 @@ class CodeGenerator:
             "model = train_model(model, X_train, y_train, X_test, y_test, opt_config)"
         )
         w.line('print("Training complete.")')
-        w.line("predictions, eval_values, X_test = evaluate(model, X_test, y_test)")
-        w.line("visualize(predictions, y_test, eval_values, X_test)")
+        w.line("predictions, viz_data = evaluate(model, X_test, y_test)")
+        w.line("visualize(predictions, y_test, viz_data)")
         w.dedent()
