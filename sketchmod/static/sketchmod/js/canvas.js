@@ -3957,6 +3957,7 @@ class DataPort extends Port {
         if (this.subType === "skip") return "#ffcc00";
         if (this.subType === "coord") return "#60a5fa";
         if (this.subType === "color") return "#ff00b7";
+        if (this.subType === "predictions") return "#60a5fa";
         if (this.type === "input") return "#ef4444";
         if (this.type === "output") return "#60a5fa";
         return "#94a3b8";
@@ -6747,11 +6748,11 @@ class PrintNode extends RectNode {
     constructor(id, x, y) {
         super(id, x, y, "print", 80, 50);
         this.label = "";
+        this.nodeColor = "#fbbf24";
         this.maxInputs = Infinity;
         this.minInputs = 1;
         this.maxOutputs = 0;
         this.minOutputs = 0;
-        // start with one input
         this.addInput();
         this.updatePorts();
     }
@@ -6760,14 +6761,6 @@ class PrintNode extends RectNode {
         ctx.fillText("Print", this.x, this.y);
     }
 
-    canAddInput(subType) {
-        return true;
-    }
-    canRemoveInput() {
-        return this.inputs.length > 0;
-    }
-
-    // no shape computation needed
     computeOutputShapes() {
         return [];
     }
@@ -6783,7 +6776,7 @@ class PrintNode extends RectNode {
             </div>
             <div class="prop-group">
                 <label>Input Ports</label>
-                <p class="prop-hint">${this.inputs.length} input(s)</p>
+                <p class="prop-hint">${this.inputs.length} tensor input(s) – prints shape to console</p>
             </div>
         `;
     }
@@ -6791,7 +6784,6 @@ class PrintNode extends RectNode {
     toJSON() {
         return { ...super.toJSON(), label: this.label };
     }
-
     fromJSON(d) {
         super.fromJSON(d);
         if (d.label) this.label = d.label;
@@ -6801,13 +6793,17 @@ class AccuracyNode extends RectNode {
     constructor(id, x, y) {
         super(id, x, y, "accuracy", 90, 60);
         this.showConfusion = false;
+        this.nodeColor = "#a78bfa";
         this.maxInputs = 2;
         this.minInputs = 2;
         this.maxOutputs = 0;
         this.minOutputs = 0;
-        // Two inputs: predictions, labels
-        this.addInput(); // predictions
-        this.addInput(); // labels
+
+        // Manually push DataPorts with unique subtypes so colours appear immediately
+        this.inputs.push(new DataPort(this, "input", 0, "predictions"));
+        this.inputs.push(new DataPort(this, "input", 1, "labels"));
+        this.inputs[0].activationPhases = ["evaluation"];
+        this.inputs[1].activationPhases = ["evaluation"];
         this.updatePorts();
     }
 
@@ -6832,7 +6828,20 @@ class AccuracyNode extends RectNode {
             </div>
             <div class="prop-group">
                 <label>Input Ports</label>
-                <p class="prop-hint">Predictions (port 0) / Labels (port 1)</p>
+                <div class="port-legend">
+                    <span class="port-legend-item">
+                        <svg width="10" height="10" viewBox="0 0 10 10">
+                            <circle cx="5" cy="5" r="4" fill="#60a5fa" stroke="#1a1d2e" stroke-width="1"/>
+                        </svg>
+                        Predictions
+                    </span>
+                    <span class="port-legend-item">
+                        <svg width="10" height="10" viewBox="0 0 10 10">
+                            <circle cx="5" cy="5" r="4" fill="#f59e0b" stroke="#1a1d2e" stroke-width="1"/>
+                        </svg>
+                        Labels
+                    </span>
+                </div>
             </div>
         `;
     }
