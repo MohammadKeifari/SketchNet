@@ -157,26 +157,113 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _get_var_for_first_model_input(self, phase):
-        """Variable that feeds the first model node in `phase`."""
+        # Map generator's short names to the full names used in port activationPhases
+        PHASE_MAP = {
+            "preprocessing": "preprocessing",
+            "train": "training",
+            "eval": "evaluation",
+        }
+        full_phase = PHASE_MAP.get(phase, phase)
+
         order = self.flow[f"{phase}_order"]
-        phase_set = self.flow.get(f"{phase}_set", set())
+        first_model = None
         for nid in order:
             if self.graph.nodes[nid].type in MODEL_TYPES:
-                for in_port in self.graph.nodes[nid].inputs:
-                    for link in self.graph.links:
-                        if link.id_to == in_port.id:
-                            src_id = self.graph.ports[link.id_from].node_id
-                            if src_id in phase_set and src_id in self.var_map:
-                                return self.var_map[src_id]
-                # fallback: any connected source with a variable
-                for in_port in self.graph.nodes[nid].inputs:
-                    for link in self.graph.links:
-                        if link.id_to == in_port.id:
-                            src_id = self.graph.ports[link.id_from].node_id
-                            if src_id in self.var_map:
-                                return self.var_map[src_id]
+                first_model = nid
+                break
+        if not first_model:
+            return "None"
+
+        explicit_candidates = []
+        fallback_candidates = []
+
+        for in_port in self.graph.nodes[first_model].inputs:
+            for link in self.graph.links:
+                if link.id_to == in_port.id:
+                    src_port = self.graph.ports[link.id_from]
+                    src_id = src_port.node_id
+                    if src_id not in self.var_map:
+                        continue
+                    var = self.var_map[src_id]
+                    if full_phase in src_port.activation_phases:
+                        explicit_candidates.append(var)
+                    else:
+                        fallback_candidates.append(var)
+
+        if explicit_candidates:
+            return explicit_candidates[0]
+        if fallback_candidates:
+            return fallback_candidates[0]
         return "None"
 
+    def _get_var_for_eval_labels(self):
+        """
+        Return the variable for test labels, or 'None' if not found.
+        A label node must:
+        - be a data‑transform or onehot/deonehot node
+        - NOT feed any model node (directly)
+        - feed the OutputNode's test input, or a visualization
+        """
+        output_node = next(
+            (n for n in self.graph.nodes.values() if n.type == "output"), None
+        )
+
+        # Collect allowed target port ids
+        allowed_targets = set()
+        if output_node:
+            test_input = next(
+                (p for p in output_node.inputs if p.sub_type == "test"), None
+            )
+            if test_input:
+                allowed_targets.add(test_input.id)
+        for viz in self.flow.get("visualizations", []):
+            for p in viz.inputs:
+                allowed_targets.add(p.id)
+
+        if not allowed_targets:
+            return "None"
+
+        for nid, node in self.graph.nodes.items():
+            if node.type not in DATA_TRANSFORM_TYPES and node.type not in (
+                "onehot",
+                "deonehot",
+            ):
+                continue
+
+            # 1. Must not feed any model node
+            feeds_model = False
+            for out_port in node.outputs:
+                for link in self.graph.links:
+                    if link.id_from == out_port.id:
+                        tgt_id = self.graph.ports[link.id_to].node_id
+                        if self.graph.nodes[tgt_id].type in MODEL_TYPES:
+                            feeds_model = True
+                            break
+                if feeds_model:
+                    break
+            if feeds_model:
+                continue
+
+            # 2. Must feed an allowed target
+            for out_port in node.outputs:
+                for link in self.graph.links:
+                    if link.id_from == out_port.id and link.id_to in allowed_targets:
+                        if nid in self.var_map:
+                            return self.var_map[nid]
+
+        return "None"
+
+    def _find_input_source(self, node_id):
+        node = self.graph.nodes[node_id]
+        if not node.inputs:
+            return None
+        port = node.inputs[0]
+        for link in self.graph.links:
+            if link.id_to == port.id:
+                return self.graph.ports[link.id_from].node_id
+        return None
+
+    # ------------------------------------------------------
     def _get_var_for_optimizer_labels(self):
         opt = self.flow.get("optimizer")
         if not opt:
@@ -191,49 +278,6 @@ class CodeGenerator:
                 if src_id in self.var_map:
                     return self.var_map[src_id]
         return "None"
-
-    def _get_var_for_eval_labels(self):
-        """Look for test labels, unwrapping one‑hot nodes."""
-        eval_set = self.flow.get("eval_set", set())
-        for nid, node in self.graph.nodes.items():
-            if node.type not in DATA_TRANSFORM_TYPES and node.type not in (
-                "onehot",
-                "deonehot",
-            ):
-                continue
-            # Skip if output feeds a model node
-            feeds_model = False
-            for out_port in node.outputs:
-                for link in self.graph.links:
-                    if link.id_from == out_port.id:
-                        tgt_id = self.graph.ports[link.id_to].node_id
-                        if self.graph.nodes[tgt_id].type in MODEL_TYPES:
-                            feeds_model = True
-                            break
-                if feeds_model:
-                    break
-            if feeds_model:
-                continue
-            actual_nid = nid
-            if node.type == "onehot":
-                for in_port in node.inputs:
-                    for link in self.graph.links:
-                        if link.id_to == in_port.id:
-                            actual_nid = self.graph.ports[link.id_from].node_id
-                            break
-            if actual_nid in self.var_map:
-                return self.var_map[actual_nid]
-        return "None"
-
-    def _find_input_source(self, node_id):
-        node = self.graph.nodes[node_id]
-        if not node.inputs:
-            return None
-        port = node.inputs[0]
-        for link in self.graph.links:
-            if link.id_to == port.id:
-                return self.graph.ports[link.id_from].node_id
-        return None
 
     # ------------------------------------------------------------------
     def _write_model_class(self, w):
