@@ -260,6 +260,19 @@ class ModelViewTests(TestCase):
         self.assertEqual(SketchModel.objects.count(), 0)
         self.assertRedirects(response, reverse("models:dashboard"))
 
+    # ===== DELETE CONFIRMATION PAGE CONTAINS SESSION CLEAR SCRIPT =====
+    def test_delete_confirmation_page_contains_session_clear_script(self):
+        """The delete confirmation template should include code that clears
+        sessionStorage if the deleted model matches the active canvas model."""
+        self._login()
+        response = self.client.get(
+            reverse("models:delete", kwargs={"model_id": self.model.model_id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "sketchmod-active-model-id")
+        self.assertContains(response, "sessionStorage.removeItem")
+        self.assertContains(response, "sketchmod-graph")
+
     # ===== DOWNLOAD =====
     def test_download_returns_json(self):
         response = self.client.get(
