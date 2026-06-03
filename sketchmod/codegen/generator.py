@@ -141,17 +141,31 @@ class CodeGenerator:
                     )
                     w.line(f"{nid}_out = {self.var_map[src_id]}")
 
-        # 5. Determine variable names for the return
-        train_feed = self._get_var_for_first_model_input("train")
-        train_labels = self._get_var_for_optimizer_labels()
-        test_feed = self._get_var_for_first_model_input("eval")
-        test_labels = self._get_var_for_eval_labels()
+        # 5. Collect visualization tensors
+        viz_nodes = self.flow.get("visualizations", [])
+        viz_vars = {}
+        if viz_nodes:
+            for viz in viz_nodes:
+                for port in viz.inputs:
+                    for link in self.graph.links:
+                        if link.id_to == port.id:
+                            src_id = self.graph.ports[link.id_from].node_id
+                            if src_id in self.var_map:
+                                viz_vars[port.id] = self.var_map[src_id]
+                            break
 
         w.line(f"X_train = {train_feed}")
         w.line(f"y_train = {train_labels}")
         w.line(f"X_test = {test_feed}")
         w.line(f"y_test = {test_labels}")
-        w.line("return X_train, y_train, X_test, y_test")
+        if viz_vars:
+            w.line("viz_data = {")
+            for port_id, var in viz_vars.items():
+                w.line(f"    '{port_id}': {var},")
+            w.line("}")
+            w.line("return X_train, y_train, X_test, y_test, viz_data")
+        else:
+            w.line("return X_train, y_train, X_test, y_test, {}")
         w.dedent()
         w.line("")
 
