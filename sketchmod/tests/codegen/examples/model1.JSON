@@ -945,63 +945,63 @@
         {
             "from": "input-main_output_0",
             "to": "t1_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "t1_output_0",
             "to": "c2_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "t1_output_1",
             "to": "c3_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "t1_output_0",
             "to": "c4_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "c2_output_0",
             "to": "n6_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "c3_output_0",
             "to": "n7_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "n6_param_out_0",
             "to": "n7_param_in_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "c4_output_0",
             "to": "o8_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "l9_output_0",
             "to": "l10_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": {
                 "shape": [3, "32"],
                 "dtype": "float32"
@@ -1011,7 +1011,7 @@
         {
             "from": "n6_output_0",
             "to": "l9_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": {
                 "shape": [32, "2"],
                 "dtype": "float32"
@@ -1021,21 +1021,21 @@
         {
             "from": "l10_output_0",
             "to": "output-main_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "l10_output_0",
             "to": "output-main_input_1",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "n7_output_0",
             "to": "l9_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": {
                 "shape": [32, "2"],
                 "dtype": "float32"
@@ -1045,63 +1045,63 @@
         {
             "from": "c3_output_0",
             "to": "c16_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "c16_output_0",
             "to": "v12_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "c17_output_0",
             "to": "v12_input_1",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "output-main_output_0",
             "to": "o20_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "o8_output_0",
             "to": "o20_input_1",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "o8_param_out_0",
             "to": "d23_param_in_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "d23_output_0",
             "to": "v12_input_2",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "c3_output_0",
             "to": "c17_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         },
         {
             "from": "output-main_output_1",
             "to": "d23_input_0",
-            "weight": 0,
+            "weight": 1,
             "weightShape": null,
             "hasWeight": false
         }
