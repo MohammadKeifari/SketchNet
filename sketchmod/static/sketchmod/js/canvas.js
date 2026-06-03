@@ -6746,9 +6746,9 @@ class DeOneHotNode extends RectNode {
 class PrintNode extends RectNode {
     constructor(id, x, y) {
         super(id, x, y, "print", 80, 50);
-        this.label = ""; // optional label prepended to output
-        this.maxInputs = 1; // can have multiple inputs
-        this.minInputs = 0;
+        this.label = "";
+        this.maxInputs = Infinity;
+        this.minInputs = 1;
         this.maxOutputs = 0;
         this.minOutputs = 0;
         // start with one input
@@ -6813,13 +6813,6 @@ class AccuracyNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.fillText("Accuracy", this.x, this.y);
-    }
-
-    canAddInput(subType) {
-        return false;
-    }
-    canRemoveInput() {
-        return false;
     }
 
     computeOutputShapes() {
