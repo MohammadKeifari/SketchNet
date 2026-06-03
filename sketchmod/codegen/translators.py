@@ -613,7 +613,6 @@ class VisualizationTranslator(BaseTranslator):
         w.line(f"# Visualization '{n.id}'")
         w.line("plt.figure()")
 
-        # Build variable names from viz_data dictionary
         var_names = []
         for i, port in enumerate(coord_ports):
             var = f"data_{i}"
@@ -635,9 +634,7 @@ class VisualizationTranslator(BaseTranslator):
             w.line("if colors is not None:")
             w.indent()
             w.line(
-                "plt.scatter("
-                + ", ".join(f"{v}.flatten()" for v in var_names[:2])
-                + ", c=colors.flatten(), alpha=0.5, cmap='tab10')"
+                f"plt.scatter({var_names[0]}.flatten(), {var_names[1]}.flatten(), c=colors.flatten(), alpha=0.5, cmap='tab10')"
             )
             w.dedent()
         w.line(f"plt.title('Visualization {n.id}')")
