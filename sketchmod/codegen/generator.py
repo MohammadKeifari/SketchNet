@@ -498,12 +498,24 @@ class CodeGenerator:
         w.dedent()  # end test batch loop
         w.dedent()  # end no_grad
         w.line("avg_val_loss = val_loss / len(test_loader.dataset)")
+        w.dedent()  # end if test_loader is not None
         w.line("")
+        # Print epoch summary (always)
+        w.line("if test_loader is not None:")
+        w.indent()
         w.line(
             "print(f'Epoch {epoch+1:3d}/{epochs}  Train Loss: {avg_train_loss:.6f}  Val Loss: {avg_val_loss:.6f}')"
         )
+        w.dedent()
+        w.line("else:")
+        w.indent()
+        w.line(
+            "print(f'Epoch {epoch+1:3d}/{epochs}  Train Loss: {avg_train_loss:.6f}')"
+        )
+        w.dedent()
         w.line("")
-        w.line("if patience is not None:")
+        # Early stopping
+        w.line("if patience is not None and test_loader is not None:")
         w.indent()
         w.line("if avg_val_loss < best_loss:")
         w.indent()
@@ -520,7 +532,6 @@ class CodeGenerator:
         w.dedent()
         w.dedent()
         w.dedent()  # end if patience
-        w.dedent()  # end if test_loader
         w.dedent()  # end epoch loop
         w.line("")
         w.line("return model")
