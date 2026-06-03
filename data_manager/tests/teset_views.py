@@ -1,3 +1,4 @@
+import json
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -399,3 +400,79 @@ class DataViewTests(TestCase):
         )
         self.assertJSONEqual(response.content, {"success": True})
         self.assertFalse(self.dataset.allowed_users.filter(id=self.other.id).exists())
+
+    # ===== NEW: Shape API =====
+    def test_dataset_shape_api_returns_shape(self):
+        """Shape endpoint returns the resolved shape"""
+        url = reverse("data:api_shape", args=[self.dataset.dataset_id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("shape", data)
+        self.assertNotEqual(data["shape"], "")
+
+    def test_dataset_shape_api_requires_visibility(self):
+        """Shape endpoint respects visibility"""
+        self.dataset.is_private = True
+        self.dataset.save()
+        self.client.login(username="otheruser", password="testpass123")
+        url = reverse("data:api_shape", args=[self.dataset.dataset_id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 403)
+
+    # ===== NEW: Info API =====
+    def test_dataset_info_api(self):
+        """Info endpoint returns filename and format"""
+        url = reverse("data:api_info", args=[self.dataset.dataset_id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("filename", data)
+        self.assertIn("format", data)
+        self.assertEqual(data["format"], "csv")
+
+    # ===== NEW: Generate Dataset =====
+    def test_generate_dataset_classification(self):
+        """Generate a synthetic classification dataset"""
+        self._login()
+        url = reverse("data:generate")
+        response = self.client.post(
+            url,
+            {
+                "type": "classification",
+                "name": "Synthetic Test",
+                "n_samples": 20,
+                "n_features": 2,
+                "n_classes": 2,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertIsNotNone(data["dataset_id"])
+        self.assertIn("shape", data)
+        dataset = Dataset.objects.get(dataset_id=data["dataset_id"])
+        self.assertTrue(dataset.file.name.endswith(".csv"))
+
+    def test_generate_dataset_invalid_type(self):
+        """Generate fails with unknown type"""
+        self._login()
+        url = reverse("data:generate")
+        response = self.client.post(url, {"type": "unknown"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_generate_dataset_unauthenticated(self):
+        """Generate requires login"""
+        url = reverse("data:generate")
+        response = self.client.post(url, {"type": "classification"})
+        self.assertEqual(response.status_code, 302)
+
+    # ===== NEW: Dataset List API (canvas picker) =====
+    def test_dataset_list_api(self):
+        """List API returns datasets for picker"""
+        url = reverse("data:api_dataset_list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("datasets", data)
+        self.assertTrue(len(data["datasets"]) >= 1)
