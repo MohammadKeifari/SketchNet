@@ -38,7 +38,7 @@ class GraphValidator:
         self._check_model_connectivity(warnings)
         self._check_preprocessing_models(warnings)
         self._check_label_encoding(warnings)
-        self._check_loss_label_compatibility(errors)
+        self._check_loss_label_compatibility(errors, warnings)
 
         return {
             "errors": errors,
@@ -166,7 +166,7 @@ class GraphValidator:
                         }
                     )
 
-    def _check_loss_label_compatibility(self, errors):
+    def _check_loss_label_compatibility(self, errors, warnings):
         """Error if the label tensor shape is incompatible with the chosen loss."""
         opt = self.flow.get("optimizer")
         if not opt or len(opt.inputs) < 2:
@@ -174,7 +174,6 @@ class GraphValidator:
         loss_type = opt.properties.get("lossType", "mse")
         labels_port = opt.inputs[1]
 
-        # Find the node feeding the labels port
         src_node = None
         for link in self.graph.links:
             if link.id_to == labels_port.id:
@@ -183,16 +182,9 @@ class GraphValidator:
         if src_node is None:
             return
 
-        # Determine if the label source produces one‑hot vectors.
-        # Heuristic: a onehot node always produces one‑hot. A column-select that selects
-        # multiple columns from a one‑hot result is also one‑hot (we can't know for sure,
-        # but we'll flag it as potentially incompatible).
         is_onehot = src_node.type == "onehot"
 
-        # For column‑select / row‑select / dim‑select after a one‑hot, we can't
-        # easily decide – we'll warn rather than error.
         if not is_onehot and src_node.type in DATA_TRANSFORM_TYPES:
-            # Try to see if the input to this node is a one‑hot
             for in_port in src_node.inputs:
                 for link in self.graph.links:
                     if link.id_to == in_port.id:
@@ -212,7 +204,6 @@ class GraphValidator:
                             )
                             return
 
-        # One‑hot labels require BCE or MSE; integer labels require CrossEntropy or NLL.
         if is_onehot:
             if loss_type not in ("bce", "mse", "l1", "huber"):
                 errors.append(
@@ -225,13 +216,12 @@ class GraphValidator:
                     }
                 )
         else:
-            # Not a one‑hot node – assume integer labels
             if loss_type in ("bce",):
                 errors.append(
                     {
                         "message": (
                             "Labels appear to be integer class indices, but "
-                            "BCEWithLogitsLoss expects one‑hot targets. "
+                            "BCEWithLogitsLoss expects one-hot targets. "
                             "Connect the OneHot node output instead, or switch to CrossEntropyLoss."
                         ),
                         "portId": labels_port.id,
