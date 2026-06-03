@@ -142,6 +142,12 @@ class CodeGenerator:
                     w.line(f"{nid}_out = {self.var_map[src_id]}")
 
         # 5. Collect visualization tensors
+        train_feed = self._get_var_for_first_model_input("train")
+        train_labels = self._get_var_for_optimizer_labels()
+        test_feed = self._get_var_for_first_model_input("eval")
+        test_labels = self._get_var_for_eval_labels()
+
+        # 5. Collect visualization tensors
         viz_nodes = self.flow.get("visualizations", [])
         viz_vars = {}
         if viz_nodes:
@@ -158,14 +164,7 @@ class CodeGenerator:
         w.line(f"y_train = {train_labels}")
         w.line(f"X_test = {test_feed}")
         w.line(f"y_test = {test_labels}")
-        if viz_vars:
-            w.line("viz_data = {")
-            for port_id, var in viz_vars.items():
-                w.line(f"    '{port_id}': {var},")
-            w.line("}")
-            w.line("return X_train, y_train, X_test, y_test, viz_data")
-        else:
-            w.line("return X_train, y_train, X_test, y_test, {}")
+        w.line("return X_train, y_train, X_test, y_test")
         w.dedent()
         w.line("")
 
@@ -559,17 +558,17 @@ class CodeGenerator:
             w.line("eval_values = predictions")
         w.line("mse = np.mean((predictions - y_test.numpy())**2)")
         w.line('print(f"Test MSE: {mse:.6f}")')
-        w.line("return predictions, eval_values")
+        w.line("return predictions, eval_values, X_test")
         w.dedent()
         w.dedent()
         w.line("")
 
         # Visualization function – always called, handles missing data internally
-        w.line("def visualize(predictions, y_test, eval_values):")
+        w.line("def visualize(predictions, y_test, eval_values, viz_data):")
         w.indent()
-        w.line("if predictions is None:")
+        w.line("if not viz_data:")
         w.indent()
-        w.line('print("No predictions – skipping visualization.")')
+        w.line('print("No visualization data connected.")')
         w.line("return")
         w.dedent()
         viz_nodes = self.flow.get("visualizations", [])
@@ -603,6 +602,6 @@ class CodeGenerator:
             "model = train_model(model, X_train, y_train, X_test, y_test, opt_config)"
         )
         w.line('print("Training complete.")')
-        w.line("predictions, eval_values = evaluate(model, X_test, y_test)")
-        w.line("visualize(predictions, y_test, eval_values)")
+        w.line("predictions, eval_values, X_test = evaluate(model, X_test, y_test)")
+        w.line("visualize(predictions, y_test, eval_values, X_test)")
         w.dedent()
