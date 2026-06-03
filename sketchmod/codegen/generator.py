@@ -634,64 +634,7 @@ class CodeGenerator:
         )
         w.line('print("Training complete.")')
         w.line("")
-
-        # ---- Inline evaluation ----
-        w.line("model.eval()")
-        w.line("with torch.no_grad():")
-        w.indent()
-        eval_feed = self._get_feed_key("eval")
-        w.line(f"outputs = model({{'{eval_feed}': X_test.to(device)}})")
-
-        # Store model outputs in var_map (sanitised)
-        output_node = next(
-            (n for n in self.graph.nodes.values() if n.type == "output"), None
-        )
-        if output_node:
-            for port in output_node.outputs:
-                var_name = self._sanitize_id(port.id) + "_tensor"
-                w.line(f"{var_name} = outputs['{port.id}']")
-                self.var_map[port.id] = var_name
-            if output_node.outputs:
-                self.var_map[output_node.id] = (
-                    self._sanitize_id(output_node.outputs[0].id) + "_tensor"
-                )
-
-        # Execute remaining eval data nodes (DeOneHot etc.)
-        eval_order = self.flow["eval_order"]
-        pre_set = self.flow.get("preprocessing_set", set())
-        for nid in eval_order:
-            node = self.graph.nodes[nid]
-            if node.type in MODEL_TYPES or nid in pre_set:
-                continue
-            self.translators[nid].data_code(w, "eval")
-
-        # Build viz_data from var_map, using only keys that feed a visualisation input
-        w.line("viz_data = {}")
-        for viz in self.flow.get("visualizations", []):
-            for port in viz.inputs:
-                for link in self.graph.links:
-                    if link.id_to == port.id:
-                        src_id = self.graph.ports[link.id_from].node_id
-                        if src_id in self.var_map:
-                            w.line(f"viz_data['{port.id}'] = {self.var_map[src_id]}")
-                        break
-
-        # Predictions for optional evaluation print
-        pred_port_id = None
-        if output_node:
-            pred_port = next(
-                (p for p in output_node.outputs if p.role == "prediction"), None
-            )
-            if pred_port:
-                pred_port_id = pred_port.id
-        if pred_port_id:
-            w.line(
-                f"predictions = {self._sanitize_id(pred_port_id)}_tensor.cpu().numpy()"
-            )
-        else:
-            w.line("predictions = list(outputs.values())[0].cpu().numpy()")
-        w.dedent()  # end no_grad
-
+        w.line("predictions, viz_data = evaluate(model, X_test, y_test, pre_data)")
         w.line("if y_test is not None:")
         w.indent()
         w.line("mse = np.mean((predictions - y_test.numpy())**2)")
@@ -701,6 +644,5 @@ class CodeGenerator:
         w.indent()
         w.line('print("No test labels – skipping evaluation.")')
         w.dedent()
-
         w.line("visualize(viz_data)")
         w.dedent()
