@@ -6369,7 +6369,15 @@ class OneHotEncodeNode extends RectNode {
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s) return this._emptyShapes();
-        const shape = [...s.shape, this.numClasses];
+
+        const shape = [...s.shape];
+        const lastDim = shape[shape.length - 1];
+        // If the last dimension is exactly 1, replace it with numClasses (squeeze)
+        if (lastDim.isNumber() && lastDim.toNumber() === 1) {
+            shape[shape.length - 1] = new ShapeExpr(this.numClasses);
+        } else {
+            shape.push(this.numClasses);
+        }
         return this._makeShapes(shape, s.symbolic, true);
     }
 
