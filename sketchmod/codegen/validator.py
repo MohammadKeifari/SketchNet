@@ -106,7 +106,7 @@ class GraphValidator:
 
     def _check_link_weights(self, warnings):
         for link in self.graph.links:
-            if link.weight == 0.0:
+            if link.has_weight and link.weight == 0.0:
                 warnings.append(
                     {
                         "message": (
