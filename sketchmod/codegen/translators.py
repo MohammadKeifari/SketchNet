@@ -610,25 +610,38 @@ class VisualizationTranslator(BaseTranslator):
         n = self.node
         coord_ports = [p for p in n.inputs if p.sub_type == "coord"]
         color_port = next((p for p in n.inputs if p.role == "color"), None)
-        w.line(f"# Visualization '{n.id}' – using test features and predictions")
+
+        w.line(f"# Visualization '{n.id}'")
         w.line("plt.figure()")
-        if len(coord_ports) == 2:
-            w.line("if X_test.shape[1] >= 2:")
-            w.indent()
-            w.line("x = X_test[:, 0].numpy().flatten()")
-            w.line("y = X_test[:, 1].numpy().flatten()")
+
+        # Build variable names from viz_data dictionary
+        var_names = []
+        for i, port in enumerate(coord_ports):
+            var = f"data_{i}"
+            w.line(f"{var} = viz_data.get('{port.id}')")
+            var_names.append(var)
+
+        if len(coord_ports) == 1:
+            w.line(f"plt.hist({var_names[0]}.flatten(), bins=20)")
+        elif len(coord_ports) == 2:
             w.line(
-                "c = predictions.argmax(axis=1) if predictions.ndim > 1 else predictions.flatten()"
+                f"plt.scatter({var_names[0]}.flatten(), {var_names[1]}.flatten(), alpha=0.5)"
             )
-            w.line("plt.scatter(x, y, c=c, alpha=0.5, cmap='tab10')")
-            w.line("plt.xlabel('Feature 0')")
-            w.line("plt.ylabel('Feature 1')")
+        elif len(coord_ports) == 3:
+            w.line("fig = plt.figure()")
+            w.line("ax = fig.add_subplot(111, projection='3d')")
+            w.line(f"ax.scatter({var_names[0]}, {var_names[1]}, {var_names[2]})")
+        if color_port:
+            w.line(f"colors = viz_data.get('{color_port.id}')")
+            w.line("if colors is not None:")
+            w.indent()
+            w.line(
+                "plt.scatter("
+                + ", ".join(f"{v}.flatten()" for v in var_names[:2])
+                + ", c=colors.flatten(), alpha=0.5, cmap='tab10')"
+            )
             w.dedent()
-        else:
-            w.line("plt.hist(predictions.flatten(), bins=20)")
-        if color_port and n.properties.get("colorMode") == "discrete":
-            w.line("plt.colorbar(label='Class')")
-        w.line("plt.title(f'Visualization {n.id}')")
+        w.line(f"plt.title('Visualization {n.id}')")
         w.line("plt.grid(True)")
         w.line("plt.show()")
 
