@@ -610,40 +610,28 @@ class VisualizationTranslator(BaseTranslator):
         n = self.node
         coord_ports = [p for p in n.inputs if p.sub_type == "coord"]
         color_port = next((p for p in n.inputs if p.role == "color"), None)
+
+        # Collect the variable names from the viz_data dictionary
+        coord_vars = []
+        for port in coord_ports:
+            w.line(f"# looking for port {port.id}")
+            w.line(f"x_{port.id} = viz_data.get('{port.id}')")
+
         w.line(f"# Visualization '{n.id}'")
         w.line("plt.figure()")
         if len(coord_ports) == 1:
-            w.line("plt.hist(predictions.flatten(), bins=20)")
+            w.line(f"plt.hist(x_{coord_ports[0].id}.flatten(), bins=20)")
         elif len(coord_ports) == 2:
-            w.line("if y_test is not None:")
-            w.indent()
             w.line(
-                "plt.scatter(y_test.numpy().flatten(), predictions.flatten(), alpha=0.5)"
+                f"plt.scatter(x_{coord_ports[0].id}.flatten(), x_{coord_ports[1].id}.flatten(), alpha=0.5)"
             )
-            w.dedent()
-            w.line("else:")
-            w.indent()
-            w.line("# No test labels; plotting predictions vs index")
-            w.line(
-                "plt.scatter(range(len(predictions)), predictions.flatten(), alpha=0.5)"
-            )
-            w.dedent()
-            w.line("plt.xlabel('Sample index')")
-            w.line("plt.ylabel('Predictions')")
         elif len(coord_ports) == 3:
             w.line("fig = plt.figure()")
             w.line("ax = fig.add_subplot(111, projection='3d')")
-            w.line("if y_test is not None:")
-            w.indent()
-            w.line("ax.scatter(y_test, predictions, eval_values)")
-            w.dedent()
-            w.line("else:")
-            w.indent()
-            w.line("ax.scatter(range(len(predictions)), predictions, eval_values)")
-            w.dedent()
-        if color_port and n.properties.get("colorMode") in ("discrete", "continuous"):
-            w.line("# Color mapping would go here (omitted for brevity)")
-        w.line("plt.title(f'Visualization {n.id}')")
+            w.line(
+                f"ax.scatter(x_{coord_ports[0].id}, x_{coord_ports[1].id}, x_{coord_ports[2].id})"
+            )
+        w.line(f"plt.title('Visualization {n.id}')")
         w.line("plt.grid(True)")
         w.line("plt.show()")
 
