@@ -681,6 +681,66 @@ class VisualizationTranslator(BaseTranslator):
         w.line("plt.show()")
 
 
+class PrintTranslator(BaseTranslator):
+    node_type = "print"
+
+    def data_code(self, w, phase):
+        n = self.node
+        label = n.properties.get("label", "") or n.id
+        # Print each connected input
+        for i, port in enumerate(n.inputs):
+            for link in self.graph.links:
+                if link.id_to == port.id:
+                    src_id = self.graph.ports[link.id_from].node_id
+                    var = self.var_map.get(src_id, "None")
+                    w.line(f'print("{label}[{i}]:", {var}.shape, {var}[:3])')
+                    break
+
+
+class AccuracyTranslator(BaseTranslator):
+    node_type = "accuracy"
+
+    def data_code(self, w, phase):
+        n = self.node
+        show_confusion = n.properties.get("showConfusion", False)
+        # Get the two input variables
+        pred_var = None
+        label_var = None
+        for port in n.inputs:
+            for link in self.graph.links:
+                if link.id_to == port.id:
+                    src_id = self.graph.ports[link.id_from].node_id
+                    var = self.var_map.get(src_id, "None")
+                    if port.index == 0:
+                        pred_var = var
+                    else:
+                        label_var = var
+                    break
+        if not pred_var or not label_var:
+            w.line("# Accuracy node missing inputs")
+            return
+
+        w.line(f"# Accuracy calculation")
+        w.line(
+            f"pred_labels = {pred_var}.argmax(dim=1) if {pred_var}.dim() == 2 else {pred_var}"
+        )
+        w.line(
+            f"true_labels = {label_var}.argmax(dim=1) if {label_var}.dim() == 2 else {label_var}"
+        )
+        w.line(f"acc = (pred_labels == true_labels).float().mean()")
+        w.line(f'print(f"Accuracy: {{acc.item():.4f}}")')
+
+        if show_confusion:
+            w.line(
+                "from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay"
+            )
+            w.line(f"cm = confusion_matrix(true_labels.cpu(), pred_labels.cpu())")
+            w.line("disp = ConfusionMatrixDisplay(confusion_matrix=cm)")
+            w.line("disp.plot()")
+            w.line("plt.title('Confusion Matrix')")
+            w.line("plt.show()")
+
+
 # Registry mapping node type -> translator class
 TRANSLATOR_REGISTRY = {
     "input-data": InputDataTranslator,
@@ -702,6 +762,8 @@ TRANSLATOR_REGISTRY = {
     "output": OutputTranslator,
     "optimizer": OptimizerTranslator,
     "visualization": VisualizationTranslator,
+    "print": PrintTranslator,
+    "accuracy": AccuracyTranslator,
 }
 
 
