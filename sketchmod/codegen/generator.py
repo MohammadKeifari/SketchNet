@@ -189,7 +189,9 @@ class CodeGenerator:
                         explicit_candidates.append(var)
                     else:
                         fallback_candidates.append(var)
-
+        print(
+            f"[DEBUG] phase={phase}, full_phase={full_phase}, explicit={explicit_candidates}, fallback={fallback_candidates}"
+        )
         if explicit_candidates:
             return explicit_candidates[0]
         if fallback_candidates:
@@ -340,6 +342,7 @@ class CodeGenerator:
         w.line("else:")
         w.indent()
         w.line("test_loader = None")
+        w.line('print("No validation data – training only.")')
         w.dedent()
         w.line("")
         # Loss
@@ -461,10 +464,6 @@ class CodeGenerator:
         w.dedent()
         w.dedent()  # end if patience
         w.dedent()  # end if test_loader
-        w.line("else:")
-        w.indent()
-        w.line('print("No validation data – training only.")')
-        w.dedent()
         w.dedent()  # end epoch loop
         w.line("")
         w.line("return model")
@@ -472,17 +471,24 @@ class CodeGenerator:
         w.line("")
 
     def _get_feed_key(self, phase):
+        PHASE_MAP = {
+            "preprocessing": "preprocessing",
+            "train": "training",
+            "eval": "evaluation",
+        }
+        full_phase = PHASE_MAP.get(phase, phase)
+
         order = self.flow[f"{phase}_order"]
-        phase_set = self.flow.get(f"{phase}_set", set())
         for nid in order:
             if self.graph.nodes[nid].type in MODEL_TYPES:
+                # look for an input source that has the phase on its output port
                 for in_port in self.graph.nodes[nid].inputs:
                     for link in self.graph.links:
                         if link.id_to == in_port.id:
-                            src_id = self.graph.ports[link.id_from].node_id
-                            if src_id in phase_set:
-                                return src_id
-                # fallback
+                            src_port = self.graph.ports[link.id_from]
+                            if full_phase in src_port.activation_phases:
+                                return src_port.node_id
+                # fallback: any connected source
                 for in_port in self.graph.nodes[nid].inputs:
                     for link in self.graph.links:
                         if link.id_to == in_port.id:
@@ -543,12 +549,13 @@ class CodeGenerator:
         w.dedent()
         w.dedent()
         w.line("")
-        # Visualization
+
+        # Visualization function – always called, handles missing data internally
         w.line("def visualize(predictions, y_test, eval_values):")
         w.indent()
-        w.line("if predictions is None or y_test is None:")
+        w.line("if predictions is None:")
         w.indent()
-        w.line('print("Skipping visualization (no data).")')
+        w.line('print("No predictions – skipping visualization.")')
         w.line("return")
         w.dedent()
         viz_nodes = self.flow.get("visualizations", [])
@@ -581,6 +588,7 @@ class CodeGenerator:
         w.line(
             "model = train_model(model, X_train, y_train, X_test, y_test, opt_config)"
         )
+        w.line('print("Training complete.")')
         w.line("predictions, eval_values = evaluate(model, X_test, y_test)")
         w.line("visualize(predictions, y_test, eval_values)")
         w.dedent()
