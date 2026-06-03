@@ -43,6 +43,7 @@ class GraphValidator:
         return {
             "errors": errors,
             "warnings": warnings,
+            "isValid": len(errors) == 0,
         }
 
     # ---------- Errors ----------
