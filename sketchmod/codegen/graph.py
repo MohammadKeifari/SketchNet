@@ -151,7 +151,7 @@ def parse_graph(json_data: dict) -> Graph:
         link = Link(
             id_from=l["from"],
             id_to=l["to"],
-            weight=l.get("weight", 1.0) if l.get("weight") != 0 else 1.0,
+            weight=l.get("weight", 1.0),
             weight_shape=l.get("weightShape"),
             has_weight=l.get("hasWeight", False),
         )
