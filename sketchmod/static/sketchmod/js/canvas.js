@@ -5237,7 +5237,23 @@ class OutputNode extends RectNode {
         return errors;
     }
     computeOutputShapes() {
-        return [];
+        let foundShape = null;
+        for (const inPort of this.inputs) {
+            const link = SketchMod.links.find((l) => l.to === inPort);
+            if (link && link.from.shape && link.from.shape.shape) {
+                foundShape = link.from.shape;
+                break;
+            }
+        }
+        if (foundShape) {
+            return this.outputs.map(() => ({
+                shape: foundShape.shape.map((s) => new ShapeExpr(s)),
+                dtype: foundShape.dtype,
+                known: foundShape.known,
+                symbolic: foundShape.symbolic,
+            }));
+        }
+        return this._emptyShapes();
     }
 
     canAddOutput() {
