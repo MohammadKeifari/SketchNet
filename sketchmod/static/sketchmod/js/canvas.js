@@ -7589,7 +7589,7 @@ class Link {
     constructor(from, to, weight) {
         this.from = from;
         this.to = to;
-        this.weight = weight || 0;
+        this.weight = weight || 1;
         this.weightShape = null;
         this.hasWeight = false; // True for Data→Model and Model→Model connections
     }
