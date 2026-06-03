@@ -178,10 +178,12 @@ class CodeGenerator:
         w.line("def evaluate(model, X_test, y_test, pre_data):")
         w.indent()
 
-        # Unpack pre_data into local variables so translators find them
-        w.line("# Unpack preprocessed tensors")
+        # Unpack pre_data into local variables with sanitised names
         for key in self.var_map:
-            w.line(f"{key} = pre_data['{key}']")
+            sanitised = self._sanitize_id(key)
+            w.line(f"{sanitised} = pre_data['{key}']")
+            # Also update var_map so translators find the sanitised name
+            self.var_map[key] = sanitised
 
         w.line("")
         w.line("model.eval()")
@@ -190,19 +192,20 @@ class CodeGenerator:
         eval_feed = self._get_feed_key("eval")
         w.line(f"outputs = model({{'{eval_feed}': X_test.to(device)}})")
 
-        # Store model outputs with sanitised names and add to var_map
+        # Store model outputs with sanitised names
         output_node = next(
             (n for n in self.graph.nodes.values() if n.type == "output"), None
         )
         if output_node:
             for port in output_node.outputs:
-                var_name = self._sanitize_id(port.id) + "_tensor"
-                w.line(f"{var_name} = outputs['{port.id}']")
-                self.var_map[port.id] = var_name
+                sanitised = self._sanitize_id(port.id) + "_tensor"
+                w.line(f"{sanitised} = outputs['{port.id}']")
+                self.var_map[port.id] = sanitised
             if output_node.outputs:
-                self.var_map[output_node.id] = (
+                first_sanitised = (
                     self._sanitize_id(output_node.outputs[0].id) + "_tensor"
                 )
+                self.var_map[output_node.id] = first_sanitised
 
         # Execute remaining eval data nodes (DeOneHot etc.)
         eval_order = self.flow["eval_order"]
@@ -233,13 +236,12 @@ class CodeGenerator:
             if pred_port:
                 pred_port_id = pred_port.id
         if pred_port_id:
-            w.line(
-                f"predictions = {self._sanitize_id(pred_port_id)}_tensor.cpu().numpy()"
-            )
+            pred_var = self._sanitize_id(pred_port_id) + "_tensor"
+            w.line(f"predictions = {pred_var}.cpu().numpy()")
         else:
             w.line("predictions = list(outputs.values())[0].cpu().numpy()")
-        w.dedent()  # end no_grad
 
+        w.dedent()  # end no_grad
         w.line("return predictions, viz_data")
         w.dedent()
         w.line("")
