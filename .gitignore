@@ -9,5 +9,5 @@ db.sqlite3
 *.code-workspace
 media/
 todo.txt
-sketchmod/tests/examples/*.py
-sketchmod/tests/examples/data
+sketchmod/tests/codegen/examples/*.py
+sketchmod/tests/codegen/examples/data
