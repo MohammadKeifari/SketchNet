@@ -39,7 +39,7 @@ class CodeGenerator:
             self.translators[nid] = get_translator(node, self.graph, self.var_map)
 
     def _sanitize_id(self, id_str):
-        """Replace any non‑alphanumeric (except underscore) with '_'."""
+        """Replace any non-alphanumeric (except underscore) with '_'."""
         return re.sub(r"[^a-zA-Z0-9_]", "_", id_str)
 
     def generate(self) -> str:
