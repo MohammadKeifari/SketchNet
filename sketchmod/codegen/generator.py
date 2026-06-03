@@ -165,74 +165,84 @@ class CodeGenerator:
         w.line("return X_train, y_train, X_test, y_test, pre_data")
         w.dedent()
         w.line("")
+
     def _write_evaluate_function(self, w):
-    """
-    Writes a function `evaluate(model, X_test, y_test, pre_data)` that:
-      - unpacks pre_data into local variables
-      - runs the model
-      - executes any remaining eval data nodes
-      - collects viz_data and predictions
-    """
-    w.line("def evaluate(model, X_test, y_test, pre_data):")
-    w.indent()
+        """
+        Writes a function `evaluate(model, X_test, y_test, pre_data)` that:
+        - unpacks pre_data into local variables
+        - runs the model
+        - executes any remaining eval data nodes
+        - collects viz_data and predictions
+        """
+        w.line("def evaluate(model, X_test, y_test, pre_data):")
+        w.indent()
 
-    # Unpack pre_data into local variables so translators find them
-    w.line("# Unpack preprocessed tensors")
-    for key in self.var_map:
-        w.line(f"{key} = pre_data['{key}']")
+        # Unpack pre_data into local variables so translators find them
+        w.line("# Unpack preprocessed tensors")
+        for key in self.var_map:
+            w.line(f"{key} = pre_data['{key}']")
 
-    w.line("")
-    w.line("model.eval()")
-    w.line("with torch.no_grad():")
-    w.indent()
-    eval_feed = self._get_feed_key("eval")
-    w.line(f"outputs = model({{'{eval_feed}': X_test.to(device)}})")
+        w.line("")
+        w.line("model.eval()")
+        w.line("with torch.no_grad():")
+        w.indent()
+        eval_feed = self._get_feed_key("eval")
+        w.line(f"outputs = model({{'{eval_feed}': X_test.to(device)}})")
 
-    # Store model outputs with sanitised names and add to var_map
-    output_node = next((n for n in self.graph.nodes.values() if n.type == "output"), None)
-    if output_node:
-        for port in output_node.outputs:
-            var_name = self._sanitize_id(port.id) + "_tensor"
-            w.line(f"{var_name} = outputs['{port.id}']")
-            self.var_map[port.id] = var_name
-        if output_node.outputs:
-            self.var_map[output_node.id] = self._sanitize_id(output_node.outputs[0].id) + "_tensor"
+        # Store model outputs with sanitised names and add to var_map
+        output_node = next(
+            (n for n in self.graph.nodes.values() if n.type == "output"), None
+        )
+        if output_node:
+            for port in output_node.outputs:
+                var_name = self._sanitize_id(port.id) + "_tensor"
+                w.line(f"{var_name} = outputs['{port.id}']")
+                self.var_map[port.id] = var_name
+            if output_node.outputs:
+                self.var_map[output_node.id] = (
+                    self._sanitize_id(output_node.outputs[0].id) + "_tensor"
+                )
 
-    # Execute remaining eval data nodes (DeOneHot etc.)
-    eval_order = self.flow["eval_order"]
-    pre_set = self.flow.get("preprocessing_set", set())
-    for nid in eval_order:
-        node = self.graph.nodes[nid]
-        if node.type in MODEL_TYPES or nid in pre_set:
-            continue
-        self.translators[nid].data_code(w, "eval")
+        # Execute remaining eval data nodes (DeOneHot etc.)
+        eval_order = self.flow["eval_order"]
+        pre_set = self.flow.get("preprocessing_set", set())
+        for nid in eval_order:
+            node = self.graph.nodes[nid]
+            if node.type in MODEL_TYPES or nid in pre_set:
+                continue
+            self.translators[nid].data_code(w, "eval")
 
-    # Collect visualisation data
-    w.line("viz_data = {}")
-    for viz in self.flow.get("visualizations", []):
-        for port in viz.inputs:
-            for link in self.graph.links:
-                if link.id_to == port.id:
-                    src_id = self.graph.ports[link.id_from].node_id
-                    if src_id in self.var_map:
-                        w.line(f"viz_data['{port.id}'] = {self.var_map[src_id]}")
-                    break
+        # Collect visualisation data
+        w.line("viz_data = {}")
+        for viz in self.flow.get("visualizations", []):
+            for port in viz.inputs:
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src_id = self.graph.ports[link.id_from].node_id
+                        if src_id in self.var_map:
+                            w.line(f"viz_data['{port.id}'] = {self.var_map[src_id]}")
+                        break
 
-    # Predictions for optional printing
-    pred_port_id = None
-    if output_node:
-        pred_port = next((p for p in output_node.outputs if p.role == "prediction"), None)
-        if pred_port:
-            pred_port_id = pred_port.id
-    if pred_port_id:
-        w.line(f"predictions = {self._sanitize_id(pred_port_id)}_tensor.cpu().numpy()")
-    else:
-        w.line("predictions = list(outputs.values())[0].cpu().numpy()")
-    w.dedent()  # end no_grad
+        # Predictions for optional printing
+        pred_port_id = None
+        if output_node:
+            pred_port = next(
+                (p for p in output_node.outputs if p.role == "prediction"), None
+            )
+            if pred_port:
+                pred_port_id = pred_port.id
+        if pred_port_id:
+            w.line(
+                f"predictions = {self._sanitize_id(pred_port_id)}_tensor.cpu().numpy()"
+            )
+        else:
+            w.line("predictions = list(outputs.values())[0].cpu().numpy()")
+        w.dedent()  # end no_grad
 
-    w.line("return predictions, viz_data")
-    w.dedent()
-    w.line("")
+        w.line("return predictions, viz_data")
+        w.dedent()
+        w.line("")
+
     # ------------------------------------------------------------------
     def _get_var_for_first_model_input(self, phase):
         # Map generator's short names to the full names used in port activationPhases
