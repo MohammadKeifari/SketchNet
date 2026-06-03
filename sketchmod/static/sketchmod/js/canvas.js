@@ -2772,6 +2772,12 @@ const SketchMod = {
             this.offsetY = 0;
             this.scale = 1;
             this._render();
+
+            // Remove the 'load' parameter from the URL so a refresh doesn't reload the old model
+            if (window.history && window.history.replaceState) {
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, "", newUrl);
+            }
         }
     },
     _updateModelInfo() {
@@ -3623,10 +3629,20 @@ const SketchMod = {
         this.nodes = [];
         this.links = [];
         this.ports = [];
-        this._currentModelId = null;
-        this._currentModelName = null;
         this.nodeCounter = graph.nodeCounter || 0;
 
+        // Reset model ownership
+        this._currentModelId = null;
+        this._currentModelName = null;
+        sessionStorage.removeItem("sketchmod-active-model-id");
+
+        // Remove the 'load' parameter from the URL
+        if (window.history && window.history.replaceState) {
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, "", newUrl);
+        }
+
+        // Rebuild nodes
         for (const nd of graph.nodes) {
             const entry = this.nodeRegistry.find((r) => r.type === nd.type);
             let node;
@@ -3646,6 +3662,7 @@ const SketchMod = {
 
         this.ports = this._collectPorts();
 
+        // Rebuild links
         for (const ld of graph.links) {
             const from = this.ports.find((p) => p.id === ld.from);
             const to = this.ports.find((p) => p.id === ld.to);
@@ -3657,11 +3674,12 @@ const SketchMod = {
             }
         }
 
-        // Restore port shapes & phases
+        // Restore port shapes & activation phases
         if (graph.ports) {
             for (const p of graph.ports) {
                 const port = this.ports.find((pp) => pp.id === p.id);
-                if (port && p.shape) {
+                if (!port) continue;
+                if (p.shape) {
                     port.setShape(
                         p.shape.shape,
                         p.shape.dtype,
@@ -3669,7 +3687,7 @@ const SketchMod = {
                         p.shape.symbolic,
                     );
                 }
-                if (port && p.activationPhases) {
+                if (p.activationPhases) {
                     port.activationPhases = p.activationPhases;
                 }
             }
