@@ -152,24 +152,12 @@ class CodeGenerator:
         test_feed = self._get_var_for_first_model_input("eval")
         test_labels = self._get_var_for_eval_labels()
 
-        # 5. Collect visualization tensors
-        viz_nodes = self.flow.get("visualizations", [])
-        viz_vars = {}
-        if viz_nodes:
-            for viz in viz_nodes:
-                for port in viz.inputs:
-                    for link in self.graph.links:
-                        if link.id_to == port.id:
-                            src_id = self.graph.ports[link.id_from].node_id
-                            if src_id in self.var_map:
-                                viz_vars[port.id] = self.var_map[src_id]
-                            break
-
-        w.line(f"X_train = {train_feed}")
-        w.line(f"y_train = {train_labels}")
-        w.line(f"X_test = {test_feed}")
-        w.line(f"y_test = {test_labels}")
-        w.line("return X_train, y_train, X_test, y_test")
+        # 5. Build pre‑processed data dict for evaluation / visualisation
+        w.line("pre_data = {")
+        for key, var in self.var_map.items():
+            w.line(f"    '{key}': {var},")
+        w.line("}")
+        w.line(f"return X_train, y_train, X_test, y_test, pre_data")
         w.dedent()
         w.line("")
 
@@ -545,7 +533,7 @@ class CodeGenerator:
     def _write_main(self, w):
         w.line("if __name__ == '__main__':")
         w.indent()
-        w.line("X_train, y_train, X_test, y_test = load_and_preprocess()")
+        w.line("X_train, y_train, X_test, y_test, pre_data = load_and_preprocess()")
         w.line("X_train = X_train.float()")
         w.line("if y_train is not None: y_train = y_train.float()")
         w.line("X_test = X_test.float()")
@@ -571,18 +559,19 @@ class CodeGenerator:
         w.indent()
         eval_feed = self._get_feed_key("eval")
         w.line(f"outputs = model({{'{eval_feed}': X_test.to(device)}})")
-        # Store model outputs with sanitised variable names
+
+        # Store model outputs in var_map (sanitised)
         output_node = next(
             (n for n in self.graph.nodes.values() if n.type == "output"), None
         )
         if output_node:
             for port in output_node.outputs:
-                var_name = f"{self._sanitize_id(port.id)}_tensor"
+                var_name = self._sanitize_id(port.id) + "_tensor"
                 w.line(f"{var_name} = outputs['{port.id}']")
                 self.var_map[port.id] = var_name
             if output_node.outputs:
                 self.var_map[output_node.id] = (
-                    f"{self._sanitize_id(output_node.outputs[0].id)}_tensor"
+                    self._sanitize_id(output_node.outputs[0].id) + "_tensor"
                 )
 
         # Execute remaining eval data nodes (DeOneHot etc.)
@@ -594,7 +583,7 @@ class CodeGenerator:
                 continue
             self.translators[nid].data_code(w, "eval")
 
-        # Collect visualisation data
+        # Build viz_data from var_map, using only keys that feed a visualisation input
         w.line("viz_data = {}")
         for viz in self.flow.get("visualizations", []):
             for port in viz.inputs:
@@ -605,7 +594,7 @@ class CodeGenerator:
                             w.line(f"viz_data['{port.id}'] = {self.var_map[src_id]}")
                         break
 
-        # Predictions (only for optional MSE print)
+        # Predictions for optional evaluation print
         pred_port_id = None
         if output_node:
             pred_port = next(
@@ -618,10 +607,9 @@ class CodeGenerator:
                 f"predictions = {self._sanitize_id(pred_port_id)}_tensor.cpu().numpy()"
             )
         else:
-            w.line("predictions = outputs[list(outputs.keys())[0]].cpu().numpy()")
+            w.line("predictions = list(outputs.values())[0].cpu().numpy()")
         w.dedent()  # end no_grad
 
-        # Optional evaluation
         w.line("if y_test is not None:")
         w.indent()
         w.line("mse = np.mean((predictions - y_test.numpy())**2)")
