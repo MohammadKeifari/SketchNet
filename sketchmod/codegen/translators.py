@@ -610,12 +610,8 @@ class VisualizationTranslator(BaseTranslator):
         n = self.node
         coord_ports = [p for p in n.inputs if p.sub_type == "coord"]
         color_port = next((p for p in n.inputs if p.role == "color"), None)
-
-        # Collect the column indices by looking at column‑select nodes upstream
-        # (hard‑coded heuristic; a proper design would pass the data directly)
         w.line(f"# Visualization '{n.id}' – using test features and predictions")
         w.line("plt.figure()")
-        # For 2 coord ports, plot X_test[:,0] vs X_test[:,1] if dimensions match
         if len(coord_ports) == 2:
             w.line("if X_test.shape[1] >= 2:")
             w.indent()
