@@ -327,7 +327,7 @@ class NeuronTranslator(BaseTranslator):
             for link in self.graph.links:
                 if link.id_to == port.id:
                     weight_name = f"weight_{link.id_from}_{link.id_to}"
-                    init_val = link.weight if link.weight != 0.0 else 1.0
+                    init_val = float(link.weight) if link.weight != 0.0 else 1.0
                     w.line(
                         f"self.{weight_name} = nn.Parameter(torch.tensor({init_val}))"
                     )
