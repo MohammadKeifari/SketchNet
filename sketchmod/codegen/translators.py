@@ -693,7 +693,7 @@ class PrintTranslator(BaseTranslator):
                 if link.id_to == port.id:
                     src_id = self.graph.ports[link.id_from].node_id
                     var = self.var_map.get(src_id, "None")
-                    w.line(f'print("{label}[{i}]:", {var}.shape, {var}')
+                    w.line(f'print("{label}[{i}]:", {var}.shape, {var})')
                     break
 
 
