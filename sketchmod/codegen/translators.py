@@ -372,7 +372,11 @@ class NeuronTranslator(BaseTranslator):
         w.dedent()
         activation = n.properties.get("activation", "relu")
         w.line(f"x = self.fc_{n.id}(x)")
-        w.line(f"x = torch.{activation}(x)")
+        if activation in ("linear", "none"):
+            # no activation function
+            pass  # x already holds the linear output
+        else:
+            w.line(f"x = torch.{activation}(x)")
         w.line(f"outputs['{n.id}'] = x")
 
     def _guess_in_features(self, node):
