@@ -96,7 +96,8 @@ def default_check(proc, code, graph):
             print("❌ Traceback in stderr")
             ok = False
         else:
-            print("⚠️  stderr output (warnings?)")
+            print("⚠️  stderr output (likely harmless warnings):")
+            print(proc.stderr.strip()[:500])  # first 500 chars
     return ok
 
 
