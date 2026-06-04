@@ -1,3 +1,23 @@
+"""
+Main code generation engine for SketchNet.
+
+This module orchestrates the conversion of a SketchNet computation graph JSON
+into executable PyTorch training code. The CodeGenerator class coordinates:
+1. Graph parsing and phase analysis to determine execution order
+2. Node translation through specialized translators
+3. Code generation for data loading, model definition, training, and evaluation
+4. Variable tracking to maintain consistency across code sections
+
+The generated code follows a standard template:
+- Imports and device setup
+- load_and_preprocess(): Data loading and preprocessing
+- Model class definition with __init__ and forward methods
+- Training loop with loss computation and backpropagation
+- Evaluation function for test data
+- Evaluation phase with predictions and visualizations
+- Main execution block
+"""
+
 import json
 from .graph import parse_graph, Graph, Node
 from .phase_analyzer import analyze_phases
@@ -29,7 +49,29 @@ DATA_TRANSFORM_TYPES = {
 
 
 class CodeGenerator:
+    """
+    Generates executable PyTorch code from a SketchNet computation graph.
+    
+    The generator performs a multi-stage code generation process:
+    1. Parses the JSON graph and analyzes execution phases
+    2. Creates translator instances for each node
+    3. Generates code sections in order (header, preprocessing, model, training, evaluation)
+    4. Manages variable names to maintain consistency across sections
+    
+    Attributes:
+        graph (Graph): The parsed computation graph.
+        flow (Dict): Execution flow information from phase analysis.
+        var_map (Dict): Mapping of node/port IDs to variable names.
+        translators (Dict): Mapping of node IDs to translator instances.
+    """
+    
     def __init__(self, graph_data: dict):
+        """
+        Initialize the code generator with JSON graph data.
+        
+        Args:
+            graph_data (dict): JSON representation of the computation graph from the frontend.
+        """
         self.graph = parse_graph(graph_data)
         self.flow = analyze_phases(self.graph)
         self.var_map = {}  # node/port id -> variable name
@@ -39,7 +81,17 @@ class CodeGenerator:
             self.translators[nid] = get_translator(node, self.graph, self.var_map)
 
     def _sanitize_id(self, id_str):
-        """Replace any non-alphanumeric (except underscore) with '_'."""
+        """
+        Convert a graph ID into a valid Python variable name.
+        
+        Replaces any non-alphanumeric characters (except underscores) with underscores.
+        
+        Args:
+            id_str (str): The graph element ID.
+            
+        Returns:
+            str: A sanitized identifier suitable for Python code.
+        """
         return re.sub(r"[^a-zA-Z0-9_]", "_", id_str)
 
     def _has_training(self) -> bool:
@@ -59,6 +111,15 @@ class CodeGenerator:
         return False
 
     def generate(self) -> str:
+        """
+        Generate the complete PyTorch training script.
+        
+        Orchestrates all code generation stages and assembles them into a single
+        executable Python script.
+        
+        Returns:
+            str: The complete generated Python code as a single string.
+        """
         w = CodeWriter()
         self._write_header(w)
         self._write_load_and_preprocess(w)
@@ -80,7 +141,19 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _node_active_strict(self, nid, phase):
-        """Return True if every connected port of nid has `phase` in activationPhases."""
+        """
+        Check if a node is active in a phase using strict rules.
+        
+        A node is strictly active only if ALL its connected ports have the phase
+        in their activation_phases list.
+        
+        Args:
+            nid (str): The node ID.
+            phase (str): The phase to check ("training" or "evaluation").
+            
+        Returns:
+            bool: True if the node is active in the phase.
+        """
         node = self.graph.nodes[nid]
         for p in node.inputs + node.paramInputs:
             if any(l.id_to == p.id for l in self.graph.links):
@@ -93,6 +166,12 @@ class CodeGenerator:
         return True
 
     def _write_header(self, w):
+        """
+        Write PyTorch imports and device initialization.
+        
+        Args:
+            w (CodeWriter): The code writer.
+        """
         w.line("import torch")
         w.line("import torch.nn as nn")
         w.line("import torch.optim as optim")

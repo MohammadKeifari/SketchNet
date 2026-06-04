@@ -1,3 +1,14 @@
+"""
+Graph validation for SketchNet code generation.
+
+This module validates the structure and connections of a computation graph before
+code generation. It checks for required nodes, correct connections, proper cardinality
+of multi-input operations, and compatibility between loss functions and label formats.
+
+Validation produces errors (which block code generation) and warnings (which alert
+the user to potential issues but allow generation to proceed).
+"""
+
 from .graph import parse_graph
 from .phase_analyzer import analyze_phases
 
@@ -23,11 +34,38 @@ DATA_TRANSFORM_TYPES = {
 
 
 class GraphValidator:
+    """
+    Validates a computation graph for correctness and completeness.
+
+    This validator checks the graph for errors (missing required nodes, incorrect
+    connections) and warnings (potential issues like untrained layers in preprocessing,
+    loss-label mismatches, etc.).
+
+    Attributes:
+        graph: The parsed Graph object.
+        flow (Dict): Execution flow information from phase analysis.
+    """
+
     def __init__(self, graph_data):
+        """
+        Initialize the validator with JSON graph data.
+
+        Args:
+            graph_data (dict): JSON graph data (same format as CodeGenerator accepts).
+        """
         self.graph = parse_graph(graph_data)
         self.flow = analyze_phases(self.graph)
 
     def validate(self):
+        """
+        Run all validation checks on the graph.
+
+        Returns:
+            dict: Validation result with keys:
+                - "errors": List of error dicts (blocks code generation)
+                - "warnings": List of warning dicts (informational only)
+                - "isValid": Boolean (True if no errors)
+        """
         errors = []
         warnings = []
 
@@ -51,6 +89,12 @@ class GraphValidator:
     # ---------- Errors ----------
 
     def _check_input_output_present(self, errors):
+        """
+        Check that the graph has at least one input-data and one output node.
+
+        Args:
+            errors (List): List to append error dicts to.
+        """
         has_input = any(n.type == "input-data" for n in self.graph.nodes.values())
         has_output = any(n.type == "output" for n in self.graph.nodes.values())
         if not has_input:
@@ -80,6 +124,12 @@ class GraphValidator:
                 )
 
     def _check_multi_port_cardinality(self, errors):
+        """
+        Check that multi-input nodes (add, concat) have the correct number of inputs.
+
+        Args:
+            errors (List): List to append error dicts to.
+        """
         for node in self.graph.nodes.values():
             if node.type == "add":
                 in_count = sum(
@@ -111,6 +161,12 @@ class GraphValidator:
     # ---------- Warnings ----------
 
     def _check_link_weights(self, warnings):
+        """
+        Warn if a weighted link has weight 0 (would block gradients).
+
+        Args:
+            warnings (List): List to append warning dicts to.
+        """
         for link in self.graph.links:
             if link.has_weight and link.weight == 0.0:
                 warnings.append(
@@ -124,7 +180,12 @@ class GraphValidator:
                 )
 
     def _check_model_connectivity(self, warnings):
-        """Warn only if a model node is not reachable in any phase."""
+        """
+        Warn if a model node is not reachable in any phase (training or evaluation).
+
+        Args:
+            warnings (List): List to append warning dicts to.
+        """
         train_set = set(self.flow["train_order"])
         eval_set = set(self.flow["eval_order"])
         for nid, node in self.graph.nodes.items():
@@ -138,6 +199,12 @@ class GraphValidator:
                     )
 
     def _check_preprocessing_models(self, warnings):
+        """
+        Warn if a model layer appears in the preprocessing phase (will be untrained).
+
+        Args:
+            warnings (List): List to append warning dicts to.
+        """
         for nid in self.flow["preprocessing_order"]:
             node = self.graph.nodes[nid]
             if node.type in MODEL_TYPES:
@@ -152,6 +219,12 @@ class GraphValidator:
                 )
 
     def _check_label_encoding(self, warnings):
+        """
+        Warn if one-hot encoded labels are used with CrossEntropyLoss.
+
+        Args:
+            warnings (List): List to append warning dicts to.
+        """
         opt = self.flow.get("optimizer")
         if not opt or len(opt.inputs) < 2:
             return
@@ -175,7 +248,13 @@ class GraphValidator:
                     )
 
     def _check_loss_label_compatibility(self, errors, warnings):
-        """Error if the label tensor shape is incompatible with the chosen loss."""
+        """
+        Check that the label tensor shape is compatible with the chosen loss function.
+
+        Args:
+            errors (List): List to append error dicts to.
+            warnings (List): List to append warning dicts to.
+        """
         opt = self.flow.get("optimizer")
         if not opt or len(opt.inputs) < 2:
             return
@@ -237,6 +316,12 @@ class GraphValidator:
                 )
 
     def _check_accuracy_inputs(self, warnings):
+        """
+        Warn if an accuracy node doesn't have both predictions and labels connected.
+
+        Args:
+            warnings (List): List to append warning dicts to.
+        """
         for node in self.graph.nodes.values():
             if node.type == "accuracy":
                 connected = sum(
