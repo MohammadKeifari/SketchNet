@@ -372,9 +372,22 @@ class NeuronTranslator(BaseTranslator):
         w.dedent()
         activation = n.properties.get("activation", "relu")
         w.line(f"x = self.fc_{n.id}(x)")
+        activation = n.properties.get("activation", "relu")
         if activation in ("linear", "none"):
-            # no activation function
-            pass  # x already holds the linear output
+            # no activation – x already holds the output
+            pass
+        elif activation == "softmax":
+            w.line(f"x = torch.softmax(x, dim=-1)")
+        elif activation == "leaky_relu":
+            w.line(f"x = torch.nn.functional.leaky_relu(x)")
+        elif activation == "elu":
+            w.line(f"x = torch.nn.functional.elu(x)")
+        elif activation == "selu":
+            w.line(f"x = torch.nn.functional.selu(x)")
+        elif activation == "gelu":
+            w.line(f"x = torch.nn.functional.gelu(x)")
+        elif activation == "mish":
+            w.line(f"x = torch.nn.functional.mish(x)")
         else:
             w.line(f"x = torch.{activation}(x)")
         w.line(f"outputs['{n.id}'] = x")
@@ -453,7 +466,23 @@ class Conv2DTranslator(BaseTranslator):
             w.line("x = inputs_dict[list(inputs_dict.keys())[0]]  # fallback")
         w.line(f"x = self.conv_{n.id}(x)")
         activation = n.properties.get("activation", "relu")
-        w.line(f"x = torch.{activation}(x)")
+        if activation in ("linear", "none"):
+            # no activation – x already holds the output
+            pass
+        elif activation == "softmax":
+            w.line(f"x = torch.softmax(x, dim=-1)")
+        elif activation == "leaky_relu":
+            w.line(f"x = torch.nn.functional.leaky_relu(x)")
+        elif activation == "elu":
+            w.line(f"x = torch.nn.functional.elu(x)")
+        elif activation == "selu":
+            w.line(f"x = torch.nn.functional.selu(x)")
+        elif activation == "gelu":
+            w.line(f"x = torch.nn.functional.gelu(x)")
+        elif activation == "mish":
+            w.line(f"x = torch.nn.functional.mish(x)")
+        else:
+            w.line(f"x = torch.{activation}(x)")
         w.line(f"outputs['{n.id}'] = x")
 
 
