@@ -42,12 +42,14 @@ class BaseTranslator:
         for port in node.inputs + node.paramInputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
-                    src_id = self.graph.ports[link.id_from].node_id
+                    # 1) Try the exact source port ID (e.g., output-main_output_1)
+                    src_port_id = link.id_from
+                    if src_port_id in self.var_map:
+                        return self.var_map[src_port_id]
+                    # 2) Fall back to the source node ID
+                    src_id = self.graph.ports[src_port_id].node_id
                     if src_id in self.var_map:
                         return self.var_map[src_id]
-                    src_port = self.graph.ports[link.id_from]
-                    if src_port.id in self.var_map:
-                        return self.var_map[src_port.id]
         return "raw_data"
 
 
