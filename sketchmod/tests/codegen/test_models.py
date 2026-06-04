@@ -198,6 +198,13 @@ def test_model(model_file: Path, interactive: bool, dump_code: bool = False) -> 
         graph = json.load(f)
 
     code = generate_code(graph)
+
+    # Force CPU device so tests are consistent and don't use GPU
+    code = code.replace(
+        "torch.device('cuda' if torch.cuda.is_available() else 'cpu')",
+        "torch.device('cpu')",
+    )
+
     print("Code generated successfully.")
 
     if dump_code:
