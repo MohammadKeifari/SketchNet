@@ -185,32 +185,32 @@ def check_model1(proc, code, graph):
 def check_model2(proc, code, graph):
     """
     model2 checks:
-      1. Two visualization nodes (v12 and v1) are present in the generated code.
-      2. Both visualizations run without error (checked by default_check).
+      1. Only visualization v12 is present; v1 is not active because its
+         color input (c5) has only preprocessing phase.
+      2. The generated code contains exactly one plt.show() call (for v12).
       3. General execution succeeds.
     """
     ok = True
 
-    # Check that both visualization nodes appear in the generated code
     if "Visualization 'v12'" not in code:
         print("❌ Visualization v12 missing from code")
         ok = False
     else:
         print("✅ Visualization v12 found")
 
-    if "Visualization 'v1'" not in code:
-        print("❌ Visualization v1 missing from code")
+    # v1 should NOT be present
+    if "Visualization 'v1'" in code:
+        print("❌ Visualization v1 should NOT be active (color input lacks evaluation)")
         ok = False
     else:
-        print("✅ Visualization v1 found")
+        print("✅ Visualization v1 correctly absent")
 
-    # Verify that plt.show() is called twice (once per visualization)
     show_count = code.count("plt.show()")
-    if show_count < 2:
-        print(f"❌ Expected at least 2 plt.show() calls, found {show_count}")
+    if show_count != 1:
+        print(f"❌ Expected exactly 1 plt.show() call, found {show_count}")
         ok = False
     else:
-        print(f"✅ Found {show_count} plt.show() calls")
+        print(f"✅ Found {show_count} plt.show() call")
 
     return ok
 
@@ -267,9 +267,74 @@ def check_model3(proc, code, graph):
     return ok
 
 
+def check_model4(proc, code, graph):
+    """
+    model4 checks:
+      1. Training‑phase Print node p12 (label 'loss') is generated
+         and runs inside the training loop every batch.
+      2. DeOneHot (d23) correctly receives the softmax output
+         and applies argmax.
+      3. Confusion matrix is printed because
+         showConfusion=True on the Accuracy node.
+      4. Accuracy uses the argmax prediction port (output-main_output_1)
+         and labels from c5.
+      5. Both visualizations v12 and v1 are present.
+         - v12 color comes from d23 (active via param-port carry-over).
+         - v1 color comes from c5 (evaluation-active).
+    """
+    ok = True
+
+    # 1. p12 (loss print) inside training loop
+    if 'print("loss[0]:' not in code:  # note the colon
+        print("❌ p12 (loss print) missing in training loop")
+        ok = False
+    else:
+        print("✅ p12 (loss print) present in training loop")
+
+    # 2. DeOneHot handles softmax input
+    if "d23_out = torch.argmax(output_main_output_2_tensor, dim=-1)" not in code:
+        print("❌ d23 not handling softmax correctly")
+        ok = False
+    else:
+        print("✅ d23 handles softmax")
+
+    # 3. Confusion matrix printed
+    if "Confusion Matrix:" not in code:
+        print("❌ Confusion matrix not printed")
+        ok = False
+    else:
+        print("✅ Confusion matrix will be printed")
+
+    # 4. Accuracy uses argmax predictions and c5 labels
+    if "pred_labels = output_main_output_1_tensor" not in code:
+        print(
+            "❌ Accuracy predictions should use argmax output (output_main_output_1_tensor)"
+        )
+        ok = False
+    else:
+        print("✅ Accuracy predictions from correct port")
+    if "true_labels = c5" not in code:
+        print("❌ Accuracy labels should use c5")
+        ok = False
+    else:
+        print("✅ Accuracy labels from c5")
+
+    # 5. Both visualizations present
+    for viz in ("v12", "v1"):
+        if f"Visualization '{viz}'" not in code:
+            print(f"❌ {viz} missing")
+            ok = False
+        else:
+            print(f"✅ {viz} present")
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
+    3: check_model3,
+    4: check_model4,
 }
 
 
@@ -332,7 +397,7 @@ def test_model(model_file: Path, interactive: bool, dump_code: bool = False) -> 
         return True
 
     # Determine model index from filename
-    m = re.match(r"model(\d+)\.json", model_file.name)
+    m = re.match(r"model(\d+)\.json", model_file.name, re.IGNORECASE)
     model_idx = int(m.group(1)) if m else None
 
     # Run default checks
@@ -366,7 +431,18 @@ def main():
 
     if args.models:
         indices = [int(x.strip()) for x in args.models.split(",")]
-        json_files = [EXAMPLES_DIR / f"model{i}.json" for i in indices]
+        json_files = []
+        for i in indices:
+            pattern = f"model{i}.json"
+            match = (
+                next(EXAMPLES_DIR.glob(pattern), None)
+                or next(EXAMPLES_DIR.glob(pattern.upper()), None)
+                or next(EXAMPLES_DIR.glob(pattern.lower()), None)
+            )
+            if match:
+                json_files.append(match)
+            else:
+                print(f"Warning: model file for index {i} not found, skipping.")
     else:
         json_files = sorted(EXAMPLES_DIR.glob("model*.json"))
 
