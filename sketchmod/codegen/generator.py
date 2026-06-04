@@ -624,7 +624,7 @@ class CodeGenerator:
                         if link.id_to == in_port.id:
                             src_port = self.graph.ports[link.id_from]
                             if full_phase in src_port.activation_phases:
-                                    return src_port.node_id  # <-- node ID
+                                return src_port.node_id  # <-- node ID
                 # fallback: any connected source node
                 for in_port in self.graph.nodes[nid].inputs:
                     for link in self.graph.links:
