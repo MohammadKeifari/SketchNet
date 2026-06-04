@@ -43,20 +43,18 @@ class CodeGenerator:
         return re.sub(r"[^a-zA-Z0-9_]", "_", id_str)
 
     def _has_training(self) -> bool:
+        """Return True if any model node is in the training set."""
         return any(
-            nid in self.flow.get("train_set", set())
-            and self.graph.nodes[nid].type in MODEL_TYPES
-            for nid in self.flow.get("train_order", [])
+            self.graph.nodes[nid].type in MODEL_TYPES
+            for nid in self.flow.get("train_set", set())
         )
 
     def _has_evaluation(self) -> bool:
+        """Return True if any model node OR any analytics node (visualization, accuracy, print) is in the evaluation set."""
         eval_set = self.flow.get("eval_set", set())
         for nid in eval_set:
             node = self.graph.nodes[nid]
-            # anything that is not pure preprocessing and not a training‑only node
-            if node.type in ("visualization", "accuracy", "print"):
-                return True
-            if node.type in MODEL_TYPES:
+            if node.type in MODEL_TYPES | {"visualization", "accuracy", "print"}:
                 return True
         return False
 
@@ -190,6 +188,8 @@ class CodeGenerator:
         for key, var in self.var_map.items():
             w.line(f"    '{key}': {var},")
         w.line("}")
+        self._x_test_var = test_feed
+        self._y_test_var = test_labels
         w.line("return X_train, y_train, X_test, y_test, pre_data")
         w.dedent()
         w.line("")
@@ -198,44 +198,55 @@ class CodeGenerator:
         """
         Writes a function `evaluate(model, X_test, y_test, pre_data)` that:
         - unpacks pre_data into local variables
-        - runs the model
-        - executes any remaining eval data nodes
+        - runs the model **only if** any model node is active in the evaluation phase
+        - executes remaining evaluation data nodes
         - collects viz_data and predictions
         """
         w.line("def evaluate(model, X_test, y_test, pre_data):")
-        w.indent()
+        w.indent()  # inside evaluate
 
-        # Unpack pre_data into local variables with sanitised names
+        # ---- 1. Unpack pre_data into local variables ----
         for key in self.var_map:
             sanitised = self._sanitize_id(key)
             w.line(f"{sanitised} = pre_data['{key}']")
-            # Also update var_map so translators find the sanitised name
             self.var_map[key] = sanitised
 
         w.line("")
         w.line("model.eval()")
-        w.line("with torch.no_grad():")
-        w.indent()
-        eval_feed = self._get_feed_key("eval")
-        w.line(f"outputs = model({{'{eval_feed}': X_test.to(device)}})")
 
-        # Store model outputs with sanitised names
-        output_node = next(
-            (n for n in self.graph.nodes.values() if n.type == "output"), None
-        )
-        if output_node:
-            for port in output_node.outputs:
-                sanitised = self._sanitize_id(port.id) + "_tensor"
-                w.line(f"{sanitised} = outputs['{port.id}']")
-                self.var_map[port.id] = sanitised
-            if output_node.outputs:
-                first_sanitised = (
-                    self._sanitize_id(output_node.outputs[0].id) + "_tensor"
-                )
-                self.var_map[output_node.id] = first_sanitised
-
-        # Execute remaining eval data nodes (DeOneHot etc.)
+        # ---- 2. Determine whether any model node is in the evaluation order ----
         eval_order = self.flow["eval_order"]
+        model_in_eval = any(
+            self.graph.nodes[nid].type in MODEL_TYPES for nid in eval_order
+        )
+
+        # ---- 3. Run model forward (if needed) ----
+        if model_in_eval:
+            w.line("with torch.no_grad():")
+            w.indent()  # inside no_grad
+            eval_feed = self._get_feed_key("eval")
+            w.line(f"outputs = model({{'{eval_feed}': X_test.to(device)}})")
+
+            output_node = next(
+                (n for n in self.graph.nodes.values() if n.type == "output"), None
+            )
+            if output_node:
+                for port in output_node.outputs:
+                    sanitised = self._sanitize_id(port.id) + "_tensor"
+                    w.line(f"{sanitised} = outputs['{port.id}']")
+                    self.var_map[port.id] = sanitised
+                if output_node.outputs:
+                    first_sanitised = (
+                        self._sanitize_id(output_node.outputs[0].id) + "_tensor"
+                    )
+                    self.var_map[output_node.id] = first_sanitised
+
+            w.dedent()  # end no_grad
+        else:
+            w.line("# No model layers active in evaluation – skipping model forward")
+            w.line("outputs = {}")
+
+        # ---- 4. Execute remaining evaluation data nodes ----
         pre_set = self.flow.get("preprocessing_set", set())
         for nid in eval_order:
             node = self.graph.nodes[nid]
@@ -244,7 +255,7 @@ class CodeGenerator:
             w.line(f"# Processing evaluation node {nid} ({node.type})")
             self.translators[nid].data_code(w, "eval")
 
-        # Collect visualisation data
+        # ---- 5. Collect visualisation data ----
         w.line("viz_data = {}")
         for viz in self.flow.get("visualizations", []):
             for port in viz.inputs:
@@ -255,23 +266,26 @@ class CodeGenerator:
                             w.line(f"viz_data['{port.id}'] = {self.var_map[src_id]}")
                         break
 
-        # Predictions for optional printing
+        # ---- 6. Predictions ----
         pred_port_id = None
+        output_node = next(
+            (n for n in self.graph.nodes.values() if n.type == "output"), None
+        )
         if output_node:
             pred_port = next(
                 (p for p in output_node.outputs if p.role == "prediction"), None
             )
             if pred_port:
                 pred_port_id = pred_port.id
-        if pred_port_id:
+        if pred_port_id and model_in_eval:
             pred_var = self._sanitize_id(pred_port_id) + "_tensor"
             w.line(f"predictions = {pred_var}.cpu().numpy()")
         else:
-            w.line("predictions = list(outputs.values())[0].cpu().numpy()")
+            w.line("predictions = None  # no model prediction available")
 
-        w.dedent()  # end no_grad
         w.line("return predictions, viz_data")
-        w.dedent()
+
+        w.dedent()  # end evaluate function
         w.line("")
 
     # ------------------------------------------------------------------
@@ -670,15 +684,17 @@ class CodeGenerator:
         w.indent()
         w.line("X_train, y_train, X_test, y_test, pre_data = load_and_preprocess()")
 
+        # ---- float conversion (only for tensors that exist) ----
         if self._has_training():
             w.line("X_train = X_train.float()")
             w.line("if y_train is not None: y_train = y_train.float()")
-        if self._has_evaluation():
+        if self._has_evaluation() and self._x_test_var != "None":
             w.line("X_test = X_test.float()")
             w.line("if y_test is not None: y_test = y_test.float()")
 
         w.line("")
 
+        # ---- training ----
         if self._has_training():
             opt_node = self.flow.get("optimizer")
             if opt_node:
@@ -694,17 +710,23 @@ class CodeGenerator:
             w.line('print("Training complete.")')
             w.line("")
 
+        # ---- evaluation ----
         if self._has_evaluation():
-            w.line("predictions, viz_data = evaluate(model, X_test, y_test, pre_data)")
-            w.line("if y_test is not None:")
-            w.indent()
-            w.line("mse = np.mean((predictions - y_test.numpy())**2)")
-            w.line('print(f"Test MSE: {mse:.6f}")')
-            w.dedent()
-            w.line("else:")
-            w.indent()
-            w.line('print("No test labels – skipping evaluation.")')
-            w.dedent()
-            w.line("visualize(viz_data)")
+            if not self._has_training():
+                w.line("# No model created – evaluation skipped")
+            else:
+                w.line(
+                    "predictions, viz_data = evaluate(model, X_test, y_test, pre_data)"
+                )
+                w.line("if y_test is not None:")
+                w.indent()
+                w.line("mse = np.mean((predictions - y_test.numpy())**2)")
+                w.line('print(f"Test MSE: {mse:.6f}")')
+                w.dedent()
+                w.line("else:")
+                w.indent()
+                w.line('print("No test labels – skipping evaluation.")')
+                w.dedent()
+                w.line("visualize(viz_data)")
 
         w.dedent()
