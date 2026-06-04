@@ -280,9 +280,16 @@ class DeOneHotTranslator(BaseTranslator):
 
         if param_input:
             w.line(f"categories = {param_input}")
-            w.line(f"{out_var} = torch.argmax({in_var}, dim=-1)")
-        else:
-            w.line(f"{out_var} = torch.argmax({in_var}, dim=-1)")
+
+        # Handle both 2D one‑hot and 1D class index inputs
+        w.line(f"if {in_var}.dim() == 2:")
+        w.indent()
+        w.line(f"{out_var} = torch.argmax({in_var}, dim=-1)")
+        w.dedent()
+        w.line(f"else:")
+        w.indent()
+        w.line(f"{out_var} = {in_var}  # already class indices")
+        w.dedent()
 
         self.var_map[n.id] = out_var
 
