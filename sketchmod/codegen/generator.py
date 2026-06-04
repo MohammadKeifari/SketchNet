@@ -249,7 +249,6 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _get_var_for_first_model_input(self, phase):
-        # Map generator's short names to the full names used in port activationPhases
         PHASE_MAP = {
             "preprocessing": "preprocessing",
             "train": "training",
@@ -273,14 +272,24 @@ class CodeGenerator:
             for link in self.graph.links:
                 if link.id_to == in_port.id:
                     src_port = self.graph.ports[link.id_from]
+                    src_port_id = src_port.id  # port ID first
                     src_id = src_port.node_id
-                    if src_id not in self.var_map:
-                        continue
-                    var = self.var_map[src_id]
-                    if full_phase in src_port.activation_phases:
-                        explicit_candidates.append(var)
-                    else:
-                        fallback_candidates.append(var)
+
+                    # 1) Check the source port ID
+                    if src_port_id in self.var_map:
+                        var = self.var_map[src_port_id]
+                        if full_phase in src_port.activation_phases:
+                            explicit_candidates.append(var)
+                        else:
+                            fallback_candidates.append(var)
+                    # 2) Fall back to source node ID
+                    elif src_id in self.var_map:
+                        var = self.var_map[src_id]
+                        if full_phase in src_port.activation_phases:
+                            explicit_candidates.append(var)
+                        else:
+                            fallback_candidates.append(var)
+
         if explicit_candidates:
             return explicit_candidates[0]
         if fallback_candidates:
