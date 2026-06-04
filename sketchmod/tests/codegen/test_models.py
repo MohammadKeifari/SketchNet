@@ -54,6 +54,9 @@ def generate_code(model_json: dict) -> str:
 def run_generated_code(
     code: str, timeout: int = 120, interactive: bool = False
 ) -> subprocess.CompletedProcess:
+    # Force CPU before any torch import
+    code = "import os\n" "os.environ['CUDA_VISIBLE_DEVICES'] = ''\n" + code
+
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".py", delete=False, encoding="utf-8"
     ) as f:
@@ -61,7 +64,6 @@ def run_generated_code(
         tmp_path = f.name
 
     env = os.environ.copy()
-    env["CUDA_VISIBLE_DEVICES"] = ""  # force CPU for tests
     if not interactive:
         env["MPLBACKEND"] = "Agg"
     env["PYTHONUNBUFFERED"] = "1"
