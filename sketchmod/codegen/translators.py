@@ -42,7 +42,7 @@ class BaseTranslator:
         for port in node.inputs + node.paramInputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
-                    # 1) Try the exact source port ID (e.g., output-main_output_1)
+                    # 1) Try the exact source port ID
                     src_port_id = link.id_from
                     if src_port_id in self.var_map:
                         return self.var_map[src_port_id]
@@ -138,13 +138,14 @@ class ColumnSelectTranslator(BaseTranslator):
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
-                    src_id = self.graph.ports[link.id_from].node_id
-                    # Check var_map for node id or port id
+                    src_port_id = link.id_from
+                    # 1) Check source port ID first
+                    if src_port_id in self.var_map:
+                        return self.var_map[src_port_id]
+                    # 2) Fall back to source node ID
+                    src_id = self.graph.ports[src_port_id].node_id
                     if src_id in self.var_map:
                         return self.var_map[src_id]
-                    src_port = self.graph.ports[link.id_from]
-                    if src_port.id in self.var_map:
-                        return self.var_map[src_port.id]
         return "raw_data"
 
 
@@ -702,8 +703,14 @@ class PrintTranslator(BaseTranslator):
         for i, port in enumerate(n.inputs):
             for link in self.graph.links:
                 if link.id_to == port.id:
-                    src_id = self.graph.ports[link.id_from].node_id
-                    var = self.var_map.get(src_id, "None")
+                    src_port_id = link.id_from
+                    # 1) Check port ID first
+                    if src_port_id in self.var_map:
+                        var = self.var_map[src_port_id]
+                    else:
+                        # 2) Fall back to node ID
+                        src_id = self.graph.ports[src_port_id].node_id
+                        var = self.var_map.get(src_id, "None")
                     w.line(f'print("{label}[{i}]:", {var}.shape, {var})')
                     break
 
@@ -720,8 +727,12 @@ class AccuracyTranslator(BaseTranslator):
         for port in n.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
-                    src_id = self.graph.ports[link.id_from].node_id
-                    var = self.var_map.get(src_id, "None")
+                    src_port_id = link.id_from
+                    if src_port_id in self.var_map:
+                        var = self.var_map[src_port_id]
+                    else:
+                        src_id = self.graph.ports[src_port_id].node_id
+                        var = self.var_map.get(src_id, "None")
                     if port.index == 0:
                         pred_var = var
                     else:
