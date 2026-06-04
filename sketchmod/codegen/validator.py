@@ -40,6 +40,7 @@ class GraphValidator:
         self._check_label_encoding(warnings)
         self._check_loss_label_compatibility(errors, warnings)
         self._check_accuracy_inputs(warnings)
+        self._check_visualization_shapes(warnings)
 
         return {
             "errors": errors,
@@ -275,3 +276,50 @@ class GraphValidator:
                     "nodeId": None,
                 }
             )
+
+    def _check_visualization_shapes(self, warnings):
+        for node in self.graph.nodes.values():
+            if node.type != "visualization":
+                continue
+            coord_ports = [p for p in node.inputs if p.sub_type == "coord"]
+
+            # 1) Warn if any coord port has >1 column (2D tensor)
+            for port in coord_ports:
+                shape = port.shape
+                if shape and shape.shape and len(shape.shape) > 1:
+                    last_dim = shape.shape[-1]
+                    try:
+                        if int(last_dim) > 1:
+                            warnings.append(
+                                {
+                                    "message": (
+                                        f"Visualization '{node.id}' coordinate port "
+                                        f"'{port.id}' has shape {shape.shape} with >1 column. "
+                                        "Use ColumnSelect to reduce to a single column before connecting."
+                                    ),
+                                    "portId": port.id,
+                                }
+                            )
+                    except (ValueError, TypeError):
+                        pass  # symbolic size, can't decide
+
+            # 2) Warn if sample sizes differ between coord ports
+            first_dims = []
+            for port in coord_ports:
+                shape = port.shape
+                if shape and shape.shape and len(shape.shape) >= 1:
+                    first_dims.append((port.id, shape.shape[0]))
+            if len(first_dims) >= 2:
+                first_id, first_val = first_dims[0]
+                for other_id, other_val in first_dims[1:]:
+                    if str(first_val) != str(other_val):
+                        warnings.append(
+                            {
+                                "message": (
+                                    f"Visualization '{node.id}' coordinate ports {first_id} and {other_id} "
+                                    f"have different sample sizes ({first_val} vs {other_val}). "
+                                    "The scatter plot will fail."
+                                ),
+                                "nodeId": node.id,
+                            }
+                        )
