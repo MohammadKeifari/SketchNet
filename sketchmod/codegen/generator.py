@@ -50,11 +50,15 @@ class CodeGenerator:
         )
 
     def _has_evaluation(self) -> bool:
-        return any(
-            nid in self.flow.get("eval_set", set())
-            and self.graph.nodes[nid].type in MODEL_TYPES
-            for nid in self.flow.get("eval_order", [])
-        )
+        eval_set = self.flow.get("eval_set", set())
+        for nid in eval_set:
+            node = self.graph.nodes[nid]
+            # anything that is not pure preprocessing and not a training‑only node
+            if node.type in ("visualization", "accuracy", "print"):
+                return True
+            if node.type in MODEL_TYPES:
+                return True
+        return False
 
     def generate(self) -> str:
         w = CodeWriter()
