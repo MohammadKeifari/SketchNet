@@ -95,57 +95,57 @@ class CodeGenerator:
             if node.type != "input-data":
                 self.translators[nid].data_code(w, "pre")
 
-        # 3. Train branch data transforms (strict execution; if not active, pass through)
-        train_data_nodes = [
-            nid
-            for nid in self.flow["train_order"]
-            if nid not in self.flow["preprocessing_order"]
-            and self.graph.nodes[nid].type not in MODEL_TYPES
-        ]
-        w.line("")
-        w.line("# --- Train branch data transforms ---")
-        for nid in train_data_nodes:
-            if self._node_active_strict(nid, "training"):
-                self.translators[nid].data_code(w, "train")
-            else:
-                node = self.graph.nodes[nid]
-                src_id = None
-                for link in self.graph.links:
-                    if link.id_to in {p.id for p in node.inputs}:
-                        src_id = self.graph.ports[link.id_from].node_id
-                        break
-                if src_id and src_id in self.var_map:
-                    self.var_map[nid] = self.var_map[src_id]
-                    w.line(
-                        f"# {nid} is not active in training; reusing {self.var_map[src_id]}"
-                    )
-                    w.line(f"{nid}_out = {self.var_map[src_id]}")
+        # # 3. Train branch data transforms (strict execution; if not active, pass through)
+        # train_data_nodes = [
+        #     nid
+        #     for nid in self.flow["train_order"]
+        #     if nid not in self.flow["preprocessing_order"]
+        #     and self.graph.nodes[nid].type not in MODEL_TYPES
+        # ]
+        # w.line("")
+        # w.line("# --- Train branch data transforms ---")
+        # for nid in train_data_nodes:
+        #     if self._node_active_strict(nid, "training"):
+        #         self.translators[nid].data_code(w, "train")
+        #     else:
+        #         node = self.graph.nodes[nid]
+        #         src_id = None
+        #         for link in self.graph.links:
+        #             if link.id_to in {p.id for p in node.inputs}:
+        #                 src_id = self.graph.ports[link.id_from].node_id
+        #                 break
+        #         if src_id and src_id in self.var_map:
+        #             self.var_map[nid] = self.var_map[src_id]
+        #             w.line(
+        #                 f"# {nid} is not active in training; reusing {self.var_map[src_id]}"
+        #             )
+        #             w.line(f"{nid}_out = {self.var_map[src_id]}")
 
-        # 4. Eval branch data transforms (strict execution; if not active, pass through)
-        eval_data_nodes = [
-            nid
-            for nid in self.flow["eval_order"]
-            if nid not in self.flow["preprocessing_order"]
-            and self.graph.nodes[nid].type not in MODEL_TYPES
-        ]
-        w.line("")
-        w.line("# --- Test branch data transforms ---")
-        for nid in eval_data_nodes:
-            if self._node_active_strict(nid, "evaluation"):
-                self.translators[nid].data_code(w, "eval")
-            else:
-                node = self.graph.nodes[nid]
-                src_id = None
-                for link in self.graph.links:
-                    if link.id_to in {p.id for p in node.inputs}:
-                        src_id = self.graph.ports[link.id_from].node_id
-                        break
-                if src_id and src_id in self.var_map:
-                    self.var_map[nid] = self.var_map[src_id]
-                    w.line(
-                        f"# {nid} is not active in evaluation; reusing {self.var_map[src_id]}"
-                    )
-                    w.line(f"{nid}_out = {self.var_map[src_id]}")
+        # # 4. Eval branch data transforms (strict execution; if not active, pass through)
+        # eval_data_nodes = [
+        #     nid
+        #     for nid in self.flow["eval_order"]
+        #     if nid not in self.flow["preprocessing_order"]
+        #     and self.graph.nodes[nid].type not in MODEL_TYPES
+        # ]
+        # w.line("")
+        # w.line("# --- Test branch data transforms ---")
+        # for nid in eval_data_nodes:
+        #     if self._node_active_strict(nid, "evaluation"):
+        #         self.translators[nid].data_code(w, "eval")
+        #     else:
+        #         node = self.graph.nodes[nid]
+        #         src_id = None
+        #         for link in self.graph.links:
+        #             if link.id_to in {p.id for p in node.inputs}:
+        #                 src_id = self.graph.ports[link.id_from].node_id
+        #                 break
+        #         if src_id and src_id in self.var_map:
+        #             self.var_map[nid] = self.var_map[src_id]
+        #             w.line(
+        #                 f"# {nid} is not active in evaluation; reusing {self.var_map[src_id]}"
+        #             )
+        #             w.line(f"{nid}_out = {self.var_map[src_id]}")
 
         # 5. Determine variable names for the return
         train_feed = self._get_var_for_first_model_input("train")
