@@ -57,21 +57,21 @@ class GraphValidator:
         if not has_output:
             errors.append({"message": "Missing Output node.", "nodeId": None})
 
-    def _check_optimizer_connections(self, errors):
-        opt = self.flow.get("optimizer")
-        if not opt:
-            errors.append({"message": "Optimizer node is required.", "nodeId": None})
-            return
-        for port in opt.inputs:
-            connected = any(l.id_to == port.id for l in self.graph.links)
-            if not connected:
-                role = port.role or f"port {port.index}"
-                errors.append(
-                    {
-                        "message": f"Optimizer input '{role}' is not connected.",
-                        "portId": port.id,
-                    }
-                )
+    # def _check_optimizer_connections(self, errors):
+    #     opt = self.flow.get("optimizer")
+    #     if not opt:
+    #         errors.append({"message": "Optimizer node is required.", "nodeId": None})
+    #         return
+    #     for port in opt.inputs:
+    #         connected = any(l.id_to == port.id for l in self.graph.links)
+    #         if not connected:
+    #             role = port.role or f"port {port.index}"
+    #             errors.append(
+    #                 {
+    #                     "message": f"Optimizer input '{role}' is not connected.",
+    #                     "portId": port.id,
+    #                 }
+    #             )
 
     def _check_multi_port_cardinality(self, errors):
         for node in self.graph.nodes.values():
