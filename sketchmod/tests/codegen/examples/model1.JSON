@@ -131,7 +131,12 @@
             "paramInputs": [],
             "paramOutputs": [],
             "numParamInputs": 0,
-            "numParamOutputs": 0
+            "numParamOutputs": 0,
+            "outputActivations": {
+                "loss": "none",
+                "prediction": "argmax",
+                "evaluation": "softmax"
+            }
         },
         {
             "id": "t1",
