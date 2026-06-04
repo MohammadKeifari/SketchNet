@@ -40,7 +40,6 @@ class GraphValidator:
         self._check_label_encoding(warnings)
         self._check_loss_label_compatibility(errors, warnings)
         self._check_accuracy_inputs(warnings)
-        self._check_input_output_present(errors, warnings)
 
         return {
             "errors": errors,
