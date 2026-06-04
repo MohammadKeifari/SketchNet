@@ -302,18 +302,24 @@ class TrainTestSplitTranslator(BaseTranslator):
         train_ratio = n.properties.get("trainRatio", 0.7)
         seed = n.properties.get("randomSeed", 42)
         in_var = self._get_input_var(n)
+
         w.line(f"train_size = int({in_var}.size(0) * {train_ratio})")
         w.line(f"gen = torch.Generator().manual_seed({seed})")
         w.line(f"perm = torch.randperm({in_var}.size(0), generator=gen)")
         w.line(f"train_data = {in_var}[perm[:train_size]]")
         w.line(f"test_data = {in_var}[perm[train_size:]]")
+
+        # Map port IDs to variable names
         train_port = next(p for p in n.outputs if p.sub_type == "train")
         test_port = next(p for p in n.outputs if p.sub_type == "test")
         self.var_map[train_port.id] = "train_data"
         self.var_map[test_port.id] = "test_data"
 
+        # Also store the node ID so the feed key can find it
+        self.var_map[n.id] = "train_data"
+
     def _get_input_var(self, node):
-        return ColumnSelectTranslator._get_input_var(self, node)
+        return BaseTranslator._get_input_var(self, node)
 
 
 # ---------------------------------------------------------------------------
