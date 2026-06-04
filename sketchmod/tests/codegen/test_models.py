@@ -182,8 +182,42 @@ def check_model1(proc, code, graph):
     return ok
 
 
+def check_model2(proc, code, graph):
+    """
+    model2 checks:
+      1. Two visualization nodes (v12 and v1) are present in the generated code.
+      2. Both visualizations run without error (checked by default_check).
+      3. General execution succeeds.
+    """
+    ok = True
+
+    # Check that both visualization nodes appear in the generated code
+    if "Visualization 'v12'" not in code:
+        print("❌ Visualization v12 missing from code")
+        ok = False
+    else:
+        print("✅ Visualization v12 found")
+
+    if "Visualization 'v1'" not in code:
+        print("❌ Visualization v1 missing from code")
+        ok = False
+    else:
+        print("✅ Visualization v1 found")
+
+    # Verify that plt.show() is called twice (once per visualization)
+    show_count = code.count("plt.show()")
+    if show_count < 2:
+        print(f"❌ Expected at least 2 plt.show() calls, found {show_count}")
+        ok = False
+    else:
+        print(f"✅ Found {show_count} plt.show() calls")
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
+    2: check_model2,
 }
 
 
