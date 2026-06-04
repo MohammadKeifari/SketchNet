@@ -215,6 +215,58 @@ def check_model2(proc, code, graph):
     return ok
 
 
+def check_model3(proc, code, graph):
+    """
+    model3 checks:
+      1. Nodes that are NOT fully active in any phase must NOT appear in the generated code.
+      2. Print node p7 (empty activationPhases) must be absent.
+      3. Accuracy a6 and visualization v1 must be absent because some of their input ports lack the correct phase.
+      4. Visualization v12 and DeOneHot d23 must be present (they have full evaluation connectivity).
+      5. General execution succeeds.
+    """
+    ok = True
+
+    # p7 should NOT be generated
+    if "p7" in code:
+        print("❌ p7 (Print) should not be generated (activationPhases empty)")
+        ok = False
+    else:
+        print("✅ p7 correctly absent")
+
+    # a6 should NOT be generated
+    if "a6" in code:
+        print(
+            "❌ a6 (Accuracy) should not be generated (one input missing evaluation phase)"
+        )
+        ok = False
+    else:
+        print("✅ a6 correctly absent")
+
+    # v1 should NOT be generated
+    if "v1" in code and "Visualization 'v1'" in code:
+        print(
+            "❌ v1 (Visualization) should not be generated (color input lacks evaluation phase)"
+        )
+        ok = False
+    else:
+        print("✅ v1 correctly absent")
+
+    # v12 and d23 SHOULD be generated
+    if "Visualization 'v12'" not in code:
+        print("❌ v12 missing but should be active")
+        ok = False
+    else:
+        print("✅ v12 present")
+
+    if "d23_out" not in code:
+        print("❌ d23 missing but should be active")
+        ok = False
+    else:
+        print("✅ d23 present")
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
