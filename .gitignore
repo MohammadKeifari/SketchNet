@@ -10,4 +10,4 @@ db.sqlite3
 media/
 todo.txt
 sketchmod/tests/codegen/examples/*.py
-sketchmod/tests/codegen/examples/data
+# sketchmod/tests/codegen/examples/data
