@@ -330,11 +330,62 @@ def check_model4(proc, code, graph):
     return ok
 
 
+def check_model5(proc, code, graph):
+    """
+    model5 checks:
+      1. Three Train/Test Split nodes (t1, t2, t3) are present.
+      2. Training loop is generated (layers have training phases).
+      3. Evaluation function is generated (visualization v1 is active).
+      4. Visualization v1 is present in the code.
+      5. No shape-mismatch warning is emitted (graph uses proper 1D columns).
+      6. The generated code runs without crash.
+    """
+    ok = True
+
+    # 1. Three splits
+    for s in ("t1", "t2", "t3"):
+        if f"{s}_output_0" in code:
+            print(f"✅ Split node {s} found")
+        else:
+            print(f"❌ Split node {s} missing")
+            ok = False
+
+    # 2. Training present
+    if "class Model" in code and "train_model" in code:
+        print("✅ Training loop present")
+    else:
+        print("❌ Training loop missing")
+        ok = False
+
+    # 3 & 4. Evaluation and visualization present
+    if "def evaluate(" in code and "Visualization 'v1'" in code:
+        print("✅ Evaluation + visualization v1 present")
+    else:
+        print("❌ Evaluation or visualization v1 missing")
+        ok = False
+
+    # 5. No shape mismatch warnings
+    from sketchmod.codegen.validator import GraphValidator
+
+    result = GraphValidator(graph).validate()
+    warnings = [w["message"] for w in result.get("warnings", [])]
+    if any(">1 column" in w for w in warnings) or any(
+        "different sample sizes" in w for w in warnings
+    ):
+        print("❌ Unexpected shape mismatch warning for visualization")
+        ok = False
+    else:
+        print("✅ No shape mismatch warnings")
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
     3: check_model3,
     4: check_model4,
+    5: check_model5,
 }
 
 
