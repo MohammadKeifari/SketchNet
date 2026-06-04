@@ -760,14 +760,10 @@ class AccuracyTranslator(BaseTranslator):
         w.line(f'print(f"Accuracy: {{acc.item():.4f}}")')
 
         if show_confusion:
-            w.line(
-                "from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay"
-            )
-            w.line(f"cm = confusion_matrix(true_labels.cpu(), pred_labels.cpu())")
-            w.line("disp = ConfusionMatrixDisplay(confusion_matrix=cm)")
-            w.line("disp.plot()")
-            w.line("plt.title('Confusion Matrix')")
-            w.line("plt.show()")
+            w.line("from sklearn.metrics import confusion_matrix")
+            w.line("cm = confusion_matrix(true_labels.cpu(), pred_labels.cpu())")
+            w.line('print("Confusion Matrix:")')
+            w.line("print(cm)")
 
 
 # Registry mapping node type -> translator class
