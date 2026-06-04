@@ -559,9 +559,18 @@ class OutputTranslator(BaseTranslator):
             w.line(f"if '{src_id}' in outputs:")
             w.indent()
             w.line(f"x = outputs['{src_id}']")
+            # Process each output port with its activation
             for out_port in n.outputs:
-                w.line(f"outputs['{out_port.id}'] = x")
-            w.line(f"outputs['{n.id}'] = x")
+                role = out_port.role  # 'loss', 'prediction', 'evaluation'
+                act = n.properties.get("outputActivations", {}).get(role, "none")
+                if role == "loss" or act == "none":
+                    w.line(f"outputs['{out_port.id}'] = x")
+                elif act == "softmax":
+                    w.line(f"outputs['{out_port.id}'] = torch.softmax(x, dim=-1)")
+                elif act == "argmax":
+                    w.line(f"outputs['{out_port.id}'] = torch.argmax(x, dim=-1)")
+                # optionally add sigmoid later
+            w.line(f"outputs['{n.id}'] = x")  # keep raw x for backward compatibility
             w.dedent()
         else:
             w.line(f"outputs['{n.id}'] = None  # no input connected")

@@ -3729,6 +3729,15 @@ const SketchMod = {
         this._render();
         this._showToast("Model imported successfully.");
     },
+    _updateOutputActivation(role, value) {
+        if (this.selectedNodes.length !== 1) return;
+        const node = this.selectedNodes[0];
+        if (!(node instanceof OutputNode)) return;
+        this._saveUndoState();
+        node.outputActivations[role] = value;
+        this._saveToSession();
+        this._render();
+    },
 };
 // ========== PORT BASE CLASS ==========
 class Port {
@@ -5418,7 +5427,26 @@ class OutputNode extends RectNode {
         this.outputs[0].activationPhases = ["training"]; // loss
         this.outputs[1].activationPhases = ["evaluation"]; // prediction
         this.outputs[2].activationPhases = ["evaluation"]; // evaluation
+
+        this.outputActivations = {
+            loss: "none",
+            prediction: "none",
+            evaluation: "none",
+        };
         this.updatePorts();
+    }
+
+    toJSON() {
+        const b = super.toJSON();
+        return {
+            ...b,
+            outputActivations: this.outputActivations,
+        };
+    }
+
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.outputActivations) this.outputActivations = d.outputActivations;
     }
 
     updatePorts() {
@@ -5491,49 +5519,73 @@ class OutputNode extends RectNode {
     }
 
     getPropertiesHTML() {
-        return `
-            ${this._getShapeSummaryHTML()}
-            <div class="prop-group">
-                <label>Input Ports</label>
-                <div class="port-legend">
-                    <span class="port-legend-item">
-                        <svg width="10" height="10" viewBox="0 0 10 10">
-                            <circle cx="5" cy="5" r="4" fill="#f59e0b" stroke="#1a1d2e" stroke-width="1"/>
-                        </svg>
-                        train
-                    </span>
-                    <span class="port-legend-item">
-                        <svg width="10" height="10" viewBox="0 0 10 10">
-                            <circle cx="5" cy="5" r="4" fill="#4ade80" stroke="#1a1d2e" stroke-width="1"/>
-                        </svg>
-                        test
-                    </span>
-                </div>
+        let html = this._getShapeSummaryHTML();
+
+        // Input ports legend
+        html += `
+        <div class="prop-group">
+            <label>Input Ports</label>
+            <div class="port-legend">
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <circle cx="5" cy="5" r="4" fill="#f59e0b" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    train
+                </span>
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <circle cx="5" cy="5" r="4" fill="#4ade80" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    test
+                </span>
             </div>
-            <div class="prop-group">
-                <label>Output Ports</label>
-                <div class="port-legend">
-                    <span class="port-legend-item">
-                        <svg width="10" height="10" viewBox="0 0 10 10">
-                            <circle cx="5" cy="5" r="4" fill="#53BF9D" stroke="#1a1d2e" stroke-width="1"/>
-                        </svg>
-                        Loss
-                    </span>
-                    <span class="port-legend-item">
-                        <svg width="10" height="10" viewBox="0 0 10 10">
-                            <circle cx="5" cy="5" r="4" fill="#BD4291" stroke="#1a1d2e" stroke-width="1"/>
-                        </svg>
-                        Prediction
-                    </span>
-                    <span class="port-legend-item">
-                        <svg width="10" height="10" viewBox="0 0 10 10">
-                            <circle cx="5" cy="5" r="4" fill="#FFC54D" stroke="#1a1d2e" stroke-width="1"/>
-                        </svg>
-                        Evaluation
-                    </span>
-                </div>
+        </div>
+    `;
+
+        // Output ports legend
+        html += `
+        <div class="prop-group">
+            <label>Output Ports</label>
+            <div class="port-legend">
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <circle cx="5" cy="5" r="4" fill="#53BF9D" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Loss
+                </span>
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <circle cx="5" cy="5" r="4" fill="#BD4291" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Prediction
+                </span>
+                <span class="port-legend-item">
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <circle cx="5" cy="5" r="4" fill="#FFC54D" stroke="#1a1d2e" stroke-width="1"/>
+                    </svg>
+                    Evaluation
+                </span>
             </div>
-        `;
+        </div>
+    `;
+
+        // Output activation selectors
+        const roles = ["prediction", "evaluation"];
+        for (const role of roles) {
+            const current = this.outputActivations[role] || "none";
+            html += `
+        <div class="prop-group">
+            <label>${role.charAt(0).toUpperCase() + role.slice(1)} Output</label>
+            <select class="prop-select" onchange="SketchMod._updateOutputActivation('${role}', this.value)">
+                <option value="none" ${current === "none" ? "selected" : ""}>None (raw logits)</option>
+                <option value="softmax" ${current === "softmax" ? "selected" : ""}>Softmax (probabilities)</option>
+                <option value="argmax" ${current === "argmax" ? "selected" : ""}>Argmax (class indices)</option>
+            </select>
+        </div>`;
+        }
+
+        html += `<p class="prop-hint">Loss port always uses raw logits.</p>`;
+        return html;
     }
 }
 // ========== COLUMN SELECT NODE ==========
