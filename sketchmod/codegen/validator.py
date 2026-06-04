@@ -32,7 +32,7 @@ class GraphValidator:
         warnings = []
 
         self._check_input_output_present(errors)
-        # self._check_optimizer_connections(errors)
+        self._check_optimizer_connections(warnings)
         self._check_link_weights(warnings)
         self._check_multi_port_cardinality(errors)
         self._check_model_connectivity(warnings)
@@ -58,21 +58,26 @@ class GraphValidator:
         if not has_output:
             errors.append({"message": "Missing Output node.", "nodeId": None})
 
-    # def _check_optimizer_connections(self, errors):
-    #     opt = self.flow.get("optimizer")
-    #     if not opt:
-    #         errors.append({"message": "Optimizer node is required.", "nodeId": None})
-    #         return
-    #     for port in opt.inputs:
-    #         connected = any(l.id_to == port.id for l in self.graph.links)
-    #         if not connected:
-    #             role = port.role or f"port {port.index}"
-    #             errors.append(
-    #                 {
-    #                     "message": f"Optimizer input '{role}' is not connected.",
-    #                     "portId": port.id,
-    #                 }
-    #             )
+    def _check_optimizer_connections(self, warnings):
+        opt = self.flow.get("optimizer")
+        if not opt:
+            warnings.append(
+                {
+                    "message": "Optimizer node is missing. Training loop will not be generated.",
+                    "nodeId": None,
+                }
+            )
+            return
+        for port in opt.inputs:
+            connected = any(l.id_to == port.id for l in self.graph.links)
+            if not connected:
+                role = port.role or f"port {port.index}"
+                warnings.append(
+                    {
+                        "message": f"Optimizer input '{role}' is not connected. Training may fail.",
+                        "portId": port.id,
+                    }
+                )
 
     def _check_multi_port_cardinality(self, errors):
         for node in self.graph.nodes.values():
