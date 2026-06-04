@@ -42,14 +42,37 @@ class CodeGenerator:
         """Replace any non-alphanumeric (except underscore) with '_'."""
         return re.sub(r"[^a-zA-Z0-9_]", "_", id_str)
 
+    def _has_training(self) -> bool:
+        return any(
+            nid in self.flow.get("train_set", set())
+            and self.graph.nodes[nid].type in MODEL_TYPES
+            for nid in self.flow.get("train_order", [])
+        )
+
+    def _has_evaluation(self) -> bool:
+        return any(
+            nid in self.flow.get("eval_set", set())
+            and self.graph.nodes[nid].type in MODEL_TYPES
+            for nid in self.flow.get("eval_order", [])
+        )
+
     def generate(self) -> str:
         w = CodeWriter()
         self._write_header(w)
         self._write_load_and_preprocess(w)
-        self._write_model_class(w)
-        self._write_training(w)
-        self._write_evaluate_function(w)
-        self._write_evaluation(w)
+
+        if self._has_training():
+            self._write_model_class(w)
+            self._write_training(w)
+        else:
+            w.line("# No training phase – model and training loop skipped.")
+
+        if self._has_evaluation():
+            self._write_evaluate_function(w)
+            self._write_evaluation(w)
+        else:
+            w.line("# No evaluation phase – evaluation and visualization skipped.")
+
         self._write_main(w)
         return str(w)
 
@@ -297,10 +320,6 @@ class CodeGenerator:
         return "None"
 
     def _get_var_for_eval_labels(self):
-        """
-        Return the variable name for test labels, or 'None' if not found.
-        Only considers nodes that feed the OutputNode's test input port.
-        """
         output_node = next(
             (n for n in self.graph.nodes.values() if n.type == "output"), None
         )
@@ -310,10 +329,14 @@ class CodeGenerator:
         if not test_input:
             return "None"
 
-        # Find the node that feeds the test input
         for link in self.graph.links:
             if link.id_to == test_input.id:
-                src_id = self.graph.ports[link.id_from].node_id
+                src_port_id = link.id_from
+                # 1) Check source port ID first
+                if src_port_id in self.var_map:
+                    return self.var_map[src_port_id]
+                # 2) Fallback to source node ID
+                src_id = self.graph.ports[src_port_id].node_id
                 if src_id in self.var_map:
                     return self.var_map[src_id]
         return "None"
@@ -339,7 +362,12 @@ class CodeGenerator:
 
         for link in self.graph.links:
             if link.id_to == labels_port.id:
-                src_id = self.graph.ports[link.id_from].node_id
+                src_port_id = link.id_from
+                # 1) Check source port ID first
+                if src_port_id in self.var_map:
+                    return self.var_map[src_port_id]
+                # 2) Fallback to source node ID
+                src_id = self.graph.ports[src_port_id].node_id
                 if src_id in self.var_map:
                     return self.var_map[src_id]
         return "None"
@@ -637,33 +665,42 @@ class CodeGenerator:
         w.line("if __name__ == '__main__':")
         w.indent()
         w.line("X_train, y_train, X_test, y_test, pre_data = load_and_preprocess()")
-        w.line("X_train = X_train.float()")
-        w.line("if y_train is not None: y_train = y_train.float()")
-        w.line("X_test = X_test.float()")
-        w.line("if y_test is not None: y_test = y_test.float()")
+
+        if self._has_training():
+            w.line("X_train = X_train.float()")
+            w.line("if y_train is not None: y_train = y_train.float()")
+        if self._has_evaluation():
+            w.line("X_test = X_test.float()")
+            w.line("if y_test is not None: y_test = y_test.float()")
+
         w.line("")
-        opt_node = self.flow.get("optimizer")
-        if opt_node:
-            config_code = self.translators[opt_node.id].optimizer_code(w)
-            w.line(f"opt_config = {config_code}")
-        else:
-            w.line("opt_config = {}")
-        w.line("")
-        w.line("model = Model().to(device)")
-        w.line(
-            "model = train_model(model, X_train, y_train, X_test, y_test, opt_config)"
-        )
-        w.line('print("Training complete.")')
-        w.line("")
-        w.line("predictions, viz_data = evaluate(model, X_test, y_test, pre_data)")
-        w.line("if y_test is not None:")
-        w.indent()
-        w.line("mse = np.mean((predictions - y_test.numpy())**2)")
-        w.line('print(f"Test MSE: {mse:.6f}")')
-        w.dedent()
-        w.line("else:")
-        w.indent()
-        w.line('print("No test labels – skipping evaluation.")')
-        w.dedent()
-        w.line("visualize(viz_data)")
+
+        if self._has_training():
+            opt_node = self.flow.get("optimizer")
+            if opt_node:
+                config_code = self.translators[opt_node.id].optimizer_code(w)
+                w.line(f"opt_config = {config_code}")
+            else:
+                w.line("opt_config = {}")
+            w.line("")
+            w.line("model = Model().to(device)")
+            w.line(
+                "model = train_model(model, X_train, y_train, X_test, y_test, opt_config)"
+            )
+            w.line('print("Training complete.")')
+            w.line("")
+
+        if self._has_evaluation():
+            w.line("predictions, viz_data = evaluate(model, X_test, y_test, pre_data)")
+            w.line("if y_test is not None:")
+            w.indent()
+            w.line("mse = np.mean((predictions - y_test.numpy())**2)")
+            w.line('print(f"Test MSE: {mse:.6f}")')
+            w.dedent()
+            w.line("else:")
+            w.indent()
+            w.line('print("No test labels – skipping evaluation.")')
+            w.dedent()
+            w.line("visualize(viz_data)")
+
         w.dedent()
