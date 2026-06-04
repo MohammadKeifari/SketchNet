@@ -127,8 +127,6 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
                                 src_nid in active
                                 and _is_port_active(src_port, phase)
                                 and _is_port_active(in_port, phase)
-                            ) or (
-                                src_nid in pre_set and _is_port_active(in_port, phase)
                             ):
                                 inputs_ok = True
                                 break
@@ -155,9 +153,9 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
                                 port_satisfied = True
                                 break
                             # Param port carry‑over: ignore phase if source is preprocessing
-                            if in_port.port_kind == "param" and src_nid in pre_set:
-                                port_satisfied = True
-                                break
+                            # if in_port.port_kind == "param" and src_nid in pre_set:
+                            #     port_satisfied = True
+                            #     break
                     if not port_satisfied:
                         inputs_ok = False
                         break
