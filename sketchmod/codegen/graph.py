@@ -144,7 +144,7 @@ def parse_graph(json_data: dict) -> Graph:
         graph.add_node(node)
 
     # Apply default phases for ports that have empty activation_phases
-    _apply_default_phases(graph)
+    #_apply_default_phases(graph)
 
     # Parse links
     for l in json_data.get("links", []):
