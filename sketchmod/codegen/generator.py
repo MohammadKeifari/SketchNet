@@ -281,9 +281,6 @@ class CodeGenerator:
                         explicit_candidates.append(var)
                     else:
                         fallback_candidates.append(var)
-        print(
-            f"[DEBUG] phase={phase}, full_phase={full_phase}, explicit={explicit_candidates}, fallback={fallback_candidates}"
-        )
         if explicit_candidates:
             return explicit_candidates[0]
         if fallback_candidates:
