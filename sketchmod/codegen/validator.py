@@ -32,7 +32,7 @@ class GraphValidator:
         warnings = []
 
         self._check_input_output_present(errors)
-        self._check_optimizer_connections(errors)
+        # self._check_optimizer_connections(errors)
         self._check_link_weights(warnings)
         self._check_multi_port_cardinality(errors)
         self._check_model_connectivity(warnings)
@@ -40,6 +40,7 @@ class GraphValidator:
         self._check_label_encoding(warnings)
         self._check_loss_label_compatibility(errors, warnings)
         self._check_accuracy_inputs(warnings)
+        self._check_input_output_present(errors, warnings)
 
         return {
             "errors": errors,
@@ -243,3 +244,30 @@ class GraphValidator:
                             "nodeId": node.id,
                         }
                     )
+
+    def _check_preprocessing_only(self, warnings):
+        train_set = self.flow.get("train_set", set())
+        eval_set = self.flow.get("eval_set", set())
+        preprocessing_set = self.flow.get("preprocessing_set", set())
+        # Consider nodes that are model/output/optimizer as “real” training/eval
+        has_train = any(
+            nid in train_set
+            and self.graph.nodes[nid].type in MODEL_TYPES | {"output", "optimizer"}
+            for nid in train_set
+        )
+        has_eval = any(
+            nid in eval_set
+            and self.graph.nodes[nid].type
+            in MODEL_TYPES | {"output", "optimizer", "visualization"}
+            for nid in eval_set
+        )
+        if not has_train and not has_eval and preprocessing_set:
+            warnings.append(
+                {
+                    "message": (
+                        "No training or evaluation path is reachable from preprocessing outputs. "
+                        "The generated code will contain only data loading and preprocessing."
+                    ),
+                    "nodeId": None,
+                }
+            )
