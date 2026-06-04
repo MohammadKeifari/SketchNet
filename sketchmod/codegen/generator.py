@@ -369,6 +369,28 @@ class CodeGenerator:
         w.line("")
 
     # ------------------------------------------------------------------
+    def _write_training_analytics(self, w):
+        """Generate code for non‑model, non‑preprocessing nodes active in training."""
+        train_analytics = [
+            nid
+            for nid in self.flow["train_order"]
+            if nid not in self.flow["preprocessing_set"]
+            and self.graph.nodes[nid].type not in MODEL_TYPES
+        ]
+        if not train_analytics:
+            return
+
+        # Make output port variables available as expressions like outputs['port_id']
+        output_node = next(
+            (n for n in self.graph.nodes.values() if n.type == "output"), None
+        )
+        if output_node:
+            for port in output_node.outputs:
+                self.var_map[port.id] = f"outputs['{port.id}']"
+
+        for nid in train_analytics:
+            self.translators[nid].data_code(w, "train")
+
     def _write_training(self, w):
         opt_node = self.flow.get("optimizer")
         if not opt_node:
@@ -462,6 +484,10 @@ class CodeGenerator:
         else:
             w.line("pred = list(outputs.values())[0]")
         w.line("loss = criterion(pred, batch_y)")
+        w.line("")
+        w.line("# Training analytics")
+        self._write_training_analytics(w)
+        w.line("")
         w.line("")
         w.line("optimizer.zero_grad()")
         w.line("loss.backward()")
