@@ -142,17 +142,20 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
                         if link.id_to == in_port.id:
                             src_port = graph.ports[link.id_from]
                             src_nid = src_port.node_id
-                            # Normal flow
+
+                            # Allow the link if:
+                            #  - the source is already active in the current phase, OR
+                            #  - the source is a preprocessing node (carry‑over)
+                            # and both the source and target ports have the required phase.
                             if (
-                                src_nid in active
+                                (src_nid in active or src_nid in pre_set)
                                 and _is_port_active(src_port, phase)
                                 and _is_port_active(in_port, phase)
-                            ) or (
-                                src_nid in pre_set and _is_port_active(in_port, phase)
                             ):
                                 port_satisfied = True
                                 break
-                            # Param port carry‑over: ignore phase if source is preprocessing
+
+                            # Param port carry‑over remains unchanged
                             if in_port.port_kind == "param" and src_nid in pre_set:
                                 port_satisfied = True
                                 break
