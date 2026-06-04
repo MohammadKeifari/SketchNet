@@ -1,44 +1,128 @@
 """
-Translators convert SketchNet nodes into PyTorch code snippets.
-Each translator has methods for:
-    data_code   – code executed once in load_and_preprocess()
-    init_code   – code for Model.__init__()
-    forward_code – code for Model.forward()
-    extra_code  – additional code (e.g., optimizer config, visualization)
+Translators for converting SketchNet nodes into PyTorch code snippets.
+
+This module defines translator classes that convert different node types from
+the SketchNet graph into executable PyTorch code. Each translator is responsible
+for generating code appropriate to its node type for different code generation
+stages:
+- data_code: Executed once in load_and_preprocess() for data loading/transforms
+- init_code: Code for Model.__init__() to define layers and parameters
+- forward_code: Code for Model.forward() to execute the model
+- optimizer_code: Returns optimizer configuration parameters
+- visualization_code: Code for generating visualizations after evaluation
+
+The translator registry (get_translator) returns the appropriate translator
+for each node type.
 """
 
 
 class BaseTranslator:
-    """Default translator – does nothing."""
+    """
+    Base translator class providing default (no-op) implementations.
+    
+    All translator subclasses inherit from this and override methods as needed.
+    The base implementations do nothing, allowing translators to selectively
+    implement only the code generation methods they need.
+    
+    Attributes:
+        node_type (str): The type of node this translator handles (must be set by subclasses).
+        node (Node): The graph node being translated.
+        graph (Graph): The full computation graph (for lookups).
+        var_map (Dict): Mapping of node/port IDs to variable names in generated code.
+    """
 
     node_type = None
 
     def __init__(self, node, graph, var_map):
+        """
+        Initialize the translator.
+        
+        Args:
+            node (Node): The node to translate.
+            graph (Graph): The computation graph.
+            var_map (Dict): Mapping of IDs to variable names (shared across all translators).
+        """
         self.node = node
         self.graph = graph
-        self.var_map = var_map  # maps node/port id -> variable name
+        self.var_map = var_map
 
     def data_code(self, w, phase):
-        """Generate preprocessing / data‑transform code."""
+        """
+        Generate data loading or preprocessing code.
+        
+        This code is executed once in the load_and_preprocess() function to
+        load datasets, perform data transformations, and split data into
+        training and test sets.
+        
+        Args:
+            w (CodeWriter): The code writer to append lines to.
+            phase (str): The execution phase ("pre", "train", or "eval").
+        """
         pass
 
     def init_code(self, w):
-        """Generate model __init__ code."""
+        """
+        Generate model initialization code.
+        
+        This code is executed in Model.__init__() to create layer instances
+        and other model parameters.
+        
+        Args:
+            w (CodeWriter): The code writer to append lines to.
+        """
         pass
 
     def forward_code(self, w):
-        """Generate model forward code."""
+        """
+        Generate model forward pass code.
+        
+        This code is executed in Model.forward() to compute outputs from inputs.
+        
+        Args:
+            w (CodeWriter): The code writer to append lines to.
+        """
         pass
 
     def optimizer_code(self, w):
-        """Return optimizer config dict as a Python dict literal."""
+        """
+        Return optimizer configuration as a Python dictionary literal.
+        
+        This is used by the optimizer node to configure training parameters.
+        
+        Args:
+            w (CodeWriter): The code writer (not used here).
+            
+        Returns:
+            str: A Python dictionary representation of optimizer config.
+        """
         return "{}"
 
     def visualization_code(self, w):
-        """Generate visualization code."""
+        """
+        Generate visualization code.
+        
+        This code is executed in the evaluate() function to produce
+        visualizations of model behavior and outputs.
+        
+        Args:
+            w (CodeWriter): The code writer to append lines to.
+        """
         pass
 
     def _get_input_var(self, node):
+        """
+        Get the variable name for the primary input to a node.
+        
+        Looks up connected input ports to find the variable name that holds
+        the data flowing into this node. First tries to find the exact source
+        port ID in var_map, then falls back to the source node ID.
+        
+        Args:
+            node (Node): The node whose input variable to retrieve.
+            
+        Returns:
+            str: Variable name (e.g., "raw_data", "x_0_out"), or "raw_data" as fallback.
+        """
         for port in node.inputs + node.paramInputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -57,9 +141,26 @@ class BaseTranslator:
 # DATA NODES
 # ---------------------------------------------------------------------------
 class InputDataTranslator(BaseTranslator):
+    """
+    Translator for input-data nodes that load datasets.
+    
+    Handles loading data from various formats (CSV, Excel, JSON, Parquet) or
+    generating synthetic random data if no dataset is specified. The data is
+    loaded into PyTorch tensors in the preprocessing phase.
+    """
     node_type = "input-data"
 
     def data_code(self, w, phase):
+        """
+        Generate data loading code.
+        
+        Creates PyTorch tensors from CSV/Excel/JSON/Parquet files, or generates
+        synthetic data with specified shape.
+        
+        Args:
+            w (CodeWriter): The code writer.
+            phase (str): The execution phase (typically "pre" for preprocessing).
+        """
         n = self.node
         ds = n.properties.get("dataShape")
         dataset_id = n.properties.get("datasetId")
@@ -109,9 +210,22 @@ class InputDataTranslator(BaseTranslator):
 
 
 class ColumnSelectTranslator(BaseTranslator):
+    """
+    Translator for column-select nodes that select specific columns from data.
+    
+    Generates code to select a subset of columns from the input tensor using
+    PyTorch indexing.
+    """
     node_type = "column-select"
 
     def data_code(self, w, phase):
+        """
+        Generate column selection code.
+        
+        Args:
+            w (CodeWriter): The code writer.
+            phase (str): The execution phase.
+        """
         n = self.node
         cols = n.properties.get("selectedColumns", [])
         if not cols:
@@ -135,6 +249,7 @@ class ColumnSelectTranslator(BaseTranslator):
             self.var_map[n.id] = out_var
 
     def _get_input_var(self, node):
+        """Get the input variable, prioritizing source port ID over source node ID."""
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -150,9 +265,25 @@ class ColumnSelectTranslator(BaseTranslator):
 
 
 class RowSelectTranslator(BaseTranslator):
+    """
+    Translator for row-select nodes that select specific rows from data.
+    
+    Supports multiple selection methods:
+    - first-n: Select the first N rows
+    - random: Select N random rows
+    - slice: Select rows using Python slice notation
+    - indices: Select rows by specific indices
+    """
     node_type = "row-select"
 
     def data_code(self, w, phase):
+        """
+        Generate row selection code.
+        
+        Args:
+            w (CodeWriter): The code writer.
+            phase (str): The execution phase.
+        """
         n = self.node
         method = n.properties.get("method", "first-n")
         value = n.properties.get("value", "100")
@@ -178,13 +309,26 @@ class RowSelectTranslator(BaseTranslator):
         self.var_map[n.id] = out_var
 
     def _get_input_var(self, node):
+        """Get the input variable."""
         return ColumnSelectTranslator._get_input_var(self, node)
 
 
 class DimSelectTranslator(BaseTranslator):
+    """
+    Translator for dim-select nodes that reshape or select dimensions.
+    
+    Generates code to reshape or select specific dimensions from a tensor.
+    """
     node_type = "dim-select"
 
     def data_code(self, w, phase):
+        """
+        Generate dimension selection code.
+        
+        Args:
+            w (CodeWriter): The code writer.
+            phase (str): The execution phase.
+        """
         n = self.node
         dims = n.properties.get("dimSelections", [])
         in_var = self._get_input_var(n)
