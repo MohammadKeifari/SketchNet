@@ -618,24 +618,18 @@ class CodeGenerator:
         order = self.flow[f"{phase}_order"]
         for nid in order:
             if self.graph.nodes[nid].type in MODEL_TYPES:
+                # first model node – look for a feeding node whose output has the phase
                 for in_port in self.graph.nodes[nid].inputs:
                     for link in self.graph.links:
                         if link.id_to == in_port.id:
                             src_port = self.graph.ports[link.id_from]
-                            # 1) prefer explicit phase on source port
                             if full_phase in src_port.activation_phases:
-                                # return the port ID (the variable name)
-                                return src_port.id
-                # fallback: any connected source (port ID first, then node ID)
+                                    return src_port.node_id  # <-- node ID
+                # fallback: any connected source node
                 for in_port in self.graph.nodes[nid].inputs:
                     for link in self.graph.links:
                         if link.id_to == in_port.id:
-                            src_port = self.graph.ports[link.id_from]
-                            if src_port.id in self.var_map:
-                                return src_port.id
-                            src_id = src_port.node_id
-                            if src_id in self.var_map:
-                                return src_id
+                            return self.graph.ports[link.id_from].node_id
         return "input"
 
     def _get_loss_port_id(self):
