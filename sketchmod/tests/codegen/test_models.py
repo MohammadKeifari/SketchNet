@@ -61,6 +61,7 @@ def run_generated_code(
         tmp_path = f.name
 
     env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = ""  # force CPU for tests
     if not interactive:
         env["MPLBACKEND"] = "Agg"
     env["PYTHONUNBUFFERED"] = "1"
