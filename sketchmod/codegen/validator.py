@@ -79,6 +79,7 @@ class GraphValidator:
         self._check_loss_label_compatibility(errors, warnings)
         self._check_accuracy_inputs(warnings)
         self._check_visualization_shapes(warnings)
+        self._check_training_visualization(warnings)
 
         return {
             "errors": errors,
@@ -411,3 +412,18 @@ class GraphValidator:
                                 "nodeId": node.id,
                             }
                         )
+
+
+    def _check_training_visualization(self, warnings):
+        for nid in self.flow.get("train_set", set()):
+            node = self.graph.nodes[nid]
+            if node.type == "visualization":
+                warnings.append(
+                    {
+                        "message": (
+                            f"Visualization '{nid}' is active in the training phase. "
+                            "It will not be generated because training‑loop visualizations are not supported."
+                        ),
+                        "nodeId": nid,
+                    }
+                )
