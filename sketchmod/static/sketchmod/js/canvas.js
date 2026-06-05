@@ -1722,7 +1722,7 @@ const SketchMod = {
                     ${link.weightShapeDisplay()}
                 </p>
             </div>
-            ${
+            <!--${
                 isScalarLike
                     ? `
             <div class="prop-group">
@@ -1739,7 +1739,7 @@ const SketchMod = {
                        value="${link.weight}" step="0.01"
                        onchange="SketchMod._updateLinkWeight(this)">
                 <p class="prop-hint">Scale for random initialization</p>
-            </div>
+            </div>-->
             `
             }
         `;
