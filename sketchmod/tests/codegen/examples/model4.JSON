@@ -31,10 +31,10 @@
             "paramOutputs": [],
             "numParamInputs": 0,
             "numParamOutputs": 0,
-            "datasetId": "cs3YFLqc",
+            "datasetId": "model1to4",
             "datasetName": "Synthetic Classification",
             "dataShape": "(100, 3)",
-            "datasetFile": "cs3YFLqc.csv",
+            "datasetFile": "model1to4.csv",
             "datasetFormat": "csv"
         },
         {
