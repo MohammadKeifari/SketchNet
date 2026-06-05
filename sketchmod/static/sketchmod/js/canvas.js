@@ -5315,21 +5315,6 @@ class LayerNode extends RectNode {
                     onchange="SketchMod._updateNodeBias(this)">
                 <p class="prop-hint">Initial value for bias vector (${this.numNeurons},)</p>
             </div>
-            <div class="prop-group"><label>Activation</label>
-                <select id="prop-activation" class="prop-select">
-                    <option value="linear"   ${this.activation === "linear" ? "selected" : ""}>Linear (none)</option>
-                    <option value="relu"     ${this.activation === "relu" ? "selected" : ""}>ReLU</option>
-                    <option value="sigmoid"  ${this.activation === "sigmoid" ? "selected" : ""}>Sigmoid</option>
-                    <option value="tanh"     ${this.activation === "tanh" ? "selected" : ""}>Tanh</option>
-                    <option value="softmax"  ${this.activation === "softmax" ? "selected" : ""}>Softmax</option>
-                    <option value="softplus" ${this.activation === "softplus" ? "selected" : ""}>Softplus</option>
-                    <option value="elu"      ${this.activation === "elu" ? "selected" : ""}>ELU</option>
-                    <option value="selu"     ${this.activation === "selu" ? "selected" : ""}>SELU</option>
-                    <option value="gelu"     ${this.activation === "gelu" ? "selected" : ""}>GELU</option>
-                    <option value="leaky_relu" ${this.activation === "leaky_relu" ? "selected" : ""}>Leaky ReLU</option>
-                    <option value="mish"     ${this.activation === "mish" ? "selected" : ""}>Mish</option>
-                    </select>
-            </div>
         `
         );
     }
