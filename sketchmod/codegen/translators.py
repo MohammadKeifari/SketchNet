@@ -378,6 +378,28 @@ class NeuronTranslator(BaseTranslator):
 
     node_type = "neuron"
 
+    def _guess_in_features(self, node):
+        """
+        Return the number of input features by looking at the last dimension
+        of the shape of the first connected source port.
+        """
+        for port in node.inputs:
+            for link in self.graph.links:
+                if link.id_to == port.id:
+                    src_port = self.graph.ports[link.id_from]
+                    if (
+                        src_port.shape
+                        and src_port.shape.shape
+                        and len(src_port.shape.shape) >= 2
+                    ):
+                        # shape is (batch, ..., in_features)
+                        in_feat = src_port.shape.shape[-1]
+                        try:
+                            return int(str(in_feat))
+                        except (ValueError, TypeError):
+                            pass
+        return "input_size  # TODO: set input feature dimension"
+
     def init_code(self, w):
         n = self.node
         in_features = self._guess_in_features(n)
@@ -428,15 +450,6 @@ class NeuronTranslator(BaseTranslator):
         else:
             w.line(f"outputs['{n.id}'] = None  # no input connected")
 
-    def _guess_in_features(self, node):
-        for port in node.inputs:
-            for link in self.graph.links:
-                if link.id_to == port.id and link.weight_shape:
-                    shape = link.weight_shape.get("shape", [])
-                    if len(shape) >= 2:
-                        return shape[1]
-        return "input_size  # TODO: set input feature dimension"
-
 
 class LayerTranslator(NeuronTranslator):
     """Dense (linear) layer with configurable number of neurons and activation."""
@@ -445,7 +458,7 @@ class LayerTranslator(NeuronTranslator):
 
     def init_code(self, w):
         n = self.node
-        in_features = self._guess_in_features(n)
+        in_features = self._guess_in_features(n)  # inherited, uses port shape
         out_features = n.properties.get("numNeurons", 64)
         bias = n.properties.get("hasBias", True)
         bias_val = n.properties.get("bias", 0.0)
@@ -454,14 +467,6 @@ class LayerTranslator(NeuronTranslator):
         )
         if bias:
             w.line(f"nn.init.constant_(self.fc_{n.id}.bias, {bias_val})")
-        for port in n.inputs:
-            for link in self.graph.links:
-                if link.id_to == port.id:
-                    weight_name = f"weight_{link.id_from}_{link.id_to}"
-                    init_val = float(link.weight) if link.weight != 0.0 else 1.0
-                    w.line(
-                        f"self.{weight_name} = nn.Parameter(torch.tensor({init_val}))"
-                    )
 
 
 class Conv2DTranslator(BaseTranslator):
@@ -616,8 +621,6 @@ class BatchNormTranslator(BaseTranslator):
         w.dedent()
         w.line(f"x = self.bn_{n.id}(x)")
         w.line(f"outputs['{n.id}'] = x")
-
-
 
 
 class AddTranslator(BaseTranslator):
