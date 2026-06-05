@@ -80,6 +80,8 @@ class GraphValidator:
         self._check_accuracy_inputs(warnings)
         self._check_visualization_shapes(warnings)
         self._check_training_visualization(warnings)
+        self._check_required_inputs(errors)
+        self._check_required_outputs(errors)
 
         return {
             "errors": errors,
@@ -413,7 +415,6 @@ class GraphValidator:
                             }
                         )
 
-
     def _check_training_visualization(self, warnings):
         for nid in self.flow.get("train_set", set()):
             node = self.graph.nodes[nid]
@@ -425,5 +426,71 @@ class GraphValidator:
                             "It will not be generated because training‑loop visualizations are not supported."
                         ),
                         "nodeId": nid,
+                    }
+                )
+
+    def _check_required_inputs(self, errors):
+        """Ensure nodes have the minimum required incoming connections."""
+        for node in self.graph.nodes.values():
+            # Count connected data input ports
+            in_count = sum(
+                1 for l in self.graph.links if l.id_to in {p.id for p in node.inputs}
+            )
+            if node.type in (
+                "neuron",
+                "layer",
+                "conv2d",
+                "flatten",
+                "dropout",
+                "batchnorm",
+            ):
+                if in_count < 1:
+                    errors.append(
+                        {
+                            "message": f"Node '{node.type}' ({node.id}) requires at least 1 input connection, found {in_count}.",
+                            "nodeId": node.id,
+                        }
+                    )
+            elif node.type == "add":
+                if in_count != 2:
+                    errors.append(
+                        {
+                            "message": f"Add node '{node.id}' requires exactly 2 inputs, found {in_count}.",
+                            "nodeId": node.id,
+                        }
+                    )
+            elif node.type == "concat":
+                if in_count < 2:
+                    errors.append(
+                        {
+                            "message": f"Concat node '{node.id}' requires at least 2 inputs, found {in_count}.",
+                            "nodeId": node.id,
+                        }
+                    )
+            elif node.type == "optimizer":
+                for port in node.inputs:
+                    connected = any(l.id_to == port.id for l in self.graph.links)
+                    if not connected:
+                        role = port.role or f"port {port.index}"
+                        errors.append(
+                            {
+                                "message": f"Optimizer input '{role}' is not connected.",
+                                "portId": port.id,
+                            }
+                        )
+
+    def _check_required_outputs(self, errors):
+        """Ensure Output node has both inputs connected (train & test)."""
+        output_node = next(
+            (n for n in self.graph.nodes.values() if n.type == "output"), None
+        )
+        if not output_node:
+            return
+        for port in output_node.inputs:
+            if not any(l.id_to == port.id for l in self.graph.links):
+                errors.append(
+                    {
+                        "message": f"Output input '{port.sub_type}' is not connected.",
+                        "portId": port.id,
                     }
                 )
