@@ -7044,7 +7044,7 @@ class ConcatenateNode extends RectNode {
 class AddNode extends RectNode {
     constructor(id, x, y) {
         super(id, x, y, "add", 90, 55);
-        this.maxInputs = 1;
+        this.maxInputs = Infinity;
         this.minInputs = 1;
         this.maxOutputs = 1;
         this.minOutputs = 1;
