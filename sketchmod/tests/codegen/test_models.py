@@ -382,12 +382,78 @@ def check_model5(proc, code, graph):
     return ok
 
 
+def check_model6(proc, code, graph):
+    """
+    model6 checks:
+      1. Dropout, Add, Concat nodes are present in the generated code.
+      2. Preprocessing visualization (viz_pre) is present and runs in load_and_preprocess.
+      3. Evaluation visualization (viz_eval) is present and runs in evaluate.
+      4. Training visualization (viz_train) triggers a validator warning.
+      5. Model converges (final training loss < 0.1).
+    """
+    ok = True
+
+    # 1. Key nodes
+    for node_name in ["dropout", "Add", "Concat"]:
+        if node_name.lower() in code.lower():
+            print(f"✅ {node_name} found")
+        else:
+            print(f"❌ {node_name} missing")
+            ok = False
+
+    # 2. Preprocessing viz
+    if "Visualization 'viz_pre'" in code:
+        print("✅ viz_pre present")
+    else:
+        print("❌ viz_pre missing")
+        ok = False
+
+    # 3. Evaluation viz
+    if "Visualization 'viz_eval'" in code:
+        print("✅ viz_eval present")
+    else:
+        print("❌ viz_eval missing")
+        ok = False
+
+    # 4. Training viz warning
+    from sketchmod.codegen.validator import GraphValidator
+
+    result = GraphValidator(graph).validate()
+    warnings = [w["message"] for w in result.get("warnings", [])]
+    if any("training" in w.lower() and "visualization" in w.lower() for w in warnings):
+        print("✅ Training visualization warning present")
+    else:
+        print("❌ Training visualization warning missing")
+        ok = False
+
+    # 5. Convergence
+    output = proc.stdout
+    import re
+
+    losses = re.findall(r"Train Loss: ([0-9.]+)", output)
+    if losses:
+        final_train_loss = float(losses[-1])
+        if final_train_loss < 0.1:
+            print(f"✅ Model converged (final train loss = {final_train_loss:.6f})")
+        else:
+            print(
+                f"❌ Model did not converge (final train loss = {final_train_loss:.6f})"
+            )
+            ok = False
+    else:
+        print("❌ Could not parse train loss from output")
+        ok = False
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
     3: check_model3,
     4: check_model4,
     5: check_model5,
+    6: check_model6,
 }
 
 
