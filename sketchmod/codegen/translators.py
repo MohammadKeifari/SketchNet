@@ -19,11 +19,11 @@ for each node type.
 class BaseTranslator:
     """
     Base translator class providing default (no-op) implementations.
-    
+
     All translator subclasses inherit from this and override methods as needed.
     The base implementations do nothing, allowing translators to selectively
     implement only the code generation methods they need.
-    
+
     Attributes:
         node_type (str): The type of node this translator handles (must be set by subclasses).
         node (Node): The graph node being translated.
@@ -36,7 +36,7 @@ class BaseTranslator:
     def __init__(self, node, graph, var_map):
         """
         Initialize the translator.
-        
+
         Args:
             node (Node): The node to translate.
             graph (Graph): The computation graph.
@@ -49,11 +49,7 @@ class BaseTranslator:
     def data_code(self, w, phase):
         """
         Generate data loading or preprocessing code.
-        
-        This code is executed once in the load_and_preprocess() function to
-        load datasets, perform data transformations, and split data into
-        training and test sets.
-        
+
         Args:
             w (CodeWriter): The code writer to append lines to.
             phase (str): The execution phase ("pre", "train", or "eval").
@@ -62,75 +58,42 @@ class BaseTranslator:
 
     def init_code(self, w):
         """
-        Generate model initialization code.
-        
-        This code is executed in Model.__init__() to create layer instances
-        and other model parameters.
-        
-        Args:
-            w (CodeWriter): The code writer to append lines to.
+        Generate model initialization code (Model.__init__).
         """
         pass
 
     def forward_code(self, w):
         """
-        Generate model forward pass code.
-        
-        This code is executed in Model.forward() to compute outputs from inputs.
-        
-        Args:
-            w (CodeWriter): The code writer to append lines to.
+        Generate model forward pass code (Model.forward).
         """
         pass
 
     def optimizer_code(self, w):
         """
         Return optimizer configuration as a Python dictionary literal.
-        
-        This is used by the optimizer node to configure training parameters.
-        
-        Args:
-            w (CodeWriter): The code writer (not used here).
-            
-        Returns:
-            str: A Python dictionary representation of optimizer config.
         """
         return "{}"
 
     def visualization_code(self, w):
         """
-        Generate visualization code.
-        
-        This code is executed in the evaluate() function to produce
-        visualizations of model behavior and outputs.
-        
-        Args:
-            w (CodeWriter): The code writer to append lines to.
+        Generate visualization code (evaluate function).
         """
         pass
 
     def _get_input_var(self, node):
         """
-        Get the variable name for the primary input to a node.
-        
-        Looks up connected input ports to find the variable name that holds
-        the data flowing into this node. First tries to find the exact source
-        port ID in var_map, then falls back to the source node ID.
-        
-        Args:
-            node (Node): The node whose input variable to retrieve.
-            
-        Returns:
-            str: Variable name (e.g., "raw_data", "x_0_out"), or "raw_data" as fallback.
+        Return the variable name feeding a node's first input port.
+
+        Performs a port‑ID‑first lookup:
+        1. Exact source port ID in var_map.
+        2. Fallback: source node ID in var_map.
         """
         for port in node.inputs + node.paramInputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
-                    # 1) Try the exact source port ID
                     src_port_id = link.id_from
                     if src_port_id in self.var_map:
                         return self.var_map[src_port_id]
-                    # 2) Fall back to the source node ID
                     src_id = self.graph.ports[src_port_id].node_id
                     if src_id in self.var_map:
                         return self.var_map[src_id]
@@ -142,25 +105,13 @@ class BaseTranslator:
 # ---------------------------------------------------------------------------
 class InputDataTranslator(BaseTranslator):
     """
-    Translator for input-data nodes that load datasets.
-    
-    Handles loading data from various formats (CSV, Excel, JSON, Parquet) or
-    generating synthetic random data if no dataset is specified. The data is
-    loaded into PyTorch tensors in the preprocessing phase.
+    Loads a dataset from CSV, Excel, JSON, or Parquet, or generates synthetic
+    random data when no dataset is provided.
     """
+
     node_type = "input-data"
 
     def data_code(self, w, phase):
-        """
-        Generate data loading code.
-        
-        Creates PyTorch tensors from CSV/Excel/JSON/Parquet files, or generates
-        synthetic data with specified shape.
-        
-        Args:
-            w (CodeWriter): The code writer.
-            phase (str): The execution phase (typically "pre" for preprocessing).
-        """
         n = self.node
         ds = n.properties.get("dataShape")
         dataset_id = n.properties.get("datasetId")
@@ -168,20 +119,19 @@ class InputDataTranslator(BaseTranslator):
         dataset_format = n.properties.get("datasetFormat", "")
 
         if dataset_id and dataset_file:
-            # Real dataset – generate loading code
             ext = dataset_format or dataset_file.rsplit(".", 1)[-1]
             if ext in ("csv", "xlsx", "json", "parquet"):
                 if ext == "csv":
-                    w.line(f"import pandas as pd")
+                    w.line("import pandas as pd")
                     w.line(f"df = pd.read_csv('data/{dataset_file}')")
                 elif ext == "xlsx":
-                    w.line(f"import pandas as pd")
+                    w.line("import pandas as pd")
                     w.line(f"df = pd.read_excel('data/{dataset_file}')")
                 elif ext == "json":
-                    w.line(f"import pandas as pd")
+                    w.line("import pandas as pd")
                     w.line(f"df = pd.read_json('data/{dataset_file}')")
                 elif ext == "parquet":
-                    w.line(f"import pandas as pd")
+                    w.line("import pandas as pd")
                     w.line(f"df = pd.read_parquet('data/{dataset_file}')")
                 w.line("raw_data = torch.tensor(df.values, dtype=torch.float32)")
             else:
@@ -189,7 +139,6 @@ class InputDataTranslator(BaseTranslator):
                 w.line("raw_data = torch.randn(200, 10)")
             self.var_map[n.id] = "raw_data"
         elif ds:
-            # Manual shape
             parts = ds.strip("()").split(",")
             row_str = parts[0].strip()
             cols = [int(p.strip()) for p in parts[1:]]
@@ -211,35 +160,24 @@ class InputDataTranslator(BaseTranslator):
 
 class ColumnSelectTranslator(BaseTranslator):
     """
-    Translator for column-select nodes that select specific columns from data.
-    
-    Generates code to select a subset of columns from the input tensor using
-    PyTorch indexing.
+    Selects a subset of columns from the input tensor using PyTorch indexing.
     """
+
     node_type = "column-select"
 
     def data_code(self, w, phase):
-        """
-        Generate column selection code.
-        
-        Args:
-            w (CodeWriter): The code writer.
-            phase (str): The execution phase.
-        """
         n = self.node
         cols = n.properties.get("selectedColumns", [])
         if not cols:
             col_str = n.properties.get("columnInput", "")
             if col_str:
                 w.line(f"# ColumnSelect '{n.id}' with input '{col_str}'")
-                # generate dynamic selection using Python slice syntax
                 w.line(f"indices = list(range({col_str}))")
                 in_var = self._get_input_var(n)
                 out_var = f"{n.id}_out"
                 w.line(f"{out_var} = {in_var}[:, indices]")
                 self.var_map[n.id] = out_var
             else:
-                # pass-through
                 self.var_map[n.id] = self._get_input_var(n)
         else:
             col_list = ", ".join(str(c) for c in cols)
@@ -249,15 +187,13 @@ class ColumnSelectTranslator(BaseTranslator):
             self.var_map[n.id] = out_var
 
     def _get_input_var(self, node):
-        """Get the input variable, prioritizing source port ID over source node ID."""
+        """Port‑ID first, then node‑ID."""
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
                     src_port_id = link.id_from
-                    # 1) Check source port ID first
                     if src_port_id in self.var_map:
                         return self.var_map[src_port_id]
-                    # 2) Fall back to source node ID
                     src_id = self.graph.ports[src_port_id].node_id
                     if src_id in self.var_map:
                         return self.var_map[src_id]
@@ -265,25 +201,11 @@ class ColumnSelectTranslator(BaseTranslator):
 
 
 class RowSelectTranslator(BaseTranslator):
-    """
-    Translator for row-select nodes that select specific rows from data.
-    
-    Supports multiple selection methods:
-    - first-n: Select the first N rows
-    - random: Select N random rows
-    - slice: Select rows using Python slice notation
-    - indices: Select rows by specific indices
-    """
+    """Selects rows via first‑N, random, slice, or explicit indices."""
+
     node_type = "row-select"
 
     def data_code(self, w, phase):
-        """
-        Generate row selection code.
-        
-        Args:
-            w (CodeWriter): The code writer.
-            phase (str): The execution phase.
-        """
         n = self.node
         method = n.properties.get("method", "first-n")
         value = n.properties.get("value", "100")
@@ -309,60 +231,45 @@ class RowSelectTranslator(BaseTranslator):
         self.var_map[n.id] = out_var
 
     def _get_input_var(self, node):
-        """Get the input variable."""
         return ColumnSelectTranslator._get_input_var(self, node)
 
 
 class DimSelectTranslator(BaseTranslator):
-    """
-    Translator for dim-select nodes that reshape or select dimensions.
-    
-    Generates code to reshape or select specific dimensions from a tensor.
-    """
+    """Applies per‑dimension slicing (e.g., ``[0:3, 1:2]``)."""
+
     node_type = "dim-select"
 
     def data_code(self, w, phase):
-        """
-        Generate dimension selection code.
-        
-        Args:
-            w (CodeWriter): The code writer.
-            phase (str): The execution phase.
-        """
         n = self.node
         dims = n.properties.get("dimSelections", [])
         in_var = self._get_input_var(n)
         out_var = f"{n.id}_out"
-        # For now, we'll generate a simple pass-through if all dims are ":"
         if all(not s or s.strip() == ":" for s in dims):
             w.line(f"{out_var} = {in_var}  # no dimension selection")
         else:
-            # Build a list of indices for each dimension
             slices = []
             for sel in dims:
                 if not sel or sel.strip() == ":":
                     slices.append(":")
                 else:
-                    # parse like "0,1,2" or "0:3"
                     slices.append(f"[{sel}]")
             if all(s == ":" for s in slices):
                 w.line(f"{out_var} = {in_var}")
             else:
-                # concatenate slices after the batch dim
                 slice_str = "[:, " + ", ".join(slices) + "]"
                 w.line(f"{out_var} = {in_var}{slice_str}")
         self.var_map[n.id] = out_var
 
     def _get_input_var(self, node):
-        """Get input var."""
         return ColumnSelectTranslator._get_input_var(self, node)
 
 
 class NormalizeTranslator(BaseTranslator):
+    """Standard (Z‑score) or Min‑Max normalisation."""
+
     node_type = "normalize"
 
     def data_code(self, w, phase):
-        """Emit data-processing code for this node."""
         n = self.node
         method = n.properties.get("method", "standard")
         in_var = self._get_input_var(n)
@@ -378,48 +285,42 @@ class NormalizeTranslator(BaseTranslator):
         self.var_map[n.id] = out_var
 
     def _get_input_var(self, node):
-        """Get input var."""
         return ColumnSelectTranslator._get_input_var(self, node)
 
 
 class OneHotTranslator(BaseTranslator):
+    """One‑hot encodes integer labels. Supports param output for shared categories."""
+
     node_type = "onehot"
 
     def data_code(self, w, phase):
-        """Emit data-processing code for this node."""
         n = self.node
         num_classes = n.properties.get("numClasses", 10)
         in_var = self._get_input_var(n)
         out_var = f"{n.id}_out"
 
-        # Check if a param input is connected (for sharing encoding)
-        param_input = None
-        if n.paramOutputs:
-            param_input = f"{n.id}_categories"
-
-        w.line(f"# OneHot encode – squeeze last dim if needed")
+        w.line("# OneHot encode – squeeze last dim if needed")
         w.line(f"{in_var}_squeezed = {in_var}.squeeze(-1).long()")
         w.line(
             f"{out_var} = torch.nn.functional.one_hot({in_var}_squeezed, num_classes={num_classes}).float()"
         )
         self.var_map[n.id] = out_var
 
-        # Store categories for sharing via param output
         if n.paramOutputs:
             w.line(f"categories = torch.arange({num_classes})")
             self.var_map[n.paramOutputs[0].id] = "categories"
 
 
 class DeOneHotTranslator(BaseTranslator):
+    """Converts one‑hot vectors back to class indices. Handles both 1‑D and 2‑D inputs."""
+
     node_type = "deonehot"
 
     def data_code(self, w, phase):
-        """Emit data-processing code for this node."""
         n = self.node
         in_var = self._get_input_var(n)
         out_var = f"{n.id}_out"
 
-        # Check if a param input is connected (for shared encoding)
         param_input = None
         if n.paramInputs:
             for link in self.graph.links:
@@ -430,12 +331,11 @@ class DeOneHotTranslator(BaseTranslator):
         if param_input:
             w.line(f"categories = {param_input}")
 
-        # Handle both 2D one‑hot and 1D class index inputs
         w.line(f"if {in_var}.dim() == 2:")
         w.indent()
         w.line(f"{out_var} = torch.argmax({in_var}, dim=-1)")
         w.dedent()
-        w.line(f"else:")
+        w.line("else:")
         w.indent()
         w.line(f"{out_var} = {in_var}  # already class indices")
         w.dedent()
@@ -444,16 +344,16 @@ class DeOneHotTranslator(BaseTranslator):
 
 
 class TrainTestSplitTranslator(BaseTranslator):
+    """Splits data into train/test sets. Stores results under port IDs and node ID."""
+
     node_type = "train-test"
 
     def data_code(self, w, phase):
-        """Emit data-processing code for this node."""
         n = self.node
         train_ratio = n.properties.get("trainRatio", 0.7)
         seed = n.properties.get("randomSeed", 42)
         in_var = self._get_input_var(n)
 
-        # Unique variable names to avoid collisions
         train_var = f"train_data_{n.id}"
         test_var = f"test_data_{n.id}"
 
@@ -474,10 +374,11 @@ class TrainTestSplitTranslator(BaseTranslator):
 # MODEL NODES
 # ---------------------------------------------------------------------------
 class NeuronTranslator(BaseTranslator):
+    """Single neuron with scalar input weights, linear layer, and activation."""
+
     node_type = "neuron"
 
     def init_code(self, w):
-        """Emit layer initialization code."""
         n = self.node
         in_features = self._guess_in_features(n)
         out_features = 1
@@ -498,10 +399,8 @@ class NeuronTranslator(BaseTranslator):
                     )
 
     def forward_code(self, w):
-        """Emit forward-pass code."""
         n = self.node
         w.line(f"# --- {n.type} {n.id} ---")
-        # Collect source node IDs and weights
         terms = []
         for port in n.inputs:
             for link in self.graph.links:
@@ -513,8 +412,7 @@ class NeuronTranslator(BaseTranslator):
             w.line(f"outputs['{n.id}'] = None  # no input connected")
             return
 
-        # Build weighted sum using values from `outputs` (internal nodes) or `inputs_dict` (first layer)
-        w.line(f"x = None")
+        w.line("x = None")
         for src_id, wgt in terms:
             w.line(f"if '{src_id}' in outputs or '{src_id}' in inputs_dict:")
             w.indent()
@@ -526,30 +424,27 @@ class NeuronTranslator(BaseTranslator):
         w.indent()
         w.line(f'raise ValueError("No input for {n.type} {n.id}")')
         w.dedent()
-        activation = n.properties.get("activation", "relu")
         w.line(f"x = self.fc_{n.id}(x)")
         activation = n.properties.get("activation", "relu")
         if activation in ("linear", "none"):
-            # no activation – x already holds the output
             pass
         elif activation == "softmax":
-            w.line(f"x = torch.softmax(x, dim=-1)")
+            w.line("x = torch.softmax(x, dim=-1)")
         elif activation == "leaky_relu":
-            w.line(f"x = torch.nn.functional.leaky_relu(x)")
+            w.line("x = torch.nn.functional.leaky_relu(x)")
         elif activation == "elu":
-            w.line(f"x = torch.nn.functional.elu(x)")
+            w.line("x = torch.nn.functional.elu(x)")
         elif activation == "selu":
-            w.line(f"x = torch.nn.functional.selu(x)")
+            w.line("x = torch.nn.functional.selu(x)")
         elif activation == "gelu":
-            w.line(f"x = torch.nn.functional.gelu(x)")
+            w.line("x = torch.nn.functional.gelu(x)")
         elif activation == "mish":
-            w.line(f"x = torch.nn.functional.mish(x)")
+            w.line("x = torch.nn.functional.mish(x)")
         else:
             w.line(f"x = torch.{activation}(x)")
         w.line(f"outputs['{n.id}'] = x")
 
     def _guess_in_features(self, node):
-        """Guess in features."""
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id and link.weight_shape:
@@ -560,10 +455,11 @@ class NeuronTranslator(BaseTranslator):
 
 
 class LayerTranslator(NeuronTranslator):
+    """Dense (linear) layer with configurable number of neurons and activation."""
+
     node_type = "layer"
 
     def init_code(self, w):
-        """Emit layer initialization code."""
         n = self.node
         in_features = self._guess_in_features(n)
         out_features = n.properties.get("numNeurons", 64)
@@ -583,16 +479,15 @@ class LayerTranslator(NeuronTranslator):
                         f"self.{weight_name} = nn.Parameter(torch.tensor({init_val}))"
                     )
 
-    # forward_code inherited from NeuronTranslator
-
 
 class Conv2DTranslator(BaseTranslator):
+    """2D convolutional layer with optional activation."""
+
     node_type = "conv2d"
 
     def init_code(self, w):
-        """Emit layer initialization code."""
         n = self.node
-        in_channels = 1  # placeholder, should be derived from input shape
+        in_channels = 1
         out_channels = n.properties.get("filters", 32)
         kernel = n.properties.get("kernelSize", 3)
         stride = n.properties.get("stride", 1)
@@ -601,7 +496,6 @@ class Conv2DTranslator(BaseTranslator):
         w.line(
             f"self.conv_{n.id} = nn.Conv2d({in_channels}, {out_channels}, kernel_size={kernel}, stride={stride}, padding={padding}, bias={bias})"
         )
-        # scalar weights for input links (if multi-input)
         for port in n.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -612,112 +506,120 @@ class Conv2DTranslator(BaseTranslator):
                     )
 
     def forward_code(self, w):
-        """Emit forward-pass code."""
         n = self.node
-        # find input source (usually one)
         in_src = (
             list(self.graph.predecessors(n.id))[0]
             if self.graph.predecessors(n.id)
             else None
         )
         if in_src:
-            w.line(f"x = inputs_dict.get('{in_src}')")
+            w.line(f"if '{in_src}' in outputs or '{in_src}' in inputs_dict:")
+            w.indent()
+            w.line(f"x = outputs.get('{in_src}', inputs_dict.get('{in_src}'))")
+            w.dedent()
         else:
             w.line("x = inputs_dict[list(inputs_dict.keys())[0]]  # fallback")
         w.line(f"x = self.conv_{n.id}(x)")
         activation = n.properties.get("activation", "relu")
         if activation in ("linear", "none"):
-            # no activation – x already holds the output
             pass
         elif activation == "softmax":
-            w.line(f"x = torch.softmax(x, dim=-1)")
+            w.line("x = torch.softmax(x, dim=-1)")
         elif activation == "leaky_relu":
-            w.line(f"x = torch.nn.functional.leaky_relu(x)")
+            w.line("x = torch.nn.functional.leaky_relu(x)")
         elif activation == "elu":
-            w.line(f"x = torch.nn.functional.elu(x)")
+            w.line("x = torch.nn.functional.elu(x)")
         elif activation == "selu":
-            w.line(f"x = torch.nn.functional.selu(x)")
+            w.line("x = torch.nn.functional.selu(x)")
         elif activation == "gelu":
-            w.line(f"x = torch.nn.functional.gelu(x)")
+            w.line("x = torch.nn.functional.gelu(x)")
         elif activation == "mish":
-            w.line(f"x = torch.nn.functional.mish(x)")
+            w.line("x = torch.nn.functional.mish(x)")
         else:
             w.line(f"x = torch.{activation}(x)")
         w.line(f"outputs['{n.id}'] = x")
 
 
 class FlattenTranslator(BaseTranslator):
+    """Flattens all non‑batch dimensions into a single vector."""
+
     node_type = "flatten"
 
     def init_code(self, w):
-        """Emit layer initialization code."""
         n = self.node
         w.line(f"self.flatten_{n.id} = nn.Flatten()")
 
     def forward_code(self, w):
-        """Emit forward-pass code."""
         n = self.node
         in_src = list(self.graph.predecessors(n.id))[0]
-        w.line(f"x = inputs_dict['{in_src}']")
+        w.line(f"if '{in_src}' in outputs or '{in_src}' in inputs_dict:")
+        w.indent()
+        w.line(f"x = outputs.get('{in_src}', inputs_dict.get('{in_src}'))")
+        w.dedent()
         w.line(f"x = self.flatten_{n.id}(x)")
         w.line(f"outputs['{n.id}'] = x")
 
 
 class DropoutTranslator(BaseTranslator):
+    """Dropout layer – applied during training, ignored during evaluation."""
+
     node_type = "dropout"
 
     def init_code(self, w):
-        """Emit layer initialization code."""
         n = self.node
         rate = n.properties.get("rate", 0.5)
         w.line(f"self.dropout_{n.id} = nn.Dropout(p={rate})")
 
     def forward_code(self, w):
-        """Emit forward-pass code."""
         n = self.node
         in_src = list(self.graph.predecessors(n.id))[0]
-        w.line(f"x = inputs_dict['{in_src}']")
+        w.line(f"if '{in_src}' in outputs or '{in_src}' in inputs_dict:")
+        w.indent()
+        w.line(f"x = outputs.get('{in_src}', inputs_dict.get('{in_src}'))")
+        w.dedent()
         w.line(f"x = self.dropout_{n.id}(x)")
         w.line(f"outputs['{n.id}'] = x")
 
 
 class BatchNormTranslator(BaseTranslator):
+    """Batch normalisation layer (1D)."""
+
     node_type = "batchnorm"
 
     def init_code(self, w):
-        """Emit layer initialization code."""
         n = self.node
-        # Need num_features, guess from input
         w.line(
-            f"self.bn_{n.id} = nn.BatchNorm1d(num_features=1)  # TODO: set num_features"
+            f"self.bn_{n.id} = nn.BatchNorm1d(num_features=1)  # TODO: infer num_features"
         )
 
     def forward_code(self, w):
-        """Emit forward-pass code."""
         n = self.node
         in_src = list(self.graph.predecessors(n.id))[0]
-        w.line(f"x = inputs_dict['{in_src}']")
+        w.line(f"if '{in_src}' in outputs or '{in_src}' in inputs_dict:")
+        w.indent()
+        w.line(f"x = outputs.get('{in_src}', inputs_dict.get('{in_src}'))")
+        w.dedent()
         w.line(f"x = self.bn_{n.id}(x)")
         w.line(f"outputs['{n.id}'] = x")
 
 
 class AddTranslator(BaseTranslator):
+    """Element‑wise addition of two tensors (skip / residual connection)."""
+
     node_type = "add"
 
     def init_code(self, w):
-        """Emit layer initialization code."""
-        pass  # no parameters
+        pass
 
     def forward_code(self, w):
-        """Emit forward-pass code."""
         n = self.node
         preds = list(self.graph.predecessors(n.id))
         if len(preds) >= 2:
-            w.line(f"a = inputs_dict.get('{preds[0]}')")
-            w.line(f"b = inputs_dict.get('{preds[1]}')")
-            w.line(f"if a is not None and b is not None:")
+            w.line(f"a = outputs.get('{preds[0]}', inputs_dict.get('{preds[0]}'))")
+            w.line(f"b = outputs.get('{preds[1]}', inputs_dict.get('{preds[1]}'))")
+            w.line("if a is not None and b is not None:")
             w.indent()
-            w.line(f"x = a + b")
+            w.line("x = a + b")
             w.line(f"outputs['{n.id}'] = x")
             w.dedent()
         else:
@@ -725,43 +627,48 @@ class AddTranslator(BaseTranslator):
 
 
 class ConcatTranslator(BaseTranslator):
+    """Concatenates two or more tensors along a specified dimension."""
+
     node_type = "concat"
 
     def init_code(self, w):
-        """Emit layer initialization code."""
         pass
 
     def forward_code(self, w):
-        """Emit forward-pass code."""
         n = self.node
         preds = list(self.graph.predecessors(n.id))
         axis = n.properties.get("axis", -1)
         if len(preds) >= 2:
-            ids = ", ".join(f"'{p}'" for p in preds)
-            w.line(
-                f"tensors = [inputs_dict.get(p) for p in [{ids}] if inputs_dict.get(p) is not None]"
-            )
-            w.line(f"if len(tensors) > 1:")
+            w.line("tensors = []")
+            for p in preds:
+                w.line(f"tmp = outputs.get('{p}', inputs_dict.get('{p}'))")
+                w.line("if tmp is not None: tensors.append(tmp)")
+            w.line("if len(tensors) > 1:")
             w.indent()
             w.line(f"x = torch.cat(tensors, dim={axis})")
             w.line(f"outputs['{n.id}'] = x")
+            w.dedent()
+            w.line("else:")
+            w.indent()
+            w.line(f"outputs['{n.id}'] = None")
             w.dedent()
         else:
             w.line(f"outputs['{n.id}'] = None  # Concat requires at least 2 inputs")
 
 
 class OutputTranslator(BaseTranslator):
+    """
+    Passes the output of the last model layer to the loss, prediction,
+    and evaluation ports. Supports per‑port activations (softmax, argmax).
+    """
+
     node_type = "output"
 
     def init_code(self, w):
-        """Emit layer initialization code."""
         pass
 
     def forward_code(self, w):
-        """Emit forward-pass code."""
         n = self.node
-        # The output node receives its input from the last model layer.
-        # We read from the internal 'outputs' dict, not from 'inputs_dict'.
         src_id = None
         for port in n.inputs:
             for link in self.graph.links:
@@ -774,9 +681,8 @@ class OutputTranslator(BaseTranslator):
             w.line(f"if '{src_id}' in outputs:")
             w.indent()
             w.line(f"x = outputs['{src_id}']")
-            # Process each output port with its activation
             for out_port in n.outputs:
-                role = out_port.role  # 'loss', 'prediction', 'evaluation'
+                role = out_port.role
                 act = n.properties.get("outputActivations", {}).get(role, "none")
                 if role == "loss" or act == "none":
                     w.line(f"outputs['{out_port.id}'] = x")
@@ -784,26 +690,25 @@ class OutputTranslator(BaseTranslator):
                     w.line(f"outputs['{out_port.id}'] = torch.softmax(x, dim=-1)")
                 elif act == "argmax":
                     w.line(f"outputs['{out_port.id}'] = torch.argmax(x, dim=-1)")
-                # optionally add sigmoid later
-            w.line(f"outputs['{n.id}'] = x")  # keep raw x for backward compatibility
+            w.line(f"outputs['{n.id}'] = x")  # raw for backward compatibility
             w.dedent()
         else:
             w.line(f"outputs['{n.id}'] = None  # no input connected")
 
 
 # ---------------------------------------------------------------------------
-# SPECIAL NODES (optimizer, visualization)
+# SPECIAL NODES
 # ---------------------------------------------------------------------------
 class OptimizerTranslator(BaseTranslator):
+    """Produces a configuration dictionary for the training loop."""
+
     node_type = "optimizer"
 
     def optimizer_code(self, w):
-        """Return optimizer configuration as a Python literal."""
         n = self.node
         props = n.properties
 
         def pybool(val):
-            """Convert a value to a Python boolean literal string."""
             return "True" if val else "False"
 
         config_lines = [
@@ -829,10 +734,11 @@ class OptimizerTranslator(BaseTranslator):
 
 
 class VisualizationTranslator(BaseTranslator):
+    """Generates matplotlib plotting code for scatter plots (1‑3 coords, optional colour)."""
+
     node_type = "visualization"
 
     def visualization_code(self, w):
-        """Emit visualization plotting code."""
         n = self.node
         coord_ports = [p for p in n.inputs if p.sub_type == "coord"]
         color_port = next((p for p in n.inputs if p.role == "color"), None)
@@ -846,14 +752,13 @@ class VisualizationTranslator(BaseTranslator):
             w.line(f"{var} = viz_data.get('{port.id}')")
             var_names.append(var)
 
-        # Determine if we have a colour source
         if color_port:
             w.line(f"colors = viz_data.get('{color_port.id}')")
         else:
             w.line("colors = None")
 
-        # Build a custom colormap from the user's palette only for discrete mode
         color_mode = n.properties.get("colorMode", "none")
+        cmap_name = "None"
         if color_mode == "discrete" and color_port:
             palette = n.properties.get("colorPalette", [])
             if palette:
@@ -864,18 +769,14 @@ class VisualizationTranslator(BaseTranslator):
             else:
                 cmap_name = "'tab10'"
         elif color_mode == "continuous" and color_port:
-            # use a default continuous map, or the user's min/max colours
-            w.line(f"from matplotlib.colors import LinearSegmentedColormap")
+            w.line("from matplotlib.colors import LinearSegmentedColormap")
             min_c = n.properties.get("continuousMinColor", "#3b82f6")
             max_c = n.properties.get("continuousMaxColor", "#ef4444")
             w.line(
                 f"custom_cmap = LinearSegmentedColormap.from_list('cust', ['{min_c}', '{max_c}'])"
             )
             cmap_name = "custom_cmap"
-        else:
-            cmap_name = "None"
 
-        # Draw the scatter plot
         if len(coord_ports) == 1:
             w.line(f"plt.hist({var_names[0]}.flatten(), bins=20)")
         elif len(coord_ports) == 2:
@@ -884,7 +785,6 @@ class VisualizationTranslator(BaseTranslator):
                     f"plt.scatter({var_names[0]}.flatten(), {var_names[1]}.flatten(), "
                     f"c=colors.flatten(), alpha=0.5, cmap={cmap_name})"
                 )
-                # Only add color bar for continuous mode
                 if color_mode == "continuous":
                     w.line("cbar = plt.colorbar()")
                     w.line("cbar.set_label('Value')")
@@ -909,22 +809,20 @@ class VisualizationTranslator(BaseTranslator):
 
 
 class PrintTranslator(BaseTranslator):
+    """Prints the shape and content of a tensor (for debugging)."""
+
     node_type = "print"
 
     def data_code(self, w, phase):
-        """Emit data-processing code for this node."""
         n = self.node
         label = n.properties.get("label", "") or n.id
-        # Print each connected input
         for i, port in enumerate(n.inputs):
             for link in self.graph.links:
                 if link.id_to == port.id:
                     src_port_id = link.id_from
-                    # 1) Check port ID first
                     if src_port_id in self.var_map:
                         var = self.var_map[src_port_id]
                     else:
-                        # 2) Fall back to node ID
                         src_id = self.graph.ports[src_port_id].node_id
                         var = self.var_map.get(src_id, "None")
                     w.line(f'print("{label}[{i}]:", {var}.shape, {var})')
@@ -932,13 +830,13 @@ class PrintTranslator(BaseTranslator):
 
 
 class AccuracyTranslator(BaseTranslator):
+    """Computes classification accuracy and optionally prints a confusion matrix."""
+
     node_type = "accuracy"
 
     def data_code(self, w, phase):
-        """Emit data-processing code for this node."""
         n = self.node
         show_confusion = n.properties.get("showConfusion", False)
-        # Get the two input variables
         pred_var = None
         label_var = None
         for port in n.inputs:
@@ -959,15 +857,15 @@ class AccuracyTranslator(BaseTranslator):
             w.line("# Accuracy node missing inputs")
             return
 
-        w.line(f"# Accuracy calculation")
+        w.line("# Accuracy calculation")
         w.line(
             f"pred_labels = {pred_var}.argmax(dim=1) if {pred_var}.dim() == 2 else {pred_var}"
         )
         w.line(
             f"true_labels = {label_var}.argmax(dim=1) if {label_var}.dim() == 2 else {label_var}"
         )
-        w.line(f"acc = (pred_labels == true_labels).float().mean()")
-        w.line(f'print(f"Accuracy: {{acc.item():.4f}}")')
+        w.line("acc = (pred_labels == true_labels).float().mean()")
+        w.line('print(f"Accuracy: {acc.item():.4f}")')
 
         if show_confusion:
             w.line("from sklearn.metrics import confusion_matrix")
@@ -976,7 +874,9 @@ class AccuracyTranslator(BaseTranslator):
             w.line("print(cm)")
 
 
-# Registry mapping node type -> translator class
+# ---------------------------------------------------------------------------
+# Registry
+# ---------------------------------------------------------------------------
 TRANSLATOR_REGISTRY = {
     "input-data": InputDataTranslator,
     "column-select": ColumnSelectTranslator,
@@ -1003,6 +903,6 @@ TRANSLATOR_REGISTRY = {
 
 
 def get_translator(node, graph, var_map):
-    """Return the translator class for a node type."""
+    """Return the translator instance for a given node."""
     cls = TRANSLATOR_REGISTRY.get(node.type, BaseTranslator)
     return cls(node, graph, var_map)
