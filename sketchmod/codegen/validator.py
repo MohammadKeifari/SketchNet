@@ -103,6 +103,7 @@ class GraphValidator:
             errors.append({"message": "Missing Output node.", "nodeId": None})
 
     def _check_optimizer_connections(self, warnings):
+        """Check optimizer connections."""
         opt = self.flow.get("optimizer")
         if not opt:
             warnings.append(
@@ -336,6 +337,7 @@ class GraphValidator:
                     )
 
     def _check_preprocessing_only(self, warnings):
+        """Check preprocessing only."""
         train_set = self.flow.get("train_set", set())
         eval_set = self.flow.get("eval_set", set())
         preprocessing_set = self.flow.get("preprocessing_set", set())
@@ -363,6 +365,7 @@ class GraphValidator:
             )
 
     def _check_visualization_shapes(self, warnings):
+        """Check visualization shapes."""
         for node in self.graph.nodes.values():
             if node.type != "visualization":
                 continue

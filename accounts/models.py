@@ -6,4 +6,5 @@ class CustomUser(AbstractUser):
     email = models.EmailField(unique=True, blank=False)
 
     def __str__(self):
+        """Return the username as the string representation."""
         return self.username

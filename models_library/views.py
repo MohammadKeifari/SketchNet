@@ -22,6 +22,7 @@ def get_visible_models(user):
 
 # ===== DASHBOARD =====
 def dashboard(request):
+    """Main models page with my, liked, and recent public models."""
     models_qs = get_visible_models(request.user).select_related("owner")
 
     # My models
@@ -55,6 +56,7 @@ def dashboard(request):
 # ===== SAVE =====
 @login_required
 def save_model(request):
+    """Create a new sketch model from posted graph JSON."""
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
         description = request.POST.get("description", "").strip()
@@ -97,6 +99,7 @@ def save_model(request):
 # ===== UPDATE (subsequent saves) =====
 @login_required
 def update_model(request, model_id):
+    """Update an existing model's graph data."""
     model = get_object_or_404(SketchModel, model_id=model_id)
 
     if not model.can_edit(request.user):
@@ -118,6 +121,7 @@ def update_model(request, model_id):
 
 # ===== VIEW (read-only canvas) =====
 def view_model(request, model_id):
+    """Display a model on the read-only canvas and increment views."""
     model = get_object_or_404(SketchModel, model_id=model_id)
 
     if not model.can_view(request.user):
@@ -140,6 +144,7 @@ def view_model(request, model_id):
 # ===== FORK =====
 @login_required
 def fork_model(request, model_id):
+    """Create a copy of a model owned by the current user."""
     original = get_object_or_404(SketchModel, model_id=model_id)
 
     if not original.can_fork(request.user):
@@ -169,6 +174,7 @@ def fork_model(request, model_id):
 # ===== DELETE =====
 @login_required
 def delete_model(request, model_id):
+    """Confirm and delete a model owned by the current user."""
     model = get_object_or_404(SketchModel, model_id=model_id)
 
     if not model.can_delete(request.user):
@@ -188,6 +194,7 @@ def delete_model(request, model_id):
 
 # ===== DOWNLOAD =====
 def download_model(request, model_id):
+    """Download model graph JSON and increment the download counter."""
     model = get_object_or_404(SketchModel, model_id=model_id)
 
     if not model.can_view(request.user):
@@ -206,6 +213,7 @@ def download_model(request, model_id):
 # ===== LIKE =====
 @login_required
 def toggle_like(request, model_id):
+    """Toggle the current user's like on a model."""
     model = get_object_or_404(SketchModel, model_id=model_id)
 
     if not model.can_view(request.user):
@@ -223,6 +231,7 @@ def toggle_like(request, model_id):
 
 # ===== API: LIST =====
 def api_model_list(request):
+    """Return a JSON list of models for API consumers."""
     models_qs = get_visible_models(request.user).select_related("owner")
     models_qs = models_qs.annotate(like_count=Count("liked_by"))
 
@@ -274,6 +283,7 @@ def api_model_list(request):
 # ===== USER ACCESS MANAGEMENT =====
 @login_required
 def manage_access(request, model_id):
+    """List or update per-user view and fork permissions for a model."""
     model = get_object_or_404(SketchModel, model_id=model_id)
 
     if not model.can_edit(request.user):
@@ -316,6 +326,7 @@ def manage_access(request, model_id):
 
 @login_required
 def remove_access(request, model_id, user_id):
+    """Revoke a user's explicit access to a private model."""
     model = get_object_or_404(SketchModel, model_id=model_id)
 
     if not model.can_edit(request.user):
@@ -327,6 +338,7 @@ def remove_access(request, model_id, user_id):
 
 @login_required
 def search_users(request, model_id):
+    """Search users to grant access to a private model."""
     model = get_object_or_404(SketchModel, model_id=model_id)
 
     if not model.can_edit(request.user):
@@ -355,6 +367,7 @@ def search_users(request, model_id):
 # ===== MY MODELS (EXPANDED) =====
 @login_required
 def my_models(request):
+    """List all models owned by the current user."""
     models_qs = SketchModel.objects.filter(owner=request.user).order_by("-created_at")
     return render(request, "models_library/my_models.html", {"models": models_qs})
 
@@ -362,6 +375,7 @@ def my_models(request):
 # ===== LIKED MODELS (EXPANDED) =====
 @login_required
 def liked_models(request):
+    """List models the current user has liked."""
     models_qs = (
         get_visible_models(request.user)
         .filter(liked_by=request.user)
@@ -372,6 +386,7 @@ def liked_models(request):
 
 # ===== ALL MODELS (EXPANDED) =====
 def all_models(request):
+    """Browse all visible models with search and sort options."""
     models_qs = get_visible_models(request.user).select_related("owner")
     models_qs = models_qs.annotate(like_count=Count("liked_by"))
 
@@ -405,6 +420,7 @@ def all_models(request):
 # ============== edit ==================
 @login_required
 def edit_model(request, model_id):
+    """Display and update model metadata and cover image."""
     model = get_object_or_404(SketchModel, model_id=model_id)
 
     if not model.can_edit(request.user):
@@ -436,6 +452,7 @@ def edit_model(request, model_id):
 
 
 def download_model(request, model_id):
+    """Download model graph JSON including the model name."""
     model = get_object_or_404(SketchModel, model_id=model_id)
 
     if not model.can_view(request.user):

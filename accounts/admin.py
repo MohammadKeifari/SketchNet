@@ -127,8 +127,10 @@ class CustomUserAdmin(UserAdmin):
 
     @admin.action(description="Activate selected users")
     def activate_users(self, request, queryset):
+        """Mark all selected users as active."""
         queryset.update(is_active=True)
 
     @admin.action(description="Deactivate selected users")
     def deactivate_users(self, request, queryset):
+        """Mark all selected users as inactive."""
         queryset.update(is_active=False)

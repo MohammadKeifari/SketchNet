@@ -10,6 +10,7 @@ User = get_user_model()
 class ShapeModelTests(TestCase):
 
     def setUp(self):
+        """Set up test fixtures."""
         self.user = User.objects.create_user(
             username="testuser",
             email="test@example.com",
@@ -96,6 +97,7 @@ class ShapeModelTests(TestCase):
 class ShapeInferenceTests(TestCase):
 
     def setUp(self):
+        """Set up test fixtures."""
         self.user = User.objects.create_user(
             username="testuser",
             email="test@example.com",

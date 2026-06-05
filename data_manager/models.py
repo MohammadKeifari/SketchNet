@@ -105,6 +105,7 @@ class Dataset(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
+        """Return the dataset name and short ID."""
         return f"{self.name} ({self.dataset_id})"
 
     def resolve_shape(self):
@@ -120,12 +121,14 @@ class Dataset(models.Model):
             self.shape_known = False
 
     def save(self, *args, **kwargs):
+        """Assign an ID, resolve shape, then persist the dataset."""
         if not self.dataset_id:
             self.dataset_id = generate_dataset_id()
         self.resolve_shape()
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
+        """Remove stored files before deleting the database record."""
         # Delete the actual files
         if self.file:
             self.file.delete(save=False)
@@ -135,10 +138,12 @@ class Dataset(models.Model):
 
     @property
     def likes_count(self):
+        """Return the number of users who liked this dataset."""
         return self.liked_by.count()
 
     @property
     def popularity(self):
+        """Return a weighted popularity score from downloads, views, and likes."""
         return self.downloads * 2 + self.views + self.likes_count * 3
 
     def is_visible_to(self, user):
@@ -150,7 +155,9 @@ class Dataset(models.Model):
         return user == self.owner or user in self.allowed_users.all()
 
     def can_edit(self, user):
+        """Return whether the user is the dataset owner."""
         return user == self.owner
 
     def can_delete(self, user):
+        """Return whether the user is allowed to delete this dataset."""
         return user == self.owner

@@ -48,6 +48,7 @@ DATA_DIR = EXAMPLES_DIR / "data"
 
 
 def generate_code(model_json: dict) -> str:
+    """Generate PyTorch code from the test graph fixture."""
     return CodeGenerator(model_json).generate()
 
 
@@ -55,6 +56,7 @@ def run_generated_code(
     code: str, timeout: int = 120, interactive: bool = False
 ) -> subprocess.CompletedProcess:
     # Force CPU before any torch import
+    """Execute generated code in an isolated namespace."""
     code = "import os\n" "os.environ['CUDA_VISIBLE_DEVICES'] = ''\n" + code
 
     with tempfile.NamedTemporaryFile(
@@ -395,6 +397,7 @@ MODEL_CHECKS = {
 
 
 def test_model(model_file: Path, interactive: bool, dump_code: bool = False) -> bool:
+    """Verify model."""
     print(f"\n=== Testing {model_file.name} ===")
 
     with open(model_file) as f:
@@ -466,6 +469,7 @@ def test_model(model_file: Path, interactive: bool, dump_code: bool = False) -> 
 
 
 def main():
+    """Run the module as a script."""
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )

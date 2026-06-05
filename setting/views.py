@@ -11,6 +11,7 @@ from django.contrib import messages
 
 @login_required
 def settings_view(request):
+    """Display and update the current user's theme and sidebar preferences."""
     user_settings = request.user.settings
 
     if request.method == "POST":

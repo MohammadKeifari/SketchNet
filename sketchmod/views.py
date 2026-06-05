@@ -13,6 +13,7 @@ from .codegen.generator import CodeGenerator
 
 @login_required
 def canvas(request):
+    """Render the SketchMod canvas editor with sidebar collapse preferences."""
     context = {}
     if request.user.is_authenticated:
         user_settings = request.user.settings
@@ -233,6 +234,7 @@ def validate_api(request):
 @login_required
 @csrf_exempt
 def highlight_path_api(request):
+    """Return node and link IDs active in the requested execution phase."""
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "POST required"}, status=405)
     try:

@@ -112,6 +112,7 @@ SIMPLE_GRAPH = {
 
 class ValidatorTest(SimpleTestCase):
     def test_validate_returns_errors_and_warnings(self):
+        """Verify validate returns errors and warnings."""
         validator = GraphValidator(SIMPLE_GRAPH)
         result = validator.validate()
         self.assertIn("errors", result)
@@ -119,6 +120,7 @@ class ValidatorTest(SimpleTestCase):
         self.assertIn("isValid", result)
 
     def test_missing_optimizer_error(self):
+        """Verify missing optimizer error."""
         validator = GraphValidator(SIMPLE_GRAPH)
         result = validator.validate()
         errors = result["errors"]
@@ -127,6 +129,7 @@ class ValidatorTest(SimpleTestCase):
         )
 
     def test_missing_input_data_error(self):
+        """Verify missing input data error."""
         graph = {
             "nodes": [
                 {
@@ -156,6 +159,7 @@ class ValidatorTest(SimpleTestCase):
         )
 
     def test_link_weight_zero_warning(self):
+        """Verify link weight zero warning."""
         graph = {
             "nodes": [
                 {

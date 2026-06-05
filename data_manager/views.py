@@ -64,6 +64,7 @@ def dashboard(request):
 # ===== UPLOAD =====
 @login_required
 def upload_dataset(request):
+    """Handle dataset upload from the dashboard modal."""
     if request.method == "POST":
         form = DatasetForm(request.POST, request.FILES)
         if form.is_valid():
@@ -100,6 +101,7 @@ def upload_dataset(request):
 # ===== EDIT =====
 @login_required
 def edit_dataset(request, dataset_id):
+    """Display and process the dataset edit form."""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
 
     if not dataset.can_edit(request.user):
@@ -135,6 +137,7 @@ def edit_dataset(request, dataset_id):
 # ===== DELETE =====
 @login_required
 def delete_dataset(request, dataset_id):
+    """Confirm and perform dataset deletion."""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
 
     if not dataset.can_delete(request.user):
@@ -156,6 +159,7 @@ def delete_dataset(request, dataset_id):
 # ===== DOWNLOAD =====
 @login_required
 def download_dataset(request, dataset_id):
+    """Stream the dataset file and increment the download counter."""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
 
     if not dataset.is_visible_to(request.user):
@@ -175,6 +179,7 @@ def download_dataset(request, dataset_id):
 # ===== LIKE =====
 @login_required
 def toggle_like(request, dataset_id):
+    """Toggle the current user's like on a dataset."""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
 
     if not dataset.is_visible_to(request.user):
@@ -192,6 +197,7 @@ def toggle_like(request, dataset_id):
 
 # ===== DETAIL =====
 def dataset_detail(request, dataset_id):
+    """Show dataset details and increment the view counter."""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
 
     if not dataset.is_visible_to(request.user):
@@ -207,6 +213,7 @@ def dataset_detail(request, dataset_id):
 # ===== MY DATASETS (EXPANDED) =====
 @login_required
 def my_datasets(request):
+    """List datasets owned by or shared with the current user."""
     datasets = (
         Dataset.objects.filter(Q(owner=request.user) | Q(allowed_users=request.user))
         .distinct()
@@ -219,6 +226,7 @@ def my_datasets(request):
 # ===== LIKED DATASETS (EXPANDED) =====
 @login_required
 def liked_datasets(request):
+    """List datasets the current user has liked."""
     datasets = (
         Dataset.objects.filter(liked_by=request.user)
         .filter(
@@ -233,6 +241,7 @@ def liked_datasets(request):
 
 # ===== ALL DATASETS =====
 def all_datasets(request):
+    """Browse all visible datasets with search and sort options."""
     datasets = get_visible_datasets(request.user).select_related("owner")
     datasets = datasets.annotate(like_count=Count("liked_by"))
 
@@ -412,6 +421,7 @@ def api_dataset_shape(request, dataset_id):
 
 @login_required
 def generate_dataset(request):
+    """Generate a synthetic sklearn dataset and save it as a new Dataset."""
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -537,6 +547,7 @@ def generate_dataset(request):
             os.unlink(tmp.name)
 
 def api_dataset_info(request, dataset_id):
+    """Return filename and format metadata for a dataset."""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
     if not dataset.is_visible_to(request.user):
         return JsonResponse({"error": "Not allowed"}, status=403)

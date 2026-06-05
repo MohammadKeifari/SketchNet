@@ -9,6 +9,7 @@ User = get_user_model()
 class ProfileViewTests(TestCase):
 
     def setUp(self):
+        """Set up test fixtures."""
         self.user = User.objects.create_user(
             username="testuser", email="test@example.com", password="testpass123"
         )

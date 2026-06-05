@@ -112,12 +112,14 @@ VALID_GRAPH = {
 
 class GraphTest(SimpleTestCase):
     def test_parse_valid_graph(self):
+        """Verify parse valid graph."""
         graph = parse_graph(VALID_GRAPH)
         self.assertEqual(len(graph.nodes), 2)
         self.assertIn("input-main", graph.nodes)
         self.assertIn("output-main", graph.nodes)
 
     def test_input_data_node_parsed(self):
+        """Verify input data node parsed."""
         graph = parse_graph(VALID_GRAPH)
         node = graph.nodes["input-main"]
         self.assertEqual(node.type, "input-data")
@@ -126,6 +128,7 @@ class GraphTest(SimpleTestCase):
         self.assertEqual(port.activation_phases, ["preprocessing"])
 
     def test_output_node_parsed(self):
+        """Verify output node parsed."""
         graph = parse_graph(VALID_GRAPH)
         node = graph.nodes["output-main"]
         self.assertEqual(node.type, "output")

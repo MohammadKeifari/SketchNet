@@ -4,15 +4,18 @@ from sketchmod.codegen.writer import CodeWriter
 
 class CodeWriterTest(SimpleTestCase):
     def test_empty_writer(self):
+        """Verify empty writer."""
         w = CodeWriter()
         self.assertEqual(str(w), "")
 
     def test_single_line(self):
+        """Verify single line."""
         w = CodeWriter()
         w.line("hello")
         self.assertEqual(str(w), "hello")
 
     def test_indentation(self):
+        """Verify indentation."""
         w = CodeWriter()
         w.line("def foo():")
         w.indent()
@@ -23,6 +26,7 @@ class CodeWriterTest(SimpleTestCase):
         self.assertEqual(str(w), expected)
 
     def test_nested_indent(self):
+        """Verify nested indent."""
         w = CodeWriter()
         w.line("a")
         w.indent()

@@ -38,12 +38,14 @@ class DatasetForm(forms.ModelForm):
         }
 
     def clean_file(self):
+        """Validate uploaded dataset file size."""
         file = self.cleaned_data.get("file")
         if file:
             validate_file_size(file)
         return file
 
     def clean_cover_image(self):
+        """Reject cover images larger than 5 MB."""
         image = self.cleaned_data.get("cover_image")
         if image and image.size > 5 * 1024 * 1024:  # 5MB max for cover
             raise forms.ValidationError("Cover image must be under 5MB.")

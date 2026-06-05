@@ -118,6 +118,7 @@ class UserSettingsModelTests(TestCase):
 class SettingsViewTests(TestCase):
 
     def setUp(self):
+        """Set up test fixtures."""
         self.user = User.objects.create_user(
             username="testuser",
             email="test@example.com",
@@ -126,16 +127,19 @@ class SettingsViewTests(TestCase):
         self.settings_url = reverse("setting:settings")
 
     def test_settings_requires_login(self):
+        """Verify settings requires login."""
         response = self.client.get(self.settings_url)
         self.assertEqual(response.status_code, 302)
 
     def test_settings_page_loads(self):
+        """Verify settings page loads."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.get(self.settings_url)
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "setting/settings.html")
 
     def test_settings_shows_all_themes(self):
+        """Verify settings shows all themes."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.get(self.settings_url)
         self.assertContains(response, "System")
@@ -144,6 +148,7 @@ class SettingsViewTests(TestCase):
         self.assertContains(response, "Rose")
 
     def test_change_theme_to_dark(self):
+        """Verify change theme to dark."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.post(self.settings_url, {"theme": "dark"})
         self.assertRedirects(response, self.settings_url)
@@ -151,6 +156,7 @@ class SettingsViewTests(TestCase):
         self.assertEqual(self.user.settings.theme, "dark")
 
     def test_change_theme_to_rose(self):
+        """Verify change theme to rose."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.post(self.settings_url, {"theme": "rose"})
         self.assertRedirects(response, self.settings_url)
@@ -158,12 +164,14 @@ class SettingsViewTests(TestCase):
         self.assertEqual(self.user.settings.theme, "rose")
 
     def test_invalid_theme_not_saved(self):
+        """Verify invalid theme not saved."""
         self.client.login(username="testuser", password="testpass123")
         self.client.post(self.settings_url, {"theme": "invalid"})
         self.user.settings.refresh_from_db()
         self.assertEqual(self.user.settings.theme, "system")
 
     def test_settings_shows_current_theme(self):
+        """Verify settings shows current theme."""
         self.user.settings.theme = "rose"
         self.user.settings.save()
         self.client.login(username="testuser", password="testpass123")
@@ -175,12 +183,14 @@ class SettingsViewTests(TestCase):
         )
 
     def test_change_theme_to_forest(self):
+        """Verify change theme to forest."""
         self.client.login(username="testuser", password="testpass123")
         self.client.post(self.settings_url, {"theme": "forest"})
         self.user.settings.refresh_from_db()
         self.assertEqual(self.user.settings.theme, "forest")
 
     def test_change_theme_to_honey_dark(self):
+        """Verify change theme to honey dark."""
         self.client.login(username="testuser", password="testpass123")
         self.client.post(self.settings_url, {"theme": "honey-dark"})
         self.user.settings.refresh_from_db()

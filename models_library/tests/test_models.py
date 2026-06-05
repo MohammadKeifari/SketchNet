@@ -10,6 +10,7 @@ User = get_user_model()
 class SketchModelTests(TestCase):
 
     def setUp(self):
+        """Set up test fixtures."""
         self.user = User.objects.create_user(
             username="testuser",
             email="test@example.com",
@@ -167,6 +168,7 @@ class SketchModelTests(TestCase):
         self.assertFalse(model.can_delete(self.other))
 
     def test_fork_increments_counter(self):
+        """Verify fork increments counter."""
         original = SketchModel.objects.create(
             name="Original",
             graph_data={},
@@ -215,6 +217,7 @@ class SketchModelTests(TestCase):
 class ModelAccessTests(TestCase):
 
     def setUp(self):
+        """Set up test fixtures."""
         self.user = User.objects.create_user(
             username="owner", email="o@t.com", password="pass"
         )

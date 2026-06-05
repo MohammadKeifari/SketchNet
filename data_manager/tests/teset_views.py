@@ -11,6 +11,7 @@ User = get_user_model()
 class DataViewTests(TestCase):
 
     def setUp(self):
+        """Set up test fixtures."""
         self.user = User.objects.create_user(
             username="testuser",
             email="test@example.com",
@@ -31,6 +32,7 @@ class DataViewTests(TestCase):
         )
 
     def _login(self):
+        """Log in the test user."""
         self.client.login(username="testuser", password="testpass123")
 
     # ===== DASHBOARD =====

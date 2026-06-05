@@ -9,6 +9,7 @@ User = get_user_model()
 class DatasetModelTests(TestCase):
 
     def setUp(self):
+        """Set up test fixtures."""
         self.user = User.objects.create_user(
             username="testuser",
             email="test@example.com",

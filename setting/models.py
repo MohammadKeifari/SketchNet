@@ -53,4 +53,5 @@ class UserSettings(models.Model):
         verbose_name_plural = "User Settings"
 
     def __str__(self):
+        """Return a label identifying the owning user."""
         return f"Settings for {self.user.username}"

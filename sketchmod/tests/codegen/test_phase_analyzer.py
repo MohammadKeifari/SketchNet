@@ -113,6 +113,7 @@ SIMPLE_GRAPH = {
 
 class PhaseAnalyzerTest(SimpleTestCase):
     def test_analyze_phases_returns_expected_keys(self):
+        """Verify analyze phases returns expected keys."""
         graph = parse_graph(SIMPLE_GRAPH)
         flow = analyze_phases(graph)
         self.assertIn("preprocessing_order", flow)
@@ -122,16 +123,19 @@ class PhaseAnalyzerTest(SimpleTestCase):
         self.assertIn("visualizations", flow)
 
     def test_input_data_in_preprocessing(self):
+        """Verify input data in preprocessing."""
         graph = parse_graph(SIMPLE_GRAPH)
         flow = analyze_phases(graph)
         self.assertIn("input-main", flow["preprocessing_order"])
 
     def test_optimizer_is_none_when_missing(self):
+        """Verify optimizer is none when missing."""
         graph = parse_graph(SIMPLE_GRAPH)
         flow = analyze_phases(graph)
         self.assertIsNone(flow["optimizer"])
 
     def test_highlight_path_returns_dict(self):
+        """Verify highlight path returns dict."""
         graph = parse_graph(SIMPLE_GRAPH)
         result = highlight_path(SIMPLE_GRAPH, "preprocessing")
         self.assertIn("nodes", result)

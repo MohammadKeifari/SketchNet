@@ -213,33 +213,39 @@ GRAPH_WITH_OPTIMIZER = {
 
 class GeneratorTest(SimpleTestCase):
     def test_generate_returns_string(self):
+        """Verify generate returns string."""
         gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
         code = gen.generate()
         self.assertIsInstance(code, str)
         self.assertTrue(len(code) > 0)
 
     def test_generated_code_has_imports(self):
+        """Verify generated code has imports."""
         gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
         code = gen.generate()
         self.assertIn("import torch", code)
         self.assertIn("import torch.nn as nn", code)
 
     def test_generated_code_has_load_and_preprocess(self):
+        """Verify generated code has load and preprocess."""
         gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
         code = gen.generate()
         self.assertIn("def load_and_preprocess():", code)
 
     def test_generated_code_has_model_class(self):
+        """Verify generated code has model class."""
         gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
         code = gen.generate()
         self.assertIn("class Model(nn.Module):", code)
 
     def test_generated_code_has_train_model(self):
+        """Verify generated code has train model."""
         gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
         code = gen.generate()
         self.assertIn("def train_model(", code)
 
     def test_generated_code_has_main_block(self):
+        """Verify generated code has main block."""
         gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
         code = gen.generate()
         self.assertIn("if __name__ == '__main__':", code)

@@ -6,4 +6,5 @@ class SettingConfig(AppConfig):
     name = "setting"
 
     def ready(self):
+        """Register signal handlers when the app is loaded."""
         import setting.signals  # noqa

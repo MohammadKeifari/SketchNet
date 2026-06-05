@@ -354,6 +354,7 @@ class DimSelectTranslator(BaseTranslator):
         self.var_map[n.id] = out_var
 
     def _get_input_var(self, node):
+        """Get input var."""
         return ColumnSelectTranslator._get_input_var(self, node)
 
 
@@ -361,6 +362,7 @@ class NormalizeTranslator(BaseTranslator):
     node_type = "normalize"
 
     def data_code(self, w, phase):
+        """Emit data-processing code for this node."""
         n = self.node
         method = n.properties.get("method", "standard")
         in_var = self._get_input_var(n)
@@ -376,6 +378,7 @@ class NormalizeTranslator(BaseTranslator):
         self.var_map[n.id] = out_var
 
     def _get_input_var(self, node):
+        """Get input var."""
         return ColumnSelectTranslator._get_input_var(self, node)
 
 
@@ -383,6 +386,7 @@ class OneHotTranslator(BaseTranslator):
     node_type = "onehot"
 
     def data_code(self, w, phase):
+        """Emit data-processing code for this node."""
         n = self.node
         num_classes = n.properties.get("numClasses", 10)
         in_var = self._get_input_var(n)
@@ -410,6 +414,7 @@ class DeOneHotTranslator(BaseTranslator):
     node_type = "deonehot"
 
     def data_code(self, w, phase):
+        """Emit data-processing code for this node."""
         n = self.node
         in_var = self._get_input_var(n)
         out_var = f"{n.id}_out"
@@ -442,6 +447,7 @@ class TrainTestSplitTranslator(BaseTranslator):
     node_type = "train-test"
 
     def data_code(self, w, phase):
+        """Emit data-processing code for this node."""
         n = self.node
         train_ratio = n.properties.get("trainRatio", 0.7)
         seed = n.properties.get("randomSeed", 42)
@@ -471,6 +477,7 @@ class NeuronTranslator(BaseTranslator):
     node_type = "neuron"
 
     def init_code(self, w):
+        """Emit layer initialization code."""
         n = self.node
         in_features = self._guess_in_features(n)
         out_features = 1
@@ -491,6 +498,7 @@ class NeuronTranslator(BaseTranslator):
                     )
 
     def forward_code(self, w):
+        """Emit forward-pass code."""
         n = self.node
         w.line(f"# --- {n.type} {n.id} ---")
         # Collect source node IDs and weights
@@ -541,6 +549,7 @@ class NeuronTranslator(BaseTranslator):
         w.line(f"outputs['{n.id}'] = x")
 
     def _guess_in_features(self, node):
+        """Guess in features."""
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id and link.weight_shape:
@@ -554,6 +563,7 @@ class LayerTranslator(NeuronTranslator):
     node_type = "layer"
 
     def init_code(self, w):
+        """Emit layer initialization code."""
         n = self.node
         in_features = self._guess_in_features(n)
         out_features = n.properties.get("numNeurons", 64)
@@ -580,6 +590,7 @@ class Conv2DTranslator(BaseTranslator):
     node_type = "conv2d"
 
     def init_code(self, w):
+        """Emit layer initialization code."""
         n = self.node
         in_channels = 1  # placeholder, should be derived from input shape
         out_channels = n.properties.get("filters", 32)
@@ -601,6 +612,7 @@ class Conv2DTranslator(BaseTranslator):
                     )
 
     def forward_code(self, w):
+        """Emit forward-pass code."""
         n = self.node
         # find input source (usually one)
         in_src = (
@@ -638,10 +650,12 @@ class FlattenTranslator(BaseTranslator):
     node_type = "flatten"
 
     def init_code(self, w):
+        """Emit layer initialization code."""
         n = self.node
         w.line(f"self.flatten_{n.id} = nn.Flatten()")
 
     def forward_code(self, w):
+        """Emit forward-pass code."""
         n = self.node
         in_src = list(self.graph.predecessors(n.id))[0]
         w.line(f"x = inputs_dict['{in_src}']")
@@ -653,11 +667,13 @@ class DropoutTranslator(BaseTranslator):
     node_type = "dropout"
 
     def init_code(self, w):
+        """Emit layer initialization code."""
         n = self.node
         rate = n.properties.get("rate", 0.5)
         w.line(f"self.dropout_{n.id} = nn.Dropout(p={rate})")
 
     def forward_code(self, w):
+        """Emit forward-pass code."""
         n = self.node
         in_src = list(self.graph.predecessors(n.id))[0]
         w.line(f"x = inputs_dict['{in_src}']")
@@ -669,6 +685,7 @@ class BatchNormTranslator(BaseTranslator):
     node_type = "batchnorm"
 
     def init_code(self, w):
+        """Emit layer initialization code."""
         n = self.node
         # Need num_features, guess from input
         w.line(
@@ -676,6 +693,7 @@ class BatchNormTranslator(BaseTranslator):
         )
 
     def forward_code(self, w):
+        """Emit forward-pass code."""
         n = self.node
         in_src = list(self.graph.predecessors(n.id))[0]
         w.line(f"x = inputs_dict['{in_src}']")
@@ -687,9 +705,11 @@ class AddTranslator(BaseTranslator):
     node_type = "add"
 
     def init_code(self, w):
+        """Emit layer initialization code."""
         pass  # no parameters
 
     def forward_code(self, w):
+        """Emit forward-pass code."""
         n = self.node
         preds = list(self.graph.predecessors(n.id))
         if len(preds) >= 2:
@@ -708,9 +728,11 @@ class ConcatTranslator(BaseTranslator):
     node_type = "concat"
 
     def init_code(self, w):
+        """Emit layer initialization code."""
         pass
 
     def forward_code(self, w):
+        """Emit forward-pass code."""
         n = self.node
         preds = list(self.graph.predecessors(n.id))
         axis = n.properties.get("axis", -1)
@@ -732,9 +754,11 @@ class OutputTranslator(BaseTranslator):
     node_type = "output"
 
     def init_code(self, w):
+        """Emit layer initialization code."""
         pass
 
     def forward_code(self, w):
+        """Emit forward-pass code."""
         n = self.node
         # The output node receives its input from the last model layer.
         # We read from the internal 'outputs' dict, not from 'inputs_dict'.
@@ -774,10 +798,12 @@ class OptimizerTranslator(BaseTranslator):
     node_type = "optimizer"
 
     def optimizer_code(self, w):
+        """Return optimizer configuration as a Python literal."""
         n = self.node
         props = n.properties
 
         def pybool(val):
+            """Convert a value to a Python boolean literal string."""
             return "True" if val else "False"
 
         config_lines = [
@@ -806,6 +832,7 @@ class VisualizationTranslator(BaseTranslator):
     node_type = "visualization"
 
     def visualization_code(self, w):
+        """Emit visualization plotting code."""
         n = self.node
         coord_ports = [p for p in n.inputs if p.sub_type == "coord"]
         color_port = next((p for p in n.inputs if p.role == "color"), None)
@@ -885,6 +912,7 @@ class PrintTranslator(BaseTranslator):
     node_type = "print"
 
     def data_code(self, w, phase):
+        """Emit data-processing code for this node."""
         n = self.node
         label = n.properties.get("label", "") or n.id
         # Print each connected input
@@ -907,6 +935,7 @@ class AccuracyTranslator(BaseTranslator):
     node_type = "accuracy"
 
     def data_code(self, w, phase):
+        """Emit data-processing code for this node."""
         n = self.node
         show_confusion = n.properties.get("showConfusion", False)
         # Get the two input variables
@@ -974,5 +1003,6 @@ TRANSLATOR_REGISTRY = {
 
 
 def get_translator(node, graph, var_map):
+    """Return the translator class for a node type."""
     cls = TRANSLATOR_REGISTRY.get(node.type, BaseTranslator)
     return cls(node, graph, var_map)

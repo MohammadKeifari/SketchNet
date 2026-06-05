@@ -184,6 +184,7 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _write_load_and_preprocess(self, w):
+        """Emit the load_and_preprocess function with data pipeline code."""
         w.line("def load_and_preprocess():")
         w.indent()
 
@@ -369,6 +370,7 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _get_var_for_first_model_input(self, phase):
+        """Resolve the variable name feeding the first model layer for a phase."""
         PHASE_MAP = {
             "preprocessing": "preprocessing",
             "train": "training",
@@ -417,6 +419,7 @@ class CodeGenerator:
         return "None"
 
     def _get_var_for_eval_labels(self):
+        """Resolve the test-label variable connected to the output node."""
         output_node = next(
             (n for n in self.graph.nodes.values() if n.type == "output"), None
         )
@@ -439,6 +442,7 @@ class CodeGenerator:
         return "None"
 
     def _find_input_source(self, node_id):
+        """Return the source node ID for a node's first input port."""
         node = self.graph.nodes[node_id]
         if not node.inputs:
             return None
@@ -450,6 +454,7 @@ class CodeGenerator:
 
     # ------------------------------------------------------
     def _get_var_for_optimizer_labels(self):
+        """Resolve the training-label variable connected to the optimizer."""
         opt = self.flow.get("optimizer")
         if not opt:
             return "None"
@@ -471,6 +476,7 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _write_model_class(self, w):
+        """Emit the PyTorch Model class with init and forward methods."""
         w.line("class Model(nn.Module):")
         w.indent()
         w.line("def __init__(self):")
@@ -504,6 +510,7 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _write_training_analytics(self, w):
+        """Emit analytics node code inside the training loop."""
         train_analytics = [
             nid
             for nid in self.flow["train_order"]
@@ -535,6 +542,7 @@ class CodeGenerator:
                     del self.var_map[port.id]
 
     def _write_training(self, w):
+        """Emit the train_model function with optimizer and loss setup."""
         opt_node = self.flow.get("optimizer")
         if not opt_node:
             w.line("# No optimizer node – training loop not generated.")
@@ -705,6 +713,7 @@ class CodeGenerator:
         w.line("")
 
     def _get_feed_key(self, phase):
+        """Return the dict key used to feed tensors into the model for a phase."""
         PHASE_MAP = {
             "preprocessing": "preprocessing",
             "train": "training",
@@ -730,6 +739,7 @@ class CodeGenerator:
         return "input"
 
     def _get_loss_port_id(self):
+        """Return the output port ID used for loss computation."""
         output_node = next(
             (n for n in self.graph.nodes.values() if n.type == "output"), None
         )
@@ -741,6 +751,7 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _write_evaluation(self, w):
+        """Emit the visualize function for evaluation-phase plots."""
         w.line("def visualize(viz_data):")
         w.indent()
         w.line("if not viz_data:")
@@ -759,6 +770,7 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _write_main(self, w):
+        """Emit the if __name__ == '__main__' entry point."""
         w.line("if __name__ == '__main__':")
         w.indent()
         w.line("X_train, y_train, X_test, y_test, pre_data = load_and_preprocess()")

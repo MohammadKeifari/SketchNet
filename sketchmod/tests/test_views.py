@@ -118,6 +118,7 @@ VALID_GRAPH = {
 
 class ViewsTest(TestCase):
     def setUp(self):
+        """Set up test fixtures."""
         self.client = Client()
         self.user = User.objects.create_user(
             username="testuser", password="testpass123"
@@ -130,22 +131,26 @@ class ViewsTest(TestCase):
 
     # ---------- Canvas View ----------
     def test_canvas_requires_login(self):
+        """Verify canvas requires login."""
         response = self.client.get(self.canvas_url)
         self.assertEqual(response.status_code, 302)  # redirect to login
 
     def test_canvas_authenticated(self):
+        """Verify canvas authenticated."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.get(self.canvas_url)
         self.assertEqual(response.status_code, 200)
 
     # ---------- Export API ----------
     def test_export_unauthenticated(self):
+        """Verify export unauthenticated."""
         response = self.client.post(
             self.export_url, {}, content_type="application/json"
         )
         self.assertEqual(response.status_code, 302)
 
     def test_export_valid_graph(self):
+        """Verify export valid graph."""
         self.client.login(username="testuser", password="testpass123")
         graph_str = json.dumps(VALID_GRAPH)
         response = self.client.post(
@@ -160,6 +165,7 @@ class ViewsTest(TestCase):
         self.assertIn("filename", data)
 
     def test_export_invalid_json(self):
+        """Verify export invalid json."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.post(
             self.export_url, data="not json", content_type="application/json"
@@ -168,12 +174,14 @@ class ViewsTest(TestCase):
 
     # ---------- Validate API ----------
     def test_validate_unauthenticated(self):
+        """Verify validate unauthenticated."""
         response = self.client.post(
             self.validate_url, {}, content_type="application/json"
         )
         self.assertEqual(response.status_code, 302)
 
     def test_validate_valid_graph(self):
+        """Verify validate valid graph."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.post(
             self.validate_url,
@@ -203,12 +211,14 @@ class ViewsTest(TestCase):
 
     # ---------- Highlight Path API ----------
     def test_highlight_unauthenticated(self):
+        """Verify highlight unauthenticated."""
         response = self.client.post(
             self.highlight_url, {}, content_type="application/json"
         )
         self.assertEqual(response.status_code, 302)
 
     def test_highlight_valid(self):
+        """Verify highlight valid."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.post(
             self.highlight_url,
@@ -225,6 +235,7 @@ class ViewsTest(TestCase):
 
     # ---------- Dataset Columns API (public) ----------
     def test_dataset_columns_nonexistent(self):
+        """Verify dataset columns nonexistent."""
         url = reverse("sketchmod:api_dataset_columns", args=["nonexist"])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)

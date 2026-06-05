@@ -8,9 +8,11 @@ class BaseGraphMixin:
     """Helper to create a minimal graph with a single node of given type."""
 
     def _make_graph(self, node_dict, links=None):
+        """Build a minimal graph fixture for translator tests."""
         return {"nodes": [node_dict], "links": links or [], "nodeCounter": 1}
 
     def _get_translator(self, node_dict, links=None):
+        """Instantiate the translator for a node type."""
         graph = parse_graph(self._make_graph(node_dict, links))
         node = graph.nodes[node_dict["id"]]
         var_map = {}
@@ -19,6 +21,7 @@ class BaseGraphMixin:
 
 class InputDataTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_data_code_manual_shape(self):
+        """Verify data code manual shape."""
         node = {
             "id": "input-main",
             "type": "input-data",
@@ -57,6 +60,7 @@ class InputDataTranslatorTest(SimpleTestCase, BaseGraphMixin):
         self.assertIn("raw_data", var_map.get("input-main", ""))
 
     def test_data_code_no_shape(self):
+        """Verify data code no shape."""
         node = {
             "id": "input-main",
             "type": "input-data",
@@ -96,6 +100,7 @@ class InputDataTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class ColumnSelectTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_data_code_with_columns(self):
+        """Verify data code with columns."""
         node = {
             "id": "c1",
             "type": "column-select",
@@ -196,6 +201,7 @@ class ColumnSelectTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class NormalizeTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_data_code_standard(self):
+        """Verify data code standard."""
         node = {
             "id": "n1",
             "type": "normalize",
@@ -292,6 +298,7 @@ class NormalizeTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class OneHotTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_data_code(self):
+        """Verify data code."""
         node = {
             "id": "o1",
             "type": "onehot",
@@ -389,6 +396,7 @@ class OneHotTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class DeOneHotTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_data_code(self):
+        """Verify data code."""
         node = {
             "id": "d1",
             "type": "deonehot",
@@ -484,6 +492,7 @@ class DeOneHotTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class TrainTestSplitTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_data_code(self):
+        """Verify data code."""
         node = {
             "id": "t1",
             "type": "train-test",
@@ -593,6 +602,7 @@ class TrainTestSplitTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class LayerTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def setUp(self):
+        """Set up test fixtures."""
         self.node = {
             "id": "l1",
             "type": "layer",
@@ -682,6 +692,7 @@ class LayerTranslatorTest(SimpleTestCase, BaseGraphMixin):
         self.var_map = {"src": "data"}
 
     def test_init_code(self):
+        """Verify init code."""
         node = self.graph.nodes["l1"]
         t = get_translator(node, self.graph, self.var_map)
         w = CodeWriter()
@@ -691,6 +702,7 @@ class LayerTranslatorTest(SimpleTestCase, BaseGraphMixin):
         self.assertIn("64", code)
 
     def test_forward_code(self):
+        """Verify forward code."""
         node = self.graph.nodes["l1"]
         t = get_translator(node, self.graph, self.var_map)
         w = CodeWriter()
@@ -703,6 +715,7 @@ class LayerTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class NeuronTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_init_code(self):
+        """Verify init code."""
         node = {
             "id": "n1",
             "type": "neuron",
@@ -797,6 +810,7 @@ class NeuronTranslatorTest(SimpleTestCase, BaseGraphMixin):
         self.assertIn("1,", code)  # output size 1
 
     def test_forward_code(self):
+        """Verify forward code."""
         node = {
             "id": "n1",
             "type": "neuron",
@@ -892,6 +906,7 @@ class NeuronTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class FlattenTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_init_and_forward(self):
+        """Verify init and forward."""
         node = {
             "id": "f1",
             "type": "flatten",
@@ -988,6 +1003,7 @@ class FlattenTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class DropoutTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_init_code(self):
+        """Verify init code."""
         node = {
             "id": "d1",
             "type": "dropout",
@@ -1084,6 +1100,7 @@ class DropoutTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class BatchNormTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_init_code(self):
+        """Verify init code."""
         node = {
             "id": "b1",
             "type": "batchnorm",
@@ -1180,6 +1197,7 @@ class BatchNormTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class AddTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_forward_code(self):
+        """Verify forward code."""
         node = {
             "id": "a1",
             "type": "add",
@@ -1311,6 +1329,7 @@ class AddTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class ConcatTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_forward_code(self):
+        """Verify forward code."""
         node = {
             "id": "c1",
             "type": "concat",
@@ -1443,6 +1462,7 @@ class ConcatTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class OutputTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_forward_code(self):
+        """Verify forward code."""
         node = {
             "id": "output-main",
             "type": "output",
@@ -1548,6 +1568,7 @@ class OutputTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class OptimizerTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_optimizer_code(self):
+        """Verify optimizer code."""
         node = {
             "id": "o1",
             "type": "optimizer",
@@ -1615,6 +1636,7 @@ class OptimizerTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class VisualizationTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_visualization_code_discrete(self):
+        """Verify visualization code discrete."""
         node = {
             "id": "v1",
             "type": "visualization",
@@ -1678,6 +1700,7 @@ class VisualizationTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class Conv2DTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_init_code(self):
+        """Verify init code."""
         node = {
             "id": "c1",
             "type": "conv2d",
@@ -1734,6 +1757,7 @@ class Conv2DTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class PrintTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_data_code(self):
+        """Verify data code."""
         node = {
             "id": "p1",
             "type": "print",
@@ -1819,6 +1843,7 @@ class PrintTranslatorTest(SimpleTestCase, BaseGraphMixin):
 
 class AccuracyTranslatorTest(SimpleTestCase, BaseGraphMixin):
     def test_data_code(self):
+        """Verify data code."""
         node = {
             "id": "a1",
             "type": "accuracy",
