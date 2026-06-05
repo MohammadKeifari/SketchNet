@@ -51,24 +51,24 @@ DATA_TRANSFORM_TYPES = {
 class CodeGenerator:
     """
     Generates executable PyTorch code from a SketchNet computation graph.
-    
+
     The generator performs a multi-stage code generation process:
     1. Parses the JSON graph and analyzes execution phases
     2. Creates translator instances for each node
     3. Generates code sections in order (header, preprocessing, model, training, evaluation)
     4. Manages variable names to maintain consistency across sections
-    
+
     Attributes:
         graph (Graph): The parsed computation graph.
         flow (Dict): Execution flow information from phase analysis.
         var_map (Dict): Mapping of node/port IDs to variable names.
         translators (Dict): Mapping of node IDs to translator instances.
     """
-    
+
     def __init__(self, graph_data: dict):
         """
         Initialize the code generator with JSON graph data.
-        
+
         Args:
             graph_data (dict): JSON representation of the computation graph from the frontend.
         """
@@ -83,12 +83,12 @@ class CodeGenerator:
     def _sanitize_id(self, id_str):
         """
         Convert a graph ID into a valid Python variable name.
-        
+
         Replaces any non-alphanumeric characters (except underscores) with underscores.
-        
+
         Args:
             id_str (str): The graph element ID.
-            
+
         Returns:
             str: A sanitized identifier suitable for Python code.
         """
@@ -113,10 +113,10 @@ class CodeGenerator:
     def generate(self) -> str:
         """
         Generate the complete PyTorch training script.
-        
+
         Orchestrates all code generation stages and assembles them into a single
         executable Python script.
-        
+
         Returns:
             str: The complete generated Python code as a single string.
         """
@@ -143,14 +143,14 @@ class CodeGenerator:
     def _node_active_strict(self, nid, phase):
         """
         Check if a node is active in a phase using strict rules.
-        
+
         A node is strictly active only if ALL its connected ports have the phase
         in their activation_phases list.
-        
+
         Args:
             nid (str): The node ID.
             phase (str): The phase to check ("training" or "evaluation").
-            
+
         Returns:
             bool: True if the node is active in the phase.
         """
@@ -168,7 +168,7 @@ class CodeGenerator:
     def _write_header(self, w):
         """
         Write PyTorch imports and device initialization.
-        
+
         Args:
             w (CodeWriter): The code writer.
         """
@@ -180,6 +180,56 @@ class CodeGenerator:
         w.line("import matplotlib.pyplot as plt")
         w.line("")
         w.line("device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')")
+        w.line("")
+
+    def _write_preprocessing_visualizations(self, w):
+        """
+        Generate inline plotting code for visualization nodes active during preprocessing.
+        Creates a local ``pre_viz_data`` dictionary that maps port IDs to the preprocessed
+        variables, then calls the standard visualization code with the dict name replaced.
+        """
+        viz_nodes = [
+            nid
+            for nid in self.flow["preprocessing_order"]
+            if self.graph.nodes[nid].type == "visualization"
+        ]
+        if not viz_nodes:
+            return
+
+        w.line("# --- Preprocessing visualizations ---")
+        # Build a temporary viz_data dict for preprocessing variables
+        w.line("pre_viz_data = {}")
+        for nid in viz_nodes:
+            node = self.graph.nodes[nid]
+            for port in node.inputs:
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src_port_id = link.id_from
+                        if src_port_id in self.var_map:
+                            w.line(
+                                f"pre_viz_data['{port.id}'] = {self.var_map[src_port_id]}"
+                            )
+                        else:
+                            src_id = self.graph.ports[src_port_id].node_id
+                            if src_id in self.var_map:
+                                w.line(
+                                    f"pre_viz_data['{port.id}'] = {self.var_map[src_id]}"
+                                )
+                        break
+
+        # Generate the standard visualization code, then replace 'viz_data' with 'pre_viz_data'
+        from .writer import CodeWriter
+
+        temp_writer = CodeWriter()
+        for nid in viz_nodes:
+            self.translators[nid].visualization_code(temp_writer)
+
+        code = str(temp_writer)
+        code = code.replace("viz_data", "pre_viz_data")
+        for line in code.splitlines():
+            w.line(line)
+
+        w.line("# --- End preprocessing visualizations ---")
         w.line("")
 
     # ------------------------------------------------------------------
@@ -199,6 +249,8 @@ class CodeGenerator:
             node = self.graph.nodes[nid]
             if node.type != "input-data":
                 self.translators[nid].data_code(w, "pre")
+
+        self._write_preprocessing_visualizations(w)
 
         # # 3. Train branch data transforms (strict execution; if not active, pass through)
         # train_data_nodes = [
