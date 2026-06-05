@@ -469,9 +469,28 @@ class Conv2DTranslator(BaseTranslator):
 
     node_type = "conv2d"
 
+    def _guess_in_channels(self, node):
+        """Return the number of input channels from the first connected input shape."""
+        for port in node.inputs:
+            for link in self.graph.links:
+                if link.id_to == port.id:
+                    src_port = self.graph.ports[link.id_from]
+                    if (
+                        src_port.shape
+                        and src_port.shape.shape
+                        and len(src_port.shape.shape) >= 2
+                    ):
+                        # assume shape is (batch, channels, …)
+                        ch_expr = src_port.shape.shape[1]
+                        try:
+                            return int(str(ch_expr))
+                        except (ValueError, TypeError):
+                            pass
+        return 1  # fallback
+
     def init_code(self, w):
         n = self.node
-        in_channels = 1  # TODO: infer from input shape
+        in_channels = self._guess_in_channels(n)  # inferred from input shape
         out_channels = n.properties.get("filters", 32)
         kernel = n.properties.get("kernelSize", 3)
         stride = n.properties.get("stride", 1)
@@ -501,7 +520,7 @@ class Conv2DTranslator(BaseTranslator):
         if activation in ("linear", "none"):
             pass
         elif activation == "softmax":
-            w.line("x = torch.softmax(x, dim=-1)")
+            w.line("x = torch.softmax(x, dim=1)")
         elif activation == "leaky_relu":
             w.line("x = torch.nn.functional.leaky_relu(x)")
         elif activation == "elu":
@@ -563,11 +582,30 @@ class BatchNormTranslator(BaseTranslator):
 
     node_type = "batchnorm"
 
+    def _guess_num_features(self, node):
+        """Return the number of features from the first connected input shape."""
+        for port in node.inputs:
+            for link in self.graph.links:
+                if link.id_to == port.id:
+                    src_port = self.graph.ports[link.id_from]
+                    if (
+                        src_port.shape
+                        and src_port.shape.shape
+                        and len(src_port.shape.shape) >= 2
+                    ):
+                        # shape is (batch, features) or (batch, channels, ...)
+                        # assume features are the last dimension
+                        num = src_port.shape.shape[-1]
+                        try:
+                            return int(str(num))
+                        except (ValueError, TypeError):
+                            pass
+        return 1  # fallback
+
     def init_code(self, w):
         n = self.node
-        w.line(
-            f"self.bn_{n.id} = nn.BatchNorm1d(num_features=1)  # TODO: infer num_features"
-        )
+        num_features = self._guess_num_features(n)
+        w.line(f"self.bn_{n.id} = nn.BatchNorm1d(num_features={num_features})")
 
     def forward_code(self, w):
         n = self.node
@@ -578,6 +616,8 @@ class BatchNormTranslator(BaseTranslator):
         w.dedent()
         w.line(f"x = self.bn_{n.id}(x)")
         w.line(f"outputs['{n.id}'] = x")
+
+
 
 
 class AddTranslator(BaseTranslator):
