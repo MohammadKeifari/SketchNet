@@ -471,23 +471,16 @@ class Conv2DTranslator(BaseTranslator):
 
     def init_code(self, w):
         n = self.node
-        in_channels = 1
+        in_channels = 1  # TODO: infer from input shape
         out_channels = n.properties.get("filters", 32)
         kernel = n.properties.get("kernelSize", 3)
         stride = n.properties.get("stride", 1)
         padding = n.properties.get("padding", 0)
         bias = n.properties.get("hasBias", True)
         w.line(
-            f"self.conv_{n.id} = nn.Conv2d({in_channels}, {out_channels}, kernel_size={kernel}, stride={stride}, padding={padding}, bias={bias})"
+            f"self.conv_{n.id} = nn.Conv2d({in_channels}, {out_channels}, "
+            f"kernel_size={kernel}, stride={stride}, padding={padding}, bias={bias})"
         )
-        for port in n.inputs:
-            for link in self.graph.links:
-                if link.id_to == port.id:
-                    weight_name = f"weight_{link.id_from}_{link.id_to}"
-                    init_val = float(link.weight) if link.weight != 0.0 else 1.0
-                    w.line(
-                        f"self.{weight_name} = nn.Parameter(torch.tensor({init_val}))"
-                    )
 
     def forward_code(self, w):
         n = self.node
