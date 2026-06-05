@@ -374,7 +374,7 @@ class TrainTestSplitTranslator(BaseTranslator):
 # MODEL NODES
 # ---------------------------------------------------------------------------
 class NeuronTranslator(BaseTranslator):
-    """Single neuron with scalar input weights, linear layer, and activation."""
+    """Single neuron: one nn.Linear layer, activation."""
 
     node_type = "neuron"
 
@@ -389,60 +389,44 @@ class NeuronTranslator(BaseTranslator):
         )
         if bias:
             w.line(f"nn.init.constant_(self.fc_{n.id}.bias, {bias_val})")
-        for port in n.inputs:
-            for link in self.graph.links:
-                if link.id_to == port.id:
-                    weight_name = f"weight_{link.id_from}_{link.id_to}"
-                    init_val = float(link.weight) if link.weight != 0.0 else 1.0
-                    w.line(
-                        f"self.{weight_name} = nn.Parameter(torch.tensor({init_val}))"
-                    )
 
     def forward_code(self, w):
         n = self.node
         w.line(f"# --- {n.type} {n.id} ---")
-        terms = []
+        src_id = None
         for port in n.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
                     src_id = self.graph.ports[link.id_from].node_id
-                    weight_name = f"self.weight_{link.id_from}_{link.id_to}"
-                    terms.append((src_id, weight_name))
-        if not terms:
-            w.line(f"outputs['{n.id}'] = None  # no input connected")
-            return
-
-        w.line("x = None")
-        for src_id, wgt in terms:
+                    break
+            if src_id:
+                break
+        if src_id:
             w.line(f"if '{src_id}' in outputs or '{src_id}' in inputs_dict:")
             w.indent()
-            w.line(f"val = outputs.get('{src_id}', inputs_dict.get('{src_id}'))")
-            w.line(f"if x is None: x = {wgt} * val")
-            w.line(f"else: x = x + {wgt} * val")
+            w.line(f"x = outputs.get('{src_id}', inputs_dict.get('{src_id}'))")
             w.dedent()
-        w.line("if x is None:")
-        w.indent()
-        w.line(f'raise ValueError("No input for {n.type} {n.id}")')
-        w.dedent()
-        w.line(f"x = self.fc_{n.id}(x)")
-        activation = n.properties.get("activation", "relu")
-        if activation in ("linear", "none"):
-            pass
-        elif activation == "softmax":
-            w.line("x = torch.softmax(x, dim=-1)")
-        elif activation == "leaky_relu":
-            w.line("x = torch.nn.functional.leaky_relu(x)")
-        elif activation == "elu":
-            w.line("x = torch.nn.functional.elu(x)")
-        elif activation == "selu":
-            w.line("x = torch.nn.functional.selu(x)")
-        elif activation == "gelu":
-            w.line("x = torch.nn.functional.gelu(x)")
-        elif activation == "mish":
-            w.line("x = torch.nn.functional.mish(x)")
+            w.line(f"x = self.fc_{n.id}(x)")
+            activation = n.properties.get("activation", "relu")
+            if activation in ("linear", "none"):
+                pass
+            elif activation == "softmax":
+                w.line("x = torch.softmax(x, dim=-1)")
+            elif activation == "leaky_relu":
+                w.line("x = torch.nn.functional.leaky_relu(x)")
+            elif activation == "elu":
+                w.line("x = torch.nn.functional.elu(x)")
+            elif activation == "selu":
+                w.line("x = torch.nn.functional.selu(x)")
+            elif activation == "gelu":
+                w.line("x = torch.nn.functional.gelu(x)")
+            elif activation == "mish":
+                w.line("x = torch.nn.functional.mish(x)")
+            else:
+                w.line(f"x = torch.{activation}(x)")
+            w.line(f"outputs['{n.id}'] = x")
         else:
-            w.line(f"x = torch.{activation}(x)")
-        w.line(f"outputs['{n.id}'] = x")
+            w.line(f"outputs['{n.id}'] = None  # no input connected")
 
     def _guess_in_features(self, node):
         for port in node.inputs:
