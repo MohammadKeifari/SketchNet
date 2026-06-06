@@ -196,6 +196,8 @@ def analyze_phases(graph: Graph) -> dict:
         "eval_set": eval_set,
         "optimizer": optimizer,
         "visualizations": visualizations,
+        "train_seed_ports": train_seed_ports,
+        "eval_seed_ports": eval_seed_ports,
     }
 
 
