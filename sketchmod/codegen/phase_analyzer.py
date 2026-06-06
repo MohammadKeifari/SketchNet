@@ -6,25 +6,29 @@ from __future__ import annotations
 from typing import Set, List, Dict, Tuple, Optional
 from .graph import Graph, Node, Port, parse_graph
 
+# Nodes whose internal circuit requires ALL connected data inputs
+CONJUNCTIVE_NODES = {"add", "concat", "optimizer"}
+
 
 def _has_phase(port: Port, phase: str) -> bool:
     return phase in port.activation_phases
 
 
 def _get_connected_data_inputs(node: Node, graph: Graph) -> List[Port]:
-    connected = []
-    for port in node.inputs:
-        if port.port_kind == "data" and any(l.id_to == port.id for l in graph.links):
-            connected.append(port)
-    return connected
+    """Return every non‑param input port that has at least one incoming link."""
+    return [
+        port
+        for port in node.inputs
+        if port.port_kind != "param" and any(l.id_to == port.id for l in graph.links)
+    ]
 
 
 def _get_connected_param_inputs(node: Node, graph: Graph) -> List[Port]:
-    connected = []
-    for port in node.paramInputs:
-        if any(l.id_to == port.id for l in graph.links):
-            connected.append(port)
-    return connected
+    return [
+        port
+        for port in node.paramInputs
+        if any(l.id_to == port.id for l in graph.links)
+    ]
 
 
 def _is_data_input_satisfied(
@@ -32,20 +36,22 @@ def _is_data_input_satisfied(
     graph: Graph,
     phase: str,
     active_set: Set[str],
-    seed_ports: Optional[Set[str]] = None,
+    seed_ports: Set[str] | None = None,
 ) -> bool:
     for link in graph.links:
         if link.id_to != port.id:
             continue
         src_port = graph.ports[link.id_from]
-        src_node_id = src_port.node_id
 
-        if src_node_id not in active_set:
-            if seed_ports is not None and src_port.id in seed_ports:
-                pass
-            else:
-                continue
+        # Seed link – allowed unconditionally
+        if seed_ports and src_port.id in seed_ports:
+            if _has_phase(port, phase):
+                return True
+            continue
 
+        # Normal link – source must be active and both ports must carry the phase
+        if src_port.node_id not in active_set:
+            continue
         if not _has_phase(src_port, phase):
             continue
         if not _has_phase(port, phase):
@@ -54,48 +60,36 @@ def _is_data_input_satisfied(
     return False
 
 
-def _is_param_input_satisfied(
-    port: Port,
-    graph: Graph,
-    active_set: Set[str],
-) -> bool:
-    for link in graph.links:
-        if link.id_to != port.id:
-            continue
-        src_node_id = graph.ports[link.id_from].node_id
-        if src_node_id in active_set:
-            return True
-    return False
-
-
-def _can_activate_regular_node(
+def _can_activate(
     node: Node,
     graph: Graph,
     phase: str,
     active_set: Set[str],
-    seed_ports: Optional[Set[str]],
+    seed_ports: Set[str] | None = None,
 ) -> bool:
-    """
-    A regular node is active if EVERY connected data input is satisfied
-    AND (when the node has outputs) at least one output port carries the phase.
-    Param inputs must all be satisfied (they are dependencies, not data).
-    """
-    # ----- data inputs: ALL must be satisfied -----
+    """True if the node can be added to the active set for the given phase."""
     data_inputs = _get_connected_data_inputs(node, graph)
-    if not data_inputs:
-        # No data inputs → node cannot be activated by BFS (must be a seed)
-        return False
 
-    for port in data_inputs:
-        if not _is_data_input_satisfied(port, graph, phase, active_set, seed_ports):
+    if node.type in CONJUNCTIVE_NODES:
+        # ALL must be satisfied
+        if not data_inputs:
+            return False
+        if not all(
+            _is_data_input_satisfied(p, graph, phase, active_set, seed_ports)
+            for p in data_inputs
+        ):
+            return False
+    else:
+        # AT LEAST ONE must be satisfied (if any data inputs exist)
+        if data_inputs and not any(
+            _is_data_input_satisfied(p, graph, phase, active_set, seed_ports)
+            for p in data_inputs
+        ):
             return False
 
-    # ----- param inputs: all must be satisfied (no phase check) -----
-    for port in _get_connected_param_inputs(node, graph):
-        if not _is_param_input_satisfied(port, graph, active_set):
-            return False
+    # Param inputs are completely ignored for activation
 
-    # ----- outputs: if the node has outputs, at least one must have the phase -----
+    # Output check
     if node.outputs:
         if not any(
             _has_phase(p, phase)
@@ -103,35 +97,14 @@ def _can_activate_regular_node(
             if any(l.id_from == p.id for l in graph.links)
         ):
             return False
-
     return True
-
-
-def _can_activate_output_node(
-    node: Node,
-    graph: Graph,
-    phase: str,
-    active_set: Set[str],
-    seed_ports: Optional[Set[str]],
-) -> bool:
-    any_input = False
-    for port in _get_connected_data_inputs(node, graph):
-        if _is_data_input_satisfied(port, graph, phase, active_set, seed_ports):
-            any_input = True
-            break
-    if not any_input:
-        return False
-    for port in node.outputs:
-        if _has_phase(port, phase):
-            return True
-    return False
 
 
 def _traverse_phase(
     graph: Graph,
     phase: str,
     initial_seeds: Set[str],
-    seed_ports: Optional[Set[str]] = None,
+    seed_ports: Set[str] | None = None,
 ) -> Set[str]:
     active = set(initial_seeds)
     changed = True
@@ -140,14 +113,9 @@ def _traverse_phase(
         for nid, node in graph.nodes.items():
             if nid in active:
                 continue
-            if node.type == "output":
-                if _can_activate_output_node(node, graph, phase, active, seed_ports):
-                    active.add(nid)
-                    changed = True
-            else:
-                if _can_activate_regular_node(node, graph, phase, active, seed_ports):
-                    active.add(nid)
-                    changed = True
+            if _can_activate(node, graph, phase, active, seed_ports):
+                active.add(nid)
+                changed = True
     return active
 
 
@@ -190,7 +158,7 @@ def analyze_phases(graph: Graph) -> dict:
     pre_set = _traverse_phase(graph, "preprocessing", pre_seeds)
     pre_order = _topo_sort(graph, pre_set)
 
-    # Terminal ports for training/eval
+    # Terminal ports for training/eval (only from preprocessing outputs)
     train_seed_ports = set()
     eval_seed_ports = set()
     for nid in pre_set:
@@ -201,10 +169,11 @@ def analyze_phases(graph: Graph) -> dict:
             if _has_phase(port, "evaluation"):
                 eval_seed_ports.add(port.id)
 
-    train_set = _traverse_phase(graph, "training", set(), train_seed_ports)
+    # Training & Evaluation
+    train_set = _traverse_phase(graph, "training", set(), seed_ports=train_seed_ports)
     train_order = _topo_sort(graph, train_set)
 
-    eval_set = _traverse_phase(graph, "evaluation", set(), eval_seed_ports)
+    eval_set = _traverse_phase(graph, "evaluation", set(), seed_ports=eval_seed_ports)
     eval_order = _topo_sort(graph, eval_set)
 
     optimizer = None
@@ -218,7 +187,6 @@ def analyze_phases(graph: Graph) -> dict:
         for nid in pre_set | train_set | eval_set
         if graph.nodes[nid].type == "visualization"
     ]
-
     return {
         "preprocessing_order": pre_order,
         "train_order": train_order,
@@ -232,10 +200,6 @@ def analyze_phases(graph: Graph) -> dict:
 
 
 def highlight_path(graph_data: dict, phase: str) -> dict:
-    """
-    Return the active nodes (from phase analysis) and the links whose
-    **both ports** carry the given phase.
-    """
     graph = parse_graph(graph_data)
     flow = analyze_phases(graph)
 
@@ -249,9 +213,11 @@ def highlight_path(graph_data: dict, phase: str) -> dict:
 
     highlighted_links = []
     for link in graph.links:
-        src_port = graph.ports[link.id_from]
-        tgt_port = graph.ports[link.id_to]
-        if _has_phase(src_port, phase) and _has_phase(tgt_port, phase):
+        src = graph.ports[link.id_from]
+        tgt = graph.ports[link.id_to]
+        if src.port_kind == "param" or tgt.port_kind == "param":
+            continue
+        if _has_phase(src, phase) and _has_phase(tgt, phase):
             highlighted_links.append(f"{link.id_from}→{link.id_to}")
 
     return {"nodes": list(active_nodes), "links": highlighted_links}
