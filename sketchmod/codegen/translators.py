@@ -46,6 +46,7 @@ class BaseTranslator:
             self.var_map[self.node.outputs[0].id] = var_name
 
     def _in_var_forward(self):
+        """Return expression that reads from outputs/inputs_dict using the source node ID."""
         for port in self.node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -621,6 +622,7 @@ class OutputTranslator(BaseTranslator):
         n = self.node
         if placement != "forward":
             return
+        # find the source node feeding any input
         src = None
         for port in n.inputs:
             for link in self.graph.links:
@@ -629,23 +631,21 @@ class OutputTranslator(BaseTranslator):
                     break
             if src:
                 break
-        if src:
-            w.line(f"if '{src}' in outputs or '{src}' in inputs_dict:")
-            w.indent()
-            w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
-            for out_port in n.outputs:
-                role = out_port.role
-                act = n.properties.get("outputActivations", {}).get(role, "none")
-                if role == "loss" or act == "none":
-                    w.line(f"outputs['{out_port.id}'] = x")
-                elif act == "softmax":
-                    w.line(f"outputs['{out_port.id}'] = torch.softmax(x, dim=-1)")
-                elif act == "argmax":
-                    w.line(f"outputs['{out_port.id}'] = torch.argmax(x, dim=-1)")
-            w.line(f"outputs['{n.id}'] = x")
-            w.dedent()
-        else:
+        if not src:
+            w.line("x = None")
             w.line(f"outputs['{n.id}'] = None")
+            return
+
+        w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
+        for out_port in n.outputs:
+            role = out_port.role
+            act = n.properties.get("outputActivations", {}).get(role, "none")
+            if role == "loss" or act == "none":
+                w.line(f"outputs['{out_port.id}'] = x")
+            elif act == "softmax":
+                w.line(f"outputs['{out_port.id}'] = torch.softmax(x, dim=-1)")
+            elif act == "argmax":
+                w.line(f"outputs['{out_port.id}'] = torch.argmax(x, dim=-1)")
 
 
 # ============================================================
@@ -810,46 +810,79 @@ class PrintTranslator(BaseTranslator):
     node_type = "print"
 
     def generate(self, w, phase, placement, is_first=False):
-        if placement != "data":
+        if placement not in ("data", "forward"):
             return
         n = self.node
         label = n.properties.get("label", "") or n.id
-        for i, port in enumerate(n.inputs):
-            for link in self.graph.links:
-                if link.id_to == port.id:
-                    src = self.var_map.get(link.id_from)
-                    if src is None:
-                        src_nid = self.graph.ports[link.id_from].node_id
-                        src = self.var_map.get(src_nid, "None")
-                    w.line(f'print("{label}[{i}]:", {src}.shape, {src})')
+        if placement == "forward":
+            # Find the port ID that feeds this node
+            src_port_id = None
+            for port in n.inputs:
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src_port_id = link.id_from
+                        break
+                if src_port_id:
                     break
+            if src_port_id:
+                expr = f"outputs.get('{src_port_id}', inputs_dict.get('{src_port_id}'))"
+                w.line(f"print('{label}:', {expr}.shape, {expr})")
+            else:
+                w.line(f"print('{label}: no input')")
+        else:
+            for i, port in enumerate(n.inputs):
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src = self.var_map.get(link.id_from)
+                        if src is None:
+                            src_nid = self.graph.ports[link.id_from].node_id
+                            src = self.var_map.get(src_nid, "None")
+                        w.line(f'print("{label}[{i}]:", {src}.shape, {src})')
+                        break
 
 
 class AccuracyTranslator(BaseTranslator):
     node_type = "accuracy"
 
     def generate(self, w, phase, placement, is_first=False):
-        if placement != "data":
+        if placement not in ("data", "forward"):
             return
         n = self.node
         show_cm = n.properties.get("showConfusion", False)
         pred_var = None
         label_var = None
-        for port in n.inputs:
-            for link in self.graph.links:
-                if link.id_to == port.id:
-                    src = self.var_map.get(link.id_from)
-                    if src is None:
-                        src_nid = self.graph.ports[link.id_from].node_id
-                        src = self.var_map.get(src_nid, "None")
-                    if port.index == 0:
-                        pred_var = src
-                    else:
-                        label_var = src
-                    break
+        if placement == "forward":
+            sources = []
+            for port in n.inputs:
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        sources.append(link.id_from)
+                        break
+            if len(sources) >= 2:
+                pred_var = (
+                    f"outputs.get('{sources[0]}', inputs_dict.get('{sources[0]}'))"
+                )
+                label_var = (
+                    f"outputs.get('{sources[1]}', inputs_dict.get('{sources[1]}'))"
+                )
+        else:
+            for port in n.inputs:
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src = self.var_map.get(link.id_from)
+                        if src is None:
+                            src_nid = self.graph.ports[link.id_from].node_id
+                            src = self.var_map.get(src_nid, "None")
+                        if port.index == 0:
+                            pred_var = src
+                        else:
+                            label_var = src
+                        break
+
         if not pred_var or not label_var:
             w.line("# Accuracy node missing inputs")
             return
+
         w.line(
             f"pred_labels = {pred_var}.argmax(dim=1) if {pred_var}.dim() == 2 else {pred_var}"
         )

@@ -10,18 +10,6 @@ from .phase_analyzer import analyze_phases
 from .writer import CodeWriter
 from .translators import get_translator
 
-MODEL_TYPES = {
-    "neuron",
-    "layer",
-    "conv2d",
-    "flatten",
-    "dropout",
-    "batchnorm",
-    "add",
-    "concat",
-    "output",
-}
-
 
 class CodeGenerator:
     def __init__(self, graph_data: dict):
@@ -101,22 +89,28 @@ class CodeGenerator:
 
     def _emit_model_class(self, w):
         train_order = self.flow["train_order"]
+        # Exclude optimizer and visualization from the model
+        model_nodes = [
+            nid
+            for nid in train_order
+            if self.graph.nodes[nid].type not in ("optimizer", "visualization")
+        ]
+
         w.line("class Model(nn.Module):")
         w.indent()
         w.line("def __init__(self):")
         w.indent()
         w.line("super().__init__()")
-        for nid in train_order:
+        for nid in model_nodes:
             self.translators[nid].generate(w, "training", "init")
         w.dedent()
         w.line("")
         w.line("def forward(self, inputs_dict):")
         w.indent()
         w.line("outputs = {}")
-        for idx, nid in enumerate(train_order):
-            self.translators[nid].generate(
-                w, "training", "forward", is_first=(idx == 0)
-            )
+        for idx, nid in enumerate(model_nodes):
+            is_first = idx == 0
+            self.translators[nid].generate(w, "training", "forward", is_first=is_first)
         w.line("return outputs")
         w.dedent()
         w.dedent()
@@ -341,10 +335,10 @@ class CodeGenerator:
         w.line("")
 
     def _get_first_model_node_id(self, phase):
+        """Return the first node in the given phase's execution order."""
         order = self.flow[f"{phase}_order"]
-        for nid in order:
-            if self.graph.nodes[nid].type in MODEL_TYPES:
-                return nid
+        if order:
+            return order[0]
         return None
 
     def _get_feed_key(self, phase: str):
