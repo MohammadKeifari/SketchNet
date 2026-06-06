@@ -1,6 +1,6 @@
 """
 Translators for SketchNet nodes → PyTorch code.
-Single entry point: generate(w, phase, placement)
+Single entry point: generate(w, phase, placement, is_first=False)
 """
 
 import re
@@ -23,7 +23,9 @@ class BaseTranslator:
         self.graph = graph
         self.var_map = var_map
 
-    def generate(self, w: CodeWriter, phase: str, placement: str):
+    def generate(
+        self, w: CodeWriter, phase: str, placement: str, is_first: bool = False
+    ):
         pass
 
     def _in_var(self):
@@ -58,7 +60,7 @@ class BaseTranslator:
 class InputDataTranslator(BaseTranslator):
     node_type = "input-data"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         if placement != "data":
             return
         n = self.node
@@ -106,7 +108,7 @@ class InputDataTranslator(BaseTranslator):
 class ColumnSelectTranslator(BaseTranslator):
     node_type = "column-select"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         cols = n.properties.get("selectedColumns", [])
@@ -140,7 +142,7 @@ class ColumnSelectTranslator(BaseTranslator):
 class RowSelectTranslator(BaseTranslator):
     node_type = "row-select"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         method = n.properties.get("method", "first-n")
@@ -180,7 +182,7 @@ class RowSelectTranslator(BaseTranslator):
 class DimSelectTranslator(BaseTranslator):
     node_type = "dim-select"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         dims = n.properties.get("dimSelections", [])
@@ -212,7 +214,7 @@ class DimSelectTranslator(BaseTranslator):
 class NormalizeTranslator(BaseTranslator):
     node_type = "normalize"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         method = n.properties.get("method", "standard")
@@ -273,7 +275,7 @@ class NormalizeTranslator(BaseTranslator):
 class OneHotTranslator(BaseTranslator):
     node_type = "onehot"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         num_classes = n.properties.get("numClasses", 10)
@@ -302,7 +304,7 @@ class OneHotTranslator(BaseTranslator):
 class DeOneHotTranslator(BaseTranslator):
     node_type = "deonehot"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         if placement in ("data", "forward"):
@@ -336,7 +338,7 @@ class DeOneHotTranslator(BaseTranslator):
 class TrainTestSplitTranslator(BaseTranslator):
     node_type = "train-test"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         if placement != "data":
             return
         n = self.node
@@ -374,45 +376,51 @@ class NeuronTranslator(BaseTranslator):
                         return shape[1]
         raise ValueError(f"Cannot infer in_features for {self.node.id}")
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         if placement == "init":
             in_f = self._guess_in_features()
             w.line(f"self.fc_{sid} = nn.Linear({in_f}, 1)")
         elif placement == "forward":
-            src_ids = []
-            for port in n.inputs:
-                for link in self.graph.links:
-                    if link.id_to == port.id:
-                        src = self.graph.ports[link.id_from].node_id
-                        if src not in src_ids:
-                            src_ids.append(src)
-            if not src_ids:
-                expr = "None"
+            if is_first:
+                # Build chained inputs_dict.get(...)
+                src_ids = []
+                for port in n.inputs:
+                    for link in self.graph.links:
+                        if link.id_to == port.id:
+                            src = self.graph.ports[link.id_from].node_id
+                            if src not in src_ids:
+                                src_ids.append(src)
+                if not src_ids:
+                    expr = "None"
+                else:
+                    expr = f"inputs_dict.get('{src_ids[0]}'"
+                    for src in src_ids[1:]:
+                        expr += f", inputs_dict.get('{src}')"
+                    expr += ")"
+                w.line(f"x = {expr}")
             else:
-                expr = f"inputs_dict.get('{src_ids[0]}'"
-                for src in src_ids[1:]:
-                    expr += f", inputs_dict.get('{src}')"
-                expr += ")"
-            w.line(f"x = {expr}")
+                # Subsequent layers use outputs
+                src = self.graph.predecessors(n.id)[0]
+                w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
+
             w.line(f"x = self.fc_{sid}(x)")
             act = n.properties.get("activation", "relu")
-            if act == "linear":
-                pass
-            elif act in ("leaky_relu", "elu", "selu", "gelu", "mish"):
-                w.line(f"x = torch.nn.functional.{act}(x)")
-            elif act == "softmax":
-                w.line("x = torch.softmax(x, dim=-1)")
-            else:
-                w.line(f"x = torch.{act}(x)")
+            if act != "linear":
+                if act in ("leaky_relu", "elu", "selu", "gelu", "mish"):
+                    w.line(f"x = torch.nn.functional.{act}(x)")
+                elif act == "softmax":
+                    w.line("x = torch.softmax(x, dim=-1)")
+                else:
+                    w.line(f"x = torch.{act}(x)")
             w.line(f"outputs['{n.id}'] = x")
 
 
 class LayerTranslator(NeuronTranslator):
     node_type = "layer"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         if placement == "init":
@@ -420,7 +428,7 @@ class LayerTranslator(NeuronTranslator):
             out_f = n.properties.get("numNeurons", 64)
             w.line(f"self.fc_{sid} = nn.Linear({in_f}, {out_f})")
         else:
-            super().generate(w, phase, placement)
+            super().generate(w, phase, placement, is_first)
 
 
 class Conv2DTranslator(BaseTranslator):
@@ -438,7 +446,7 @@ class Conv2DTranslator(BaseTranslator):
                             pass
         return 1
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         if placement == "init":
@@ -452,8 +460,12 @@ class Conv2DTranslator(BaseTranslator):
                 f"self.conv_{sid} = nn.Conv2d({in_ch}, {out_ch}, kernel_size={k}, stride={s}, padding={p}, bias={bias})"
             )
         elif placement == "forward":
-            src = self.graph.predecessors(n.id)[0]
-            w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
+            if is_first:
+                src = self.graph.predecessors(n.id)[0]
+                w.line(f"x = inputs_dict.get('{src}', inputs_dict.get('{src}'))")
+            else:
+                src = self.graph.predecessors(n.id)[0]
+                w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
             w.line(f"x = self.conv_{sid}(x)")
             act = n.properties.get("activation", "relu")
             if act != "linear":
@@ -469,14 +481,18 @@ class Conv2DTranslator(BaseTranslator):
 class FlattenTranslator(BaseTranslator):
     node_type = "flatten"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         if placement == "init":
             w.line(f"self.flatten_{sid} = nn.Flatten()")
         elif placement == "forward":
-            src = self.graph.predecessors(n.id)[0]
-            w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
+            if is_first:
+                src = self.graph.predecessors(n.id)[0]
+                w.line(f"x = inputs_dict.get('{src}', inputs_dict.get('{src}'))")
+            else:
+                src = self.graph.predecessors(n.id)[0]
+                w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
             w.line(f"x = self.flatten_{sid}(x)")
             w.line(f"outputs['{n.id}'] = x")
         elif placement == "data":
@@ -496,15 +512,19 @@ class FlattenTranslator(BaseTranslator):
 class DropoutTranslator(BaseTranslator):
     node_type = "dropout"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         if placement == "init":
             rate = n.properties.get("rate", 0.5)
             w.line(f"self.dropout_{sid} = nn.Dropout(p={rate})")
         elif placement == "forward":
-            src = self.graph.predecessors(n.id)[0]
-            w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
+            if is_first:
+                src = self.graph.predecessors(n.id)[0]
+                w.line(f"x = inputs_dict.get('{src}', inputs_dict.get('{src}'))")
+            else:
+                src = self.graph.predecessors(n.id)[0]
+                w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
             w.line(f"x = self.dropout_{sid}(x)")
             w.line(f"outputs['{n.id}'] = x")
 
@@ -530,15 +550,19 @@ class BatchNormTranslator(BaseTranslator):
                 return 1
         return 1
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         sid = _sanitize(n.id)
         if placement == "init":
             num_f = self._guess_num_features()
             w.line(f"self.bn_{sid} = nn.BatchNorm1d(num_features={num_f})")
         elif placement == "forward":
-            src = self.graph.predecessors(n.id)[0]
-            w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
+            if is_first:
+                src = self.graph.predecessors(n.id)[0]
+                w.line(f"x = inputs_dict.get('{src}', inputs_dict.get('{src}'))")
+            else:
+                src = self.graph.predecessors(n.id)[0]
+                w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
             w.line(f"x = self.bn_{sid}(x)")
             w.line(f"outputs['{n.id}'] = x")
 
@@ -546,7 +570,7 @@ class BatchNormTranslator(BaseTranslator):
 class AddTranslator(BaseTranslator):
     node_type = "add"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         if placement != "forward":
             return
@@ -566,7 +590,7 @@ class AddTranslator(BaseTranslator):
 class ConcatTranslator(BaseTranslator):
     node_type = "concat"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         if placement != "forward":
             return
@@ -593,7 +617,7 @@ class ConcatTranslator(BaseTranslator):
 class OutputTranslator(BaseTranslator):
     node_type = "output"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         n = self.node
         if placement != "forward":
             return
@@ -699,7 +723,7 @@ class OptimizerTranslator(BaseTranslator):
 class VisualizationTranslator(BaseTranslator):
     node_type = "visualization"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         if placement != "data":
             return
         n = self.node
@@ -785,7 +809,7 @@ class VisualizationTranslator(BaseTranslator):
 class PrintTranslator(BaseTranslator):
     node_type = "print"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         if placement != "data":
             return
         n = self.node
@@ -804,7 +828,7 @@ class PrintTranslator(BaseTranslator):
 class AccuracyTranslator(BaseTranslator):
     node_type = "accuracy"
 
-    def generate(self, w, phase, placement):
+    def generate(self, w, phase, placement, is_first=False):
         if placement != "data":
             return
         n = self.node
