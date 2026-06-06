@@ -1,19 +1,20 @@
 import json
 import io
 import zipfile
-from django.shortcuts import render
+import os
+from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
-from django.shortcuts import get_object_or_404
-from data_manager.models import Dataset
 from django.views.decorators.csrf import csrf_exempt
-
+from django.conf import settings
+from data_manager.models import Dataset
 from .codegen.generator import CodeGenerator
+from .codegen.validator import GraphValidator
+from .codegen.phase_analyzer import highlight_path
 
 
 @login_required
 def canvas(request):
-    """Render the SketchMod canvas editor with sidebar collapse preferences."""
     context = {}
     if request.user.is_authenticated:
         user_settings = request.user.settings
@@ -26,18 +27,14 @@ def canvas(request):
 
 
 def api_dataset_columns(request, dataset_id):
-    """Return column names for a dataset"""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
-
     if not dataset.is_visible_to(request.user):
         return JsonResponse({"error": "Not allowed"}, status=403)
-
     try:
         import pandas as pd
 
         file_path = dataset.file.path
         ext = dataset.format
-
         if ext == "csv":
             df = pd.read_csv(file_path, nrows=0)
         elif ext == "xlsx":
@@ -56,7 +53,6 @@ def api_dataset_columns(request, dataset_id):
                     "message": "Cannot read columns for this format",
                 }
             )
-
         columns = df.columns.tolist()
         return JsonResponse({"columns": columns, "count": len(columns)})
     except Exception as e:
@@ -66,10 +62,8 @@ def api_dataset_columns(request, dataset_id):
 @login_required
 @csrf_exempt
 def export_api(request):
-    """API endpoint for code generation."""
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "POST required"}, status=405)
-
     try:
         data = json.loads(request.body)
         graph_json = data.get("graph", "{}")
@@ -80,22 +74,13 @@ def export_api(request):
         else:
             graph = graph_json
 
-        generator = CodeGenerator(graph)  # using the new generator
+        generator = CodeGenerator(graph)
         code = generator.generate()
 
         if export_format == "pytorch-zip":
             return _export_zip(graph, code, request)
 
-        return JsonResponse(
-            {
-                "success": True,
-                "code": code,
-                "filename": "model.py",
-            }
-        )
-
-    except json.JSONDecodeError:
-        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+        return JsonResponse({"success": True, "code": code, "filename": "model.py"})
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
@@ -103,7 +88,6 @@ def export_api(request):
 def _export_zip(graph, code, request):
     """Create a zip file containing model.py and dataset files."""
     zip_buffer = io.BytesIO()
-
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         # Add the generated model.py
         zf.writestr("model.py", code)
@@ -113,29 +97,20 @@ def _export_zip(graph, code, request):
             (n for n in graph.get("nodes", []) if n["type"] == "input-data"),
             None,
         )
-
         if input_node and input_node.get("datasetId"):
             dataset_id = input_node["datasetId"]
             try:
-                from data_manager.models import Dataset
-                from django.conf import settings
-                import os
-
                 dataset = Dataset.objects.get(dataset_id=dataset_id)
-
                 if dataset.file and dataset.file.name:
                     file_path = os.path.join(settings.MEDIA_ROOT, dataset.file.name)
-
                     if os.path.exists(file_path):
                         filename = os.path.basename(dataset.file.name)
                         zf.write(file_path, f"data/{filename}")
-
                         ext = (
                             dataset.format
                             if dataset.format
                             else filename.rsplit(".", 1)[-1]
                         )
-
                         load_instructions = ""
                         if ext == "csv":
                             load_instructions = f"df = pd.read_csv('data/{filename}')"
@@ -149,7 +124,6 @@ def _export_zip(graph, code, request):
                             )
                         else:
                             load_instructions = f"# Load 'data/{filename}' appropriately for {ext} format"
-
                         zf.writestr(
                             "data/README.txt",
                             f"Dataset: {dataset.name}\n"
@@ -163,13 +137,10 @@ def _export_zip(graph, code, request):
                         zf.writestr(
                             "data/README.txt",
                             f"Dataset file not found at: {file_path}\n"
-                            f"Please download the dataset separately from SketchNet.\n",
+                            "Please download the dataset separately from SketchNet.\n",
                         )
                 else:
                     zf.writestr("data/README.txt", "Dataset has no file attached.\n")
-
-            except ImportError:
-                zf.writestr("data/README.txt", "Cannot import Dataset model.\n")
             except Dataset.DoesNotExist:
                 zf.writestr(
                     "data/README.txt", f"Dataset with ID '{dataset_id}' not found.\n"
@@ -198,35 +169,19 @@ def _export_zip(graph, code, request):
 @login_required
 @csrf_exempt
 def validate_api(request):
-    """API endpoint for graph validation."""
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "POST required"}, status=405)
-
     try:
         data = json.loads(request.body)
         graph_json = data.get("graph", "{}")
-
         if isinstance(graph_json, str):
             graph = json.loads(graph_json)
         else:
             graph = graph_json
 
-        from .codegen.validator import GraphValidator
-
         validator = GraphValidator(graph)
         result = validator.validate()
-
-        return JsonResponse(
-            {
-                "success": True,
-                "errors": result["errors"],
-                "warnings": result["warnings"],
-                "isValid": len(result["errors"]) == 0,
-            }
-        )
-
-    except json.JSONDecodeError:
-        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+        return JsonResponse({"success": True, **result})
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
@@ -234,23 +189,18 @@ def validate_api(request):
 @login_required
 @csrf_exempt
 def highlight_path_api(request):
-    """Return node and link IDs active in the requested execution phase."""
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "POST required"}, status=405)
     try:
         data = json.loads(request.body)
         graph_json = data.get("graph", "{}")
         phase = data.get("phase", "")
-
         if isinstance(graph_json, str):
             graph = json.loads(graph_json)
         else:
             graph = graph_json
 
-        from .codegen.phase_analyzer import highlight_path
-
         result = highlight_path(graph, phase)
-
         return JsonResponse({"success": True, **result})
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
