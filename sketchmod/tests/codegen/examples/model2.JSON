@@ -40,8 +40,8 @@
         {
             "id": "output-main",
             "type": "output",
-            "x": 1031.1643831193826,
-            "y": 271.54779321499177,
+            "x": 1055.551688504403,
+            "y": 269.10906267648966,
             "inputPorts": [
                 {
                     "id": "output-main_input_0",
@@ -426,8 +426,8 @@
         {
             "id": "n7",
             "type": "normalize",
-            "x": 486.4541966080242,
-            "y": 419.8244203345288,
+            "x": 499.8672145697854,
+            "y": 424.7018814115329,
             "inputPorts": [
                 {
                     "id": "n7_input_0",
@@ -713,8 +713,8 @@
         {
             "id": "c16",
             "type": "column-select",
-            "x": 830.0318152544029,
-            "y": 47.39564031019058,
+            "x": 828.8124499851518,
+            "y": 47.39564031019057,
             "inputPorts": [
                 {
                     "id": "c16_input_0",
@@ -1042,7 +1042,7 @@
                     },
                     "bias": 0,
                     "portKind": "data",
-                    "activationPhases": ["preprocessing"]
+                    "activationPhases": ["preprocessing", "evaluation"]
                 }
             ],
             "numInputs": 1,
@@ -1914,7 +1914,7 @@
             },
             "bias": 0,
             "portKind": "data",
-            "activationPhases": ["preprocessing"]
+            "activationPhases": ["preprocessing", "evaluation"]
         }
     ],
     "nodeCounter": 5
