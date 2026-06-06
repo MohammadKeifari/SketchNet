@@ -105,8 +105,9 @@ class CodeGenerator:
         w.indent()
 
         # Unpack pre_data
-        for key in self.var_map:
-            w.line(f"{self._sanitize(key)} = pre_data['{key}']")
+        for key, var_name in self.var_map.items():
+            w.line(f"{var_name} = pre_data['{key}']")
+        w.line("")
 
         feat_var = self._get_var_for_first_model_input("train")
         label_var = self._get_var_for_optimizer_labels()
@@ -214,8 +215,9 @@ class CodeGenerator:
     def _emit_evaluate(self, w):
         w.line("def evaluate(model, pre_data):")
         w.indent()
-        for key in self.var_map:
-            w.line(f"{self._sanitize(key)} = pre_data['{key}']")
+        for key, var_name in self.var_map.items():
+            w.line(f"{var_name} = pre_data['{key}']")
+        w.line("")
 
         has_train = (
             len(self.flow["train_order"]) > 0 and self.flow["optimizer"] is not None
