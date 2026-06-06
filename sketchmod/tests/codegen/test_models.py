@@ -271,24 +271,10 @@ def check_model3(proc, code, graph):
 
 
 def check_model4(proc, code, graph):
-    """
-    model4 checks:
-      1. Training‑phase Print node p12 (label 'loss') is generated
-         and runs inside the training loop every batch.
-      2. DeOneHot (d23) correctly receives the softmax output
-         and applies argmax.
-      3. Confusion matrix is printed because
-         showConfusion=True on the Accuracy node.
-      4. Accuracy uses the argmax prediction port (output-main_output_1)
-         and labels from c5.
-      5. Both visualizations v12 and v1 are present.
-         - v12 color comes from d23 (active via param-port carry-over).
-         - v1 color comes from c5 (evaluation-active).
-    """
     ok = True
 
-    # 1. p12 (loss print) inside training loop
-    if 'print("loss[0]:' not in code:  # note the colon
+    # 1. p12 (loss print) inside training loop (now generated as print('loss:', ...))
+    if "print('loss:'" not in code:
         print("❌ p12 (loss print) missing in training loop")
         ok = False
     else:
