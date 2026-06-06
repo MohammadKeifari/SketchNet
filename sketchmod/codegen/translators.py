@@ -62,7 +62,7 @@ class BaseTranslator:
         """
         pass
 
-    def forward_code(self, w):
+    def forward_code(self, w, is_first=False):
         """
         Generate model forward pass code (Model.forward).
         """
@@ -379,26 +379,13 @@ class NeuronTranslator(BaseTranslator):
     node_type = "neuron"
 
     def _guess_in_features(self, node):
-        """
-        Return the number of input features by looking at the last dimension
-        of the shape of the first connected source port.
-        """
         for port in node.inputs:
             for link in self.graph.links:
-                if link.id_to == port.id:
-                    src_port = self.graph.ports[link.id_from]
-                    if (
-                        src_port.shape
-                        and src_port.shape.shape
-                        and len(src_port.shape.shape) >= 2
-                    ):
-                        # shape is (batch, ..., in_features)
-                        in_feat = src_port.shape.shape[-1]
-                        try:
-                            return int(str(in_feat))
-                        except (ValueError, TypeError):
-                            pass
-        return "input_size  # TODO: set input feature dimension"
+                if link.id_to == port.id and link.weight_shape:
+                    shape = link.weight_shape.get("shape", [])
+                    if len(shape) >= 2:
+                        return shape[1]
+        raise ValueError(f"Cannot infer input features for {node.type} '{node.id}'.")
 
     def init_code(self, w):
         n = self.node
@@ -412,43 +399,57 @@ class NeuronTranslator(BaseTranslator):
         if bias:
             w.line(f"nn.init.constant_(self.fc_{n.id}.bias, {bias_val})")
 
-    def forward_code(self, w):
+    def forward_code(self, w, is_first=False):
         n = self.node
         w.line(f"# --- {n.type} {n.id} ---")
-        src_id = None
+
+        # Collect unique source node IDs (in port order)
+        src_ids = []
         for port in n.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
                     src_id = self.graph.ports[link.id_from].node_id
-                    break
-            if src_id:
-                break
-        if src_id:
-            w.line(f"if '{src_id}' in outputs or '{src_id}' in inputs_dict:")
+                    if src_id not in src_ids:
+                        src_ids.append(src_id)
+
+        if not src_ids:
+            w.line(f"outputs['{n.id}'] = None  # no input connected")
+            return
+
+        # Try each source: first one that is present wins
+        w.line("x = None")
+        for src_id in src_ids:
+            w.line(
+                f"if x is None and ('{src_id}' in outputs or '{src_id}' in inputs_dict):"
+            )
             w.indent()
             w.line(f"x = outputs.get('{src_id}', inputs_dict.get('{src_id}'))")
             w.dedent()
-            w.line(f"x = self.fc_{n.id}(x)")
-            activation = n.properties.get("activation", "relu")
-            if activation in ("linear", "none"):
-                pass
-            elif activation == "softmax":
-                w.line("x = torch.softmax(x, dim=-1)")
-            elif activation == "leaky_relu":
-                w.line("x = torch.nn.functional.leaky_relu(x)")
-            elif activation == "elu":
-                w.line("x = torch.nn.functional.elu(x)")
-            elif activation == "selu":
-                w.line("x = torch.nn.functional.selu(x)")
-            elif activation == "gelu":
-                w.line("x = torch.nn.functional.gelu(x)")
-            elif activation == "mish":
-                w.line("x = torch.nn.functional.mish(x)")
-            else:
-                w.line(f"x = torch.{activation}(x)")
-            w.line(f"outputs['{n.id}'] = x")
+
+        w.line("if x is None:")
+        w.indent()
+        w.line(f'raise ValueError("No input available for {n.type} {n.id}")')
+        w.dedent()
+
+        w.line(f"x = self.fc_{n.id}(x)")
+        activation = n.properties.get("activation", "relu")
+        if activation in ("linear", "none"):
+            pass
+        elif activation == "softmax":
+            w.line("x = torch.softmax(x, dim=-1)")
+        elif activation == "leaky_relu":
+            w.line("x = torch.nn.functional.leaky_relu(x)")
+        elif activation == "elu":
+            w.line("x = torch.nn.functional.elu(x)")
+        elif activation == "selu":
+            w.line("x = torch.nn.functional.selu(x)")
+        elif activation == "gelu":
+            w.line("x = torch.nn.functional.gelu(x)")
+        elif activation == "mish":
+            w.line("x = torch.nn.functional.mish(x)")
         else:
-            w.line(f"outputs['{n.id}'] = None  # no input connected")
+            w.line(f"x = torch.{activation}(x)")
+        w.line(f"outputs['{n.id}'] = x")
 
 
 class LayerTranslator(NeuronTranslator):
@@ -458,7 +459,7 @@ class LayerTranslator(NeuronTranslator):
 
     def init_code(self, w):
         n = self.node
-        in_features = self._guess_in_features(n)  # inherited, uses port shape
+        in_features = self._guess_in_features(n)
         out_features = n.properties.get("numNeurons", 64)
         bias = n.properties.get("hasBias", True)
         bias_val = n.properties.get("bias", 0.0)
@@ -506,7 +507,7 @@ class Conv2DTranslator(BaseTranslator):
             f"kernel_size={kernel}, stride={stride}, padding={padding}, bias={bias})"
         )
 
-    def forward_code(self, w):
+    def forward_code(self, w, is_first=False):
         n = self.node
         in_src = (
             list(self.graph.predecessors(n.id))[0]
@@ -542,15 +543,39 @@ class Conv2DTranslator(BaseTranslator):
 
 
 class FlattenTranslator(BaseTranslator):
-    """Flattens all non‑batch dimensions into a single vector."""
+    """Flattens all non‑batch dimensions. Works both in preprocessing and inside the model."""
 
     node_type = "flatten"
 
+    def data_code(self, w, phase):
+        """
+        Generate flatten code for preprocessing/evaluation.
+        - If the input is 2-D and the last dim is 1 → squeeze(-1)
+        - Else → flatten(start_dim=1)
+        """
+        n = self.node
+        in_var = self._get_input_var(n)
+        out_var = f"{n.id}_out"
+        # Check shape info if available (for now we generate a runtime check)
+        w.line(f"if {in_var}.dim() == 2 and {in_var}.size(-1) == 1:")
+        w.indent()
+        w.line(f"{out_var} = {in_var}.squeeze(-1)")
+        w.dedent()
+        w.line("else:")
+        w.indent()
+        w.line(f"{out_var} = torch.flatten({in_var}, start_dim=1)")
+        w.dedent()
+        self.var_map[n.id] = out_var
+        if n.outputs:
+            self.var_map[n.outputs[0].id] = out_var
+
     def init_code(self, w):
+        """Create a flatten layer for use inside the model."""
         n = self.node
         w.line(f"self.flatten_{n.id} = nn.Flatten()")
 
-    def forward_code(self, w):
+    def forward_code(self, w, is_first=False):
+        """Apply flatten inside the model forward pass."""
         n = self.node
         in_src = list(self.graph.predecessors(n.id))[0]
         w.line(f"if '{in_src}' in outputs or '{in_src}' in inputs_dict:")
@@ -571,7 +596,7 @@ class DropoutTranslator(BaseTranslator):
         rate = n.properties.get("rate", 0.5)
         w.line(f"self.dropout_{n.id} = nn.Dropout(p={rate})")
 
-    def forward_code(self, w):
+    def forward_code(self, w, is_first=False):
         n = self.node
         in_src = list(self.graph.predecessors(n.id))[0]
         w.line(f"if '{in_src}' in outputs or '{in_src}' in inputs_dict:")
@@ -588,7 +613,13 @@ class BatchNormTranslator(BaseTranslator):
     node_type = "batchnorm"
 
     def _guess_num_features(self, node):
-        """Return the number of features from the first connected input shape."""
+        """
+        Return number of features for BatchNorm1d.
+        1) Try source port shape (future‑proof).
+        2) Try predecessor node's known output size.
+        3) Fallback to 1.
+        """
+        # 1) Source port shape
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -598,13 +629,20 @@ class BatchNormTranslator(BaseTranslator):
                         and src_port.shape.shape
                         and len(src_port.shape.shape) >= 2
                     ):
-                        # shape is (batch, features) or (batch, channels, ...)
-                        # assume features are the last dimension
                         num = src_port.shape.shape[-1]
                         try:
                             return int(str(num))
                         except (ValueError, TypeError):
                             pass
+
+        # 2) Read from predecessor node properties
+        for nid in self.graph.predecessors(node.id):
+            pred = self.graph.nodes[nid]
+            if pred.type == "layer":
+                return pred.properties.get("numNeurons", 1)
+            if pred.type == "neuron":
+                return 1
+
         return 1  # fallback
 
     def init_code(self, w):
@@ -612,7 +650,7 @@ class BatchNormTranslator(BaseTranslator):
         num_features = self._guess_num_features(n)
         w.line(f"self.bn_{n.id} = nn.BatchNorm1d(num_features={num_features})")
 
-    def forward_code(self, w):
+    def forward_code(self, w, is_first=False):
         n = self.node
         in_src = list(self.graph.predecessors(n.id))[0]
         w.line(f"if '{in_src}' in outputs or '{in_src}' in inputs_dict:")
@@ -631,7 +669,7 @@ class AddTranslator(BaseTranslator):
     def init_code(self, w):
         pass
 
-    def forward_code(self, w):
+    def forward_code(self, w, is_first=False):
         n = self.node
         preds = list(self.graph.predecessors(n.id))
         if len(preds) >= 2:
@@ -654,7 +692,7 @@ class ConcatTranslator(BaseTranslator):
     def init_code(self, w):
         pass
 
-    def forward_code(self, w):
+    def forward_code(self, w, is_first=False):
         n = self.node
         preds = list(self.graph.predecessors(n.id))
         axis = n.properties.get("axis", -1)
@@ -687,7 +725,7 @@ class OutputTranslator(BaseTranslator):
     def init_code(self, w):
         pass
 
-    def forward_code(self, w):
+    def forward_code(self, w, is_first=False):
         n = self.node
         src_id = None
         for port in n.inputs:
