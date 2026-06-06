@@ -1,9 +1,6 @@
 """
 Translators for SketchNet nodes → PyTorch code.
-
-Each translator has a single entry point:
-    generate(w, phase, placement)
-where placement is 'data', 'init', or 'forward'.
+Single entry point: generate(w, phase, placement)
 """
 
 import re
@@ -12,7 +9,6 @@ from .writer import CodeWriter
 
 
 def _sanitize(id_str: str) -> str:
-    """Convert a graph ID into a valid Python variable name."""
     return re.sub(r"[^a-zA-Z0-9_]", "_", id_str)
 
 
@@ -30,11 +26,7 @@ class BaseTranslator:
     def generate(self, w: CodeWriter, phase: str, placement: str):
         pass
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
     def _in_var(self):
-        """Return the variable name feeding the first connected input (data or param)."""
         for port in self.node.inputs + self.node.paramInputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -47,14 +39,11 @@ class BaseTranslator:
         return "None"
 
     def _store_output(self, var_name: str):
-        """Store a variable name for both the node and its first output port."""
         self.var_map[self.node.id] = var_name
         if self.node.outputs:
             self.var_map[self.node.outputs[0].id] = var_name
 
-    # For nodes used inside the Model: get input from outputs dict
     def _in_var_forward(self):
-        """Get the variable name feeding this node's first input, from outputs or inputs_dict."""
         for port in self.node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -80,24 +69,20 @@ class InputDataTranslator(BaseTranslator):
 
         if ds_id and ds_file:
             ext = ds_fmt or ds_file.rsplit(".", 1)[-1]
-            if ext == "csv":
+            if ext in ("csv", "xlsx", "json", "parquet"):
                 w.line("import pandas as pd")
-                w.line(f"df = pd.read_csv('data/{ds_file}')")
-            elif ext == "xlsx":
-                w.line("import pandas as pd")
-                w.line(f"df = pd.read_excel('data/{ds_file}')")
-            elif ext == "json":
-                w.line("import pandas as pd")
-                w.line(f"df = pd.read_json('data/{ds_file}')")
-            elif ext == "parquet":
-                w.line("import pandas as pd")
-                w.line(f"df = pd.read_parquet('data/{ds_file}')")
+                if ext == "csv":
+                    w.line(f"df = pd.read_csv('data/{ds_file}')")
+                elif ext == "xlsx":
+                    w.line(f"df = pd.read_excel('data/{ds_file}')")
+                elif ext == "json":
+                    w.line(f"df = pd.read_json('data/{ds_file}')")
+                elif ext == "parquet":
+                    w.line(f"df = pd.read_parquet('data/{ds_file}')")
+                w.line("raw_data = torch.tensor(df.values, dtype=torch.float32)")
             else:
-                w.line(f"# Unsupported format '{ext}' – falling back to random data")
+                w.line(f"# Unsupported format '{ext}' – random data fallback")
                 w.line("raw_data = torch.randn(200, 10)")
-                self._store_output("raw_data")
-                return
-            w.line("raw_data = torch.tensor(df.values, dtype=torch.float32)")
             self._store_output("raw_data")
         elif ds:
             parts = ds.strip("()").split(",")
@@ -108,7 +93,6 @@ class InputDataTranslator(BaseTranslator):
                     f"raw_data = torch.randn({row_str}, {', '.join(str(c) for c in cols)})"
                 )
             else:
-                w.line(f"# Manual shape {ds}")
                 w.line(f"num_rows = 200  # placeholder for '{row_str}'")
                 w.line(
                     f"raw_data = torch.randn(num_rows, {', '.join(str(c) for c in cols)})"
@@ -233,26 +217,57 @@ class NormalizeTranslator(BaseTranslator):
         sid = _sanitize(n.id)
         method = n.properties.get("method", "standard")
 
+        param_in = None
+        if n.paramInputs:
+            for link in self.graph.links:
+                if link.id_to == n.paramInputs[0].id:
+                    param_in = link.id_from
+                    break
+
         if placement == "data":
             in_var = self._in_var()
             out_var = f"{sid}_out"
-            self._emit_norm(w, in_var, out_var, method)
-            self._store_output(out_var)
+            if param_in:
+                src_mean = self.var_map.get(param_in + "_mean", "None")
+                src_std = self.var_map.get(param_in + "_std", "None")
+                if method == "standard":
+                    w.line(f"{out_var} = ({in_var} - {src_mean}) / ({src_std} + 1e-8)")
+                else:
+                    w.line(
+                        f"{out_var} = ({in_var} - {src_mean}) / ({src_std} - {src_mean} + 1e-8)"
+                    )
+                self._store_output(out_var)
+            else:
+                if method == "standard":
+                    w.line(f"mean = {in_var}.mean(dim=0, keepdim=True)")
+                    w.line(f"std = {in_var}.std(dim=0, keepdim=True) + 1e-8")
+                    w.line(f"{out_var} = ({in_var} - mean) / std")
+                    if n.paramOutputs:
+                        self.var_map[n.paramOutputs[0].id + "_mean"] = "mean"
+                        self.var_map[n.paramOutputs[0].id + "_std"] = "std"
+                else:
+                    w.line(f"min_val = {in_var}.min(dim=0, keepdim=True)[0]")
+                    w.line(f"max_val = {in_var}.max(dim=0, keepdim=True)[0]")
+                    w.line(
+                        f"{out_var} = ({in_var} - min_val) / (max_val - min_val + 1e-8)"
+                    )
+                    if n.paramOutputs:
+                        self.var_map[n.paramOutputs[0].id + "_mean"] = "min_val"
+                        self.var_map[n.paramOutputs[0].id + "_std"] = "max_val"
+                self._store_output(out_var)
+
         elif placement == "forward":
             in_expr = self._in_var_forward()
             w.line(f"x = {in_expr}")
-            self._emit_norm(w, "x", "x", method)
+            if method == "standard":
+                w.line(
+                    f"x = (x - x.mean(dim=0, keepdim=True)) / (x.std(dim=0, keepdim=True) + 1e-8)"
+                )
+            else:
+                w.line(f"min_val = x.min(dim=0, keepdim=True)[0]")
+                w.line(f"max_val = x.max(dim=0, keepdim=True)[0]")
+                w.line(f"x = (x - min_val) / (max_val - min_val + 1e-8)")
             w.line(f"outputs['{n.id}'] = x")
-
-    def _emit_norm(self, w, in_var, out_var, method):
-        if method == "standard":
-            w.line(f"mean = {in_var}.mean(dim=0, keepdim=True)")
-            w.line(f"std = {in_var}.std(dim=0, keepdim=True) + 1e-8")
-            w.line(f"{out_var} = ({in_var} - mean) / std")
-        else:
-            w.line(f"min_val = {in_var}.min(dim=0, keepdim=True)[0]")
-            w.line(f"max_val = {in_var}.max(dim=0, keepdim=True)[0]")
-            w.line(f"{out_var} = ({in_var} - min_val) / (max_val - min_val + 1e-8)")
 
 
 class OneHotTranslator(BaseTranslator):
@@ -290,25 +305,22 @@ class DeOneHotTranslator(BaseTranslator):
     def generate(self, w, phase, placement):
         n = self.node
         sid = _sanitize(n.id)
-
-        if placement == "data":
+        if placement in ("data", "forward"):
             in_var = self._in_var()
             out_var = f"{sid}_out"
             self._emit_deonehot(w, in_var, out_var, n)
-            self._store_output(out_var)
-        elif placement == "forward":
-            in_expr = self._in_var_forward()
-            w.line(f"x = {in_expr}")
-            self._emit_deonehot(w, "x", "x", n)
-            w.line(f"outputs['{n.id}'] = x")
+            if placement == "data":
+                self._store_output(out_var)
+            else:
+                w.line(f"outputs['{n.id}'] = x")
 
     def _emit_deonehot(self, w, in_var, out_var, node):
-        # param input support
         param_var = None
-        for link in self.graph.links:
-            if node.paramInputs and link.id_to == node.paramInputs[0].id:
-                param_var = self.var_map.get(link.id_from)
-                break
+        if node.paramInputs:
+            for link in self.graph.links:
+                if link.id_to == node.paramInputs[0].id:
+                    param_var = self.var_map.get(link.id_from)
+                    break
         if param_var:
             w.line(f"categories = {param_var}")
         w.line(f"if {in_var}.dim() == 2:")
@@ -376,26 +388,22 @@ class NeuronTranslator(BaseTranslator):
                         src = self.graph.ports[link.id_from].node_id
                         if src not in src_ids:
                             src_ids.append(src)
-            w.line("x = None")
-            for src in src_ids:
-                w.line(
-                    f"if x is None and ('{src}' in outputs or '{src}' in inputs_dict):"
-                )
-                w.indent()
-                w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
-                w.dedent()
-            w.line("if x is None:")
-            w.indent()
-            w.line(f'raise ValueError("No input for {n.type} {n.id}")')
-            w.dedent()
+            if not src_ids:
+                expr = "None"
+            else:
+                expr = f"inputs_dict.get('{src_ids[0]}'"
+                for src in src_ids[1:]:
+                    expr += f", inputs_dict.get('{src}')"
+                expr += ")"
+            w.line(f"x = {expr}")
             w.line(f"x = self.fc_{sid}(x)")
             act = n.properties.get("activation", "relu")
             if act == "linear":
                 pass
-            elif act == "softmax":
-                w.line("x = torch.softmax(x, dim=-1)")
             elif act in ("leaky_relu", "elu", "selu", "gelu", "mish"):
                 w.line(f"x = torch.nn.functional.{act}(x)")
+            elif act == "softmax":
+                w.line("x = torch.softmax(x, dim=-1)")
             else:
                 w.line(f"x = torch.{act}(x)")
             w.line(f"outputs['{n.id}'] = x")
@@ -623,16 +631,11 @@ class OptimizerTranslator(BaseTranslator):
     node_type = "optimizer"
 
     def emit_training_setup(self, w: CodeWriter):
-        """
-        Emit exactly the loss function and optimizer selected by the user.
-        No runtime if/elif chains.
-        """
         props = self.node.properties
         loss = props.get("lossType", "mse")
         opt = props.get("optimizerType", "adam")
         lr = props.get("learningRate", 0.001)
 
-        # Loss function – one line only
         loss_map = {
             "mse": "nn.MSELoss()",
             "cross_entropy": "nn.CrossEntropyLoss()",
@@ -642,7 +645,6 @@ class OptimizerTranslator(BaseTranslator):
         }
         w.line(f"criterion = {loss_map.get(loss, 'nn.MSELoss()')}")
 
-        # Optimizer – one concrete instantiation
         if opt == "adam":
             w.line(f"optimizer = optim.Adam(model.parameters(), lr={lr},")
             w.line(
@@ -675,15 +677,12 @@ class OptimizerTranslator(BaseTranslator):
                 f"                             weight_decay={props.get('weightDecay', 0)})"
             )
         else:
-            # fallback
             w.line(f"optimizer = optim.Adam(model.parameters(), lr={lr})")
 
-        # Handle label casting for classification losses
-        if loss == "cross_entropy" or loss == "nll":
-            w.line("labels = labels.long()  # required for CrossEntropyLoss/NLLLoss")
+        if loss in ("cross_entropy", "nll"):
+            w.line("labels = labels.long()  # required for CrossEntropyLoss")
 
     def get_config(self) -> str:
-        """Return hyperparameter config dict (loss_type and optimizer_type omitted)."""
         props = self.node.properties
         lines = [
             f"'learning_rate': {props.get('learningRate', 0.001)}",
