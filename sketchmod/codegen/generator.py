@@ -1,35 +1,34 @@
 """
 Main code generation engine for SketchNet.
-
-Orchestrates the conversion of a graph into a runnable PyTorch script
-using the new phase‑driven architecture.
+Orchestrates the conversion of a graph into a runnable PyTorch script.
 """
 
 import json
+import re
 from .graph import parse_graph
 from .phase_analyzer import analyze_phases
 from .writer import CodeWriter
 from .translators import get_translator
 
+MODEL_TYPES = {
+    "neuron",
+    "layer",
+    "conv2d",
+    "flatten",
+    "dropout",
+    "batchnorm",
+    "add",
+    "concat",
+    "output",
+}
+
 
 class CodeGenerator:
-    MODEL_TYPES = {
-        "neuron",
-        "layer",
-        "conv2d",
-        "flatten",
-        "dropout",
-        "batchnorm",
-        "add",
-        "concat",
-        "output",
-    }
-
     def __init__(self, graph_data: dict):
         self.graph = parse_graph(graph_data)
         self.flow = analyze_phases(self.graph)
         self.var_map = {}  # port/node id → variable name
-        self.translators = {}  # node id → translator instance
+        self.translators = {}
 
         for nid, node in self.graph.nodes.items():
             self.translators[nid] = get_translator(node, self.graph, self.var_map)
@@ -77,12 +76,29 @@ class CodeGenerator:
 
         order = self.flow["preprocessing_order"]
         for nid in order:
-            node = self.graph.nodes[nid]
             self.translators[nid].generate(w, "preprocessing", "data")
 
+        # Build pre_data using ONLY terminal ports that carry training/eval
         w.line("pre_data = {")
-        for key, var in self.var_map.items():
-            w.line(f"    '{key}': {var},")
+        for port_id in self.flow["train_seed_ports"]:
+            if port_id in self.var_map:
+                w.line(f"    '{port_id}': {self.var_map[port_id]},")
+        for port_id in self.flow["eval_seed_ports"]:
+            if port_id in self.var_map:
+                w.line(f"    '{port_id}': {self.var_map[port_id]},")
+        # Param outputs needed later
+        for nid in order:
+            node = self.graph.nodes[nid]
+            if node.type == "onehot" and node.paramOutputs:
+                pid = node.paramOutputs[0].id
+                if pid in self.var_map:
+                    w.line(f"    '{pid}': {self.var_map[pid]},")
+            if node.type == "normalize" and node.paramOutputs:
+                pid = node.paramOutputs[0].id
+                for suffix in ("_mean", "_std"):
+                    key = pid + suffix
+                    if key in self.var_map:
+                        w.line(f"    '{key}': {self.var_map[key]},")
         w.line("}")
         w.line("return pre_data")
         w.dedent()
@@ -116,14 +132,12 @@ class CodeGenerator:
         w.line("def train_model(model, pre_data, config):")
         w.indent()
 
-        # Unpack pre_data
-        for key, var_name in self.var_map.items():
-            w.line(f"{var_name} = pre_data['{key}']")
-        w.line("")
+        self._unpack_pre_data(w)
 
-        feed_key, feed_var = self._get_feed_key("train")
+        feat_var = self._get_var_for_first_model_input("train")
         label_var = self._get_var_for_optimizer_labels()
-        w.line(f"features = {feed_var}.float()")
+
+        w.line(f"features = {feat_var}.float()")
         w.line(f"labels = {label_var}")
 
         w.line("batch_size = config.get('batch_size', 32)")
@@ -133,7 +147,7 @@ class CodeGenerator:
         )
         w.line("")
 
-        # Let the optimizer translator write the concrete loss + optimizer code
+        # Loss & optimizer (no branching – translator writes concrete lines)
         translator = self.translators[opt_node.id]
         translator.emit_training_setup(w)
 
@@ -151,7 +165,7 @@ class CodeGenerator:
         w.line("for batch_X, batch_y in loader:")
         w.indent()
         w.line("batch_X, batch_y = batch_X.to(device), batch_y.to(device)")
-        root_id = self._get_first_model_node_id("train")
+        feed_key, _ = self._get_feed_key("train")
         w.line(f"inputs_dict = {{'{feed_key}': batch_X}}")
         w.line("outputs = model(inputs_dict)")
 
@@ -173,52 +187,50 @@ class CodeGenerator:
         w.line("avg_train_loss = total_loss / len(loader.dataset)")
         w.line("print(f'Epoch {epoch+1:3d}  Train Loss: {avg_train_loss:.6f}')")
 
-        # Validation (if test labels exist)
+        # Validation – only if test labels exist
         test_label_var = self._get_var_for_eval_labels()
-        w.line(f"if {test_label_var} is not None:")
-        w.indent()
-        w.line(f"val_features = {self._get_var_for_first_model_input('eval')}.float()")
-        w.line(f"val_labels = {test_label_var}")
-        # Cast if needed (optimizer translator already handled cast for training labels;
-        # we repeat for validation labels if cross-entropy)
-        loss_type = opt_node.properties.get("lossType", "mse")
-        if loss_type in ("cross_entropy", "nll"):
-            w.line("val_labels = val_labels.long()")
-        w.line("model.eval()")
-        w.line("with torch.no_grad():")
-        w.indent()
-        eval_root = self._get_first_model_node_id("eval")
-        w.line(f"outputs = model({{'{eval_root}': val_features.to(device)}})")
-        if loss_port:
+        if test_label_var != "None":
             w.line(
-                f"val_loss = criterion(outputs['{loss_port}'], val_labels.to(device)).item()"
+                f"val_features = {self._get_var_for_first_model_input('eval')}.float()"
             )
-        else:
-            w.line(
-                "val_loss = criterion(list(outputs.values())[0], val_labels.to(device)).item()"
-            )
-        w.dedent()
-        w.line("print(f'           Val Loss: {val_loss:.6f}')")
-        w.line("if patience is not None:")
-        w.indent()
-        w.line("if val_loss < best_loss:")
-        w.indent()
-        w.line("best_loss = val_loss")
-        w.line("no_improve = 0")
-        w.dedent()
-        w.line("else:")
-        w.indent()
-        w.line("no_improve += 1")
-        w.line("if no_improve >= patience:")
-        w.indent()
-        w.line("print('Early stopping.')")
-        w.line("break")
-        w.dedent()
-        w.dedent()
-        w.dedent()
-        w.dedent()
+            w.line(f"val_labels = {test_label_var}")
+            loss_type = opt_node.properties.get("lossType", "mse")
+            if loss_type in ("cross_entropy", "nll"):
+                w.line("val_labels = val_labels.long()")
+            w.line("model.eval()")
+            w.line("with torch.no_grad():")
+            w.indent()
+            eval_feed_key, _ = self._get_feed_key("eval")
+            w.line(f"outputs = model({{'{eval_feed_key}': val_features.to(device)}})")
+            if loss_port:
+                w.line(
+                    f"val_loss = criterion(outputs['{loss_port}'], val_labels.to(device)).item()"
+                )
+            else:
+                w.line(
+                    "val_loss = criterion(list(outputs.values())[0], val_labels.to(device)).item()"
+                )
+            w.dedent()
+            w.line("print(f'           Val Loss: {val_loss:.6f}')")
+            w.line("if patience is not None:")
+            w.indent()
+            w.line("if val_loss < best_loss:")
+            w.indent()
+            w.line("best_loss = val_loss")
+            w.line("no_improve = 0")
+            w.dedent()
+            w.line("else:")
+            w.indent()
+            w.line("no_improve += 1")
+            w.line("if no_improve >= patience:")
+            w.indent()
+            w.line("print('Early stopping.')")
+            w.line("break")
+            w.dedent()
+            w.dedent()
+            w.dedent()
 
-        w.dedent()
+        w.dedent()  # end epoch loop
         w.line("return model")
         w.dedent()
         w.line("")
@@ -227,9 +239,7 @@ class CodeGenerator:
     def _emit_evaluate(self, w):
         w.line("def evaluate(model, pre_data):")
         w.indent()
-        for key, var_name in self.var_map.items():
-            w.line(f"{var_name} = pre_data['{key}']")
-        w.line("")
+        self._unpack_pre_data(w)
 
         has_train = (
             len(self.flow["train_order"]) > 0 and self.flow["optimizer"] is not None
@@ -240,7 +250,6 @@ class CodeGenerator:
             w.line("with torch.no_grad():")
             w.indent()
             eval_feed_key, eval_feed_var = self._get_feed_key("eval")
-            eval_feat = self._get_var_for_first_model_input("eval")
             w.line(
                 f"eval_in = {{'{eval_feed_key}': {eval_feed_var}.float().to(device)}}"
             )
@@ -250,8 +259,9 @@ class CodeGenerator:
             )
             if output_node:
                 for port in output_node.outputs:
-                    w.line(f"{self._sanitize(port.id)}_tensor = outputs['{port.id}']")
-                    self.var_map[port.id] = f"{self._sanitize(port.id)}_tensor"
+                    sanitized = self._sanitize(port.id) + "_tensor"
+                    w.line(f"{sanitized} = outputs['{port.id}']")
+                    self.var_map[port.id] = sanitized
             w.dedent()
         else:
             w.line("# No trained model – running evaluation nodes untrained")
@@ -280,7 +290,6 @@ class CodeGenerator:
                                 src = self.var_map.get(src_nid, "None")
                             w.line(f"viz_data['{port.id}'] = {src}")
                             break
-
         w.line("return viz_data if 'viz_data' in dir() else {}")
         w.dedent()
         w.line("")
@@ -308,46 +317,87 @@ class CodeGenerator:
 
         if has_eval:
             w.line("viz_data = evaluate(model, pre_data)")
+            # plt.show() already called inside each visualization translator
 
         w.dedent()
 
     # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
     def _sanitize(self, id_str: str) -> str:
-        import re
-
         return re.sub(r"[^a-zA-Z0-9_]", "_", id_str)
+
+    def _unpack_pre_data(self, w):
+        """Write lines to unpack pre_data dict into local variables."""
+        for port_id in self.flow["train_seed_ports"]:
+            if port_id in self.var_map:
+                var = self.var_map[port_id]
+                w.line(f"{var} = pre_data['{port_id}']")
+        for port_id in self.flow["eval_seed_ports"]:
+            if port_id in self.var_map:
+                var = self.var_map[port_id]
+                w.line(f"{var} = pre_data['{port_id}']")
+        # Param outputs
+        for nid in self.flow["preprocessing_order"]:
+            node = self.graph.nodes[nid]
+            if node.type == "onehot" and node.paramOutputs:
+                pid = node.paramOutputs[0].id
+                if pid in self.var_map:
+                    w.line(f"{self.var_map[pid]} = pre_data['{pid}']")
+            if node.type == "normalize" and node.paramOutputs:
+                pid = node.paramOutputs[0].id
+                for suffix in ("_mean", "_std"):
+                    key = pid + suffix
+                    if key in self.var_map:
+                        w.line(f"{self.var_map[key]} = pre_data['{key}']")
+        w.line("")
 
     def _get_first_model_node_id(self, phase):
         """Return the first MODEL node in the given phase's execution order."""
         order = self.flow[f"{phase}_order"]
         for nid in order:
-            if self.graph.nodes[nid].type in self.MODEL_TYPES:
+            if self.graph.nodes[nid].type in MODEL_TYPES:
                 return nid
         return None
 
-    def _get_var_for_first_model_input(self, phase):
+    def _get_feed_key(self, phase: str):
+        """Return (source_node_id, variable_name) for the model input."""
+        PHASE_MAP = {"train": "training", "eval": "evaluation"}
+        full_phase = PHASE_MAP[phase]
         nid = self._get_first_model_node_id(phase)
         if nid is None:
-            return "None"
+            return None, None
         node = self.graph.nodes[nid]
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
-                    src_port = link.id_from
-                    if src_port in self.var_map:
-                        return self.var_map[src_port]
-                    src_nid = self.graph.ports[src_port].node_id
-                    if src_nid in self.var_map:
-                        return self.var_map[src_nid]
-        return "None"
+                    src_port = self.graph.ports[link.id_from]
+                    if full_phase in src_port.activation_phases:
+                        src_node_id = src_port.node_id
+                        var = self.var_map.get(src_port.id) or self.var_map.get(
+                            src_node_id
+                        )
+                        return src_node_id, var
+        # Fallback
+        for port in node.inputs:
+            for link in self.graph.links:
+                if link.id_to == port.id:
+                    src_node_id = self.graph.ports[link.id_from].node_id
+                    var = self.var_map.get(link.id_from) or self.var_map.get(
+                        src_node_id
+                    )
+                    return src_node_id, var
+        return None, None
+
+    def _get_var_for_first_model_input(self, phase):
+        _, var = self._get_feed_key(phase)
+        return var if var else "None"
 
     def _get_var_for_optimizer_labels(self):
         opt = self.flow.get("optimizer")
-        if not opt:
+        if not opt or len(opt.inputs) < 2:
             return "None"
-        labels_port = opt.inputs[1] if len(opt.inputs) > 1 else None
-        if not labels_port:
-            return "None"
+        labels_port = opt.inputs[1]
         for link in self.graph.links:
             if link.id_to == labels_port.id:
                 src = link.id_from
@@ -364,30 +414,18 @@ class CodeGenerator:
         )
         if not output_node:
             return "None"
-        test_port = None
-        for p in output_node.inputs:
+        for port in output_node.inputs:
             for link in self.graph.links:
-                if link.id_to == p.id:
+                if link.id_to == port.id:
                     src_port = self.graph.ports[link.id_from]
                     if "evaluation" in src_port.activation_phases:
-                        test_port = p
-                        break
-            if test_port:
-                break
-        if not test_port:
-            for p in output_node.inputs:
-                if any(l.id_to == p.id for l in self.graph.links):
-                    test_port = p
-                    break
-        if test_port:
-            for link in self.graph.links:
-                if link.id_to == test_port.id:
-                    src = link.id_from
-                    if src in self.var_map:
-                        return self.var_map[src]
-                    src_nid = self.graph.ports[src].node_id
-                    if src_nid in self.var_map:
-                        return self.var_map[src_nid]
+                        for l2 in self.graph.links:
+                            if l2.id_to == src_port.id:
+                                if l2.id_from in self.var_map:
+                                    return self.var_map[l2.id_from]
+                                src_nid = self.graph.ports[l2.id_from].node_id
+                                if src_nid in self.var_map:
+                                    return self.var_map[src_nid]
         return "None"
 
     def _get_loss_port_id(self):
@@ -399,36 +437,3 @@ class CodeGenerator:
                 if p.role == "loss":
                     return p.id
         return None
-
-    def _get_feed_key(self, phase: str):
-        """
-        Return (source_node_id, variable_name) that should be used as the
-        model input for the given phase ('train' or 'eval').
-        """
-        PHASE_MAP = {"train": "training", "eval": "evaluation"}
-        full_phase = PHASE_MAP[phase]
-        nid = self._get_first_model_node_id(phase)
-        if nid is None:
-            return None, None
-        node = self.graph.nodes[nid]
-        # Find a source port whose output carries the full_phase
-        for in_port in node.inputs:
-            for link in self.graph.links:
-                if link.id_to == in_port.id:
-                    src_port = self.graph.ports[link.id_from]
-                    if full_phase in src_port.activation_phases:
-                        src_node_id = src_port.node_id
-                        var = self.var_map.get(src_port.id) or self.var_map.get(
-                            src_node_id
-                        )
-                        return src_node_id, var
-        # Fallback: any connected source
-        for in_port in node.inputs:
-            for link in self.graph.links:
-                if link.id_to == in_port.id:
-                    src_node_id = self.graph.ports[link.id_from].node_id
-                    var = self.var_map.get(link.id_from) or self.var_map.get(
-                        src_node_id
-                    )
-                    return src_node_id, var
-        return None, None
