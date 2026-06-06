@@ -148,13 +148,27 @@ def check_model1(proc, code, graph):
     else:
         print("✅ Evaluation port (softmax)")
 
-    # 2) OneHot → DeOneHot param link
-    param_link = re.search(r"categories\s*=\s*o8_param_out_0", code)
-    if not param_link:
-        print("❌ OneHot → DeOneHot parameter sharing missing")
-        ok = False
+    # 2) OneHot → DeOneHot parameter sharing
+    # The OneHot node creates 'categories' via torch.arange.
+    # The DeOneHot node must use that variable, not create its own arange.
+    # Find the DeOneHot code block for node 'd23' and check it contains
+    # 'categories' but NOT 'torch.arange'.
+    d23_block = re.search(
+        r"# Processing evaluation node d23.*?(?=\n# |\n\Z)", code, re.DOTALL
+    )
+    if d23_block:
+        block = d23_block.group(0)
+        if "torch.arange" in block:
+            print("❌ DeOneHot creates its own categories (missing parameter sharing)")
+            ok = False
+        elif "categories" in block:
+            print("✅ OneHot → DeOneHot parameter sharing")
+        else:
+            print("❌ DeOneHot does not reference categories")
+            ok = False
     else:
-        print("✅ OneHot → DeOneHot parameter sharing")
+        print("❌ DeOneHot block not found")
+        ok = False
 
     # 3) Phase analysis
     parsed = parse_graph(graph)
@@ -187,32 +201,25 @@ def check_model1(proc, code, graph):
 def check_model2(proc, code, graph):
     """
     model2 checks:
-      1. Only visualization v12 is present; v1 is not active because its
-         color input (c5) has only preprocessing phase.
-      2. The generated code contains exactly one plt.show() call (for v12).
+      1. Both visualizations v12 and v1 are present (both active in evaluation).
+      2. The generated code contains exactly two plt.show() calls.
       3. General execution succeeds.
     """
     ok = True
 
-    if "Visualization 'v12'" not in code:
-        print("❌ Visualization v12 missing from code")
-        ok = False
-    else:
-        print("✅ Visualization v12 found")
-
-    # v1 should NOT be present
-    if "Visualization 'v1'" in code:
-        print("❌ Visualization v1 should NOT be active (color input lacks evaluation)")
-        ok = False
-    else:
-        print("✅ Visualization v1 correctly absent")
+    for viz in ("v12", "v1"):
+        if f"Visualization '{viz}'" not in code:
+            print(f"❌ Visualization {viz} missing")
+            ok = False
+        else:
+            print(f"✅ Visualization {viz} present")
 
     show_count = code.count("plt.show()")
-    if show_count != 1:
-        print(f"❌ Expected exactly 1 plt.show() call, found {show_count}")
+    if show_count != 2:
+        print(f"❌ Expected 2 plt.show() calls, found {show_count}")
         ok = False
     else:
-        print(f"✅ Found {show_count} plt.show() call")
+        print(f"✅ Found {show_count} plt.show() calls")
 
     return ok
 
