@@ -7,7 +7,7 @@ from typing import Set, List, Dict, Tuple, Optional
 from .graph import Graph, Node, Port, parse_graph
 
 # Nodes whose internal circuit requires ALL connected data inputs
-CONJUNCTIVE_NODES = {"add", "concat", "optimizer"}
+CONJUNCTIVE_NODES = {"add", "concat", "optimizer", "visualization"}
 
 
 def _has_phase(port: Port, phase: str) -> bool:
