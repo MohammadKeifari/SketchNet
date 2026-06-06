@@ -20,11 +20,11 @@ from typing import List, Dict, Optional, Any
 class Port:
     """
     Represents an input or output port on a node in the computation graph.
-    
+
     A port is a connection point where data or parameters can flow between nodes.
     Each port has activation phases that determine during which execution phases
     (preprocessing, training, evaluation) it is active.
-    
+
     Attributes:
         id (str): Unique identifier for this port.
         node_id (str): ID of the node that owns this port.
@@ -42,6 +42,7 @@ class Port:
         bias (float): Bias value if applicable. Defaults to 0.0.
         connection_limit (int): Maximum number of connections to this port. Defaults to 1.
     """
+
     id: str
     node_id: str
     type: str
@@ -59,10 +60,10 @@ class Port:
 class Link:
     """
     Represents a connection between two ports in the computation graph.
-    
+
     A link carries data or parameters from an output port to an input port.
     Links can optionally have learnable weights (for layers that combine inputs).
-    
+
     Attributes:
         id_from (str): ID of the source port.
         id_to (str): ID of the destination port.
@@ -71,6 +72,7 @@ class Link:
         has_weight (bool): Whether this link has learnable weights (e.g., for add/concat
             layers that combine multiple inputs). Defaults to False.
     """
+
     id_from: str
     id_to: str
     weight: float = 1.0
@@ -82,10 +84,10 @@ class Link:
 class Node:
     """
     Represents a computational unit (node) in the computation graph.
-    
+
     A node can represent various types of operations: data input, preprocessing transforms,
     neural network layers, output operations, optimizers, etc.
-    
+
     Attributes:
         id (str): Unique identifier for this node.
         type (str): Node type (e.g., "input-data", "conv2d", "layer", "optimizer",
@@ -99,6 +101,7 @@ class Node:
         x (float): X coordinate in the visual editor. Defaults to 0.0.
         y (float): Y coordinate in the visual editor. Defaults to 0.0.
     """
+
     id: str
     type: str
     inputs: List[Port] = field(default_factory=list)
@@ -114,16 +117,17 @@ class Node:
 class Graph:
     """
     Represents a complete computation graph for neural network definition.
-    
+
     The graph is a directed acyclic graph (DAG) where nodes are computational units
     and links are data/parameter flows between them. It includes utility methods for
     traversing the graph structure.
-    
+
     Attributes:
         nodes (Dict[str, Node]): Mapping of node IDs to Node objects.
         links (List[Link]): List of all connections in the graph.
         ports (Dict[str, Port]): Mapping of port IDs to Port objects for quick lookup.
     """
+
     nodes: Dict[str, Node] = field(default_factory=dict)
     links: List[Link] = field(default_factory=list)
     ports: Dict[str, Port] = field(default_factory=dict)
@@ -131,7 +135,7 @@ class Graph:
     def add_node(self, node: Node):
         """
         Add a node to the graph.
-        
+
         Args:
             node (Node): The node to add.
         """
@@ -140,7 +144,7 @@ class Graph:
     def add_link(self, link: Link):
         """
         Add a link (connection) to the graph.
-        
+
         Args:
             link (Link): The link to add.
         """
@@ -149,10 +153,10 @@ class Graph:
     def successors(self, node_id: str) -> List[str]:
         """
         Get all nodes that receive output from the given node.
-        
+
         Args:
             node_id (str): The ID of the source node.
-            
+
         Returns:
             List[str]: List of node IDs that are downstream from the given node.
         """
@@ -166,10 +170,10 @@ class Graph:
     def predecessors(self, node_id: str) -> List[str]:
         """
         Get all nodes that feed input to the given node.
-        
+
         Args:
             node_id (str): The ID of the target node.
-            
+
         Returns:
             List[str]: List of node IDs that are upstream from the given node.
         """
@@ -181,23 +185,22 @@ class Graph:
         return list(sources)
 
 
-
 def parse_graph(json_data: dict) -> Graph:
     """
     Parse JSON graph data into a Graph object.
-    
+
     Converts JSON representation of a computation graph (from the SketchNet frontend)
     into Python objects. Performs two main steps:
     1. Creates nodes and ports from the JSON data
     2. Applies default activation phases to ports that don't have explicit phases
-    
+
     Args:
         json_data (dict): JSON data with keys:
             - "nodes": List of node definitions
             - "links": List of connection definitions
             Each node should have "id", "type", "inputPorts", "outputPorts",
             "paramInputs", "paramOutputs", and optional "x", "y" coordinates.
-            
+
     Returns:
         Graph: The parsed computation graph with all nodes, ports, and links.
     """
@@ -276,7 +279,7 @@ def parse_graph(json_data: dict) -> Graph:
         graph.add_node(node)
 
     # Apply default phases for ports that have empty activation_phases
-    #_apply_default_phases(graph)
+    # _apply_default_phases(graph)
 
     # Parse links
     for l in json_data.get("links", []):
@@ -295,7 +298,7 @@ def parse_graph(json_data: dict) -> Graph:
 def _apply_default_phases(graph: Graph):
     """
     Set default activation phases for ports that were not explicitly specified.
-    
+
     Different node types have different default activation phase patterns:
     - input-data: outputs are active in preprocessing
     - preprocessing nodes (column-select, normalize, etc.): all ports active in
@@ -305,7 +308,7 @@ def _apply_default_phases(graph: Graph):
     - output node: inputs vary by sub_type; outputs vary by role (loss, prediction, etc.)
     - optimizer: loss and label inputs active in training
     - visualization: inputs active in evaluation
-    
+
     Args:
         graph (Graph): The graph whose port phases should be populated.
     """
