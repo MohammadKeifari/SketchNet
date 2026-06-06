@@ -447,6 +447,85 @@ def check_model6(proc, code, graph):
     return ok
 
 
+def check_model7(proc, code, graph):
+    """
+    model7 checks:
+      1. RowSelect node is present.
+      2. BatchNorm node is present.
+      3. LeakyReLU activation is used.
+      4. CrossEntropyLoss is configured.
+      5. Output activation softmax/argmax are correctly set.
+      6. Accuracy node appears and final accuracy exceeds 80 %.
+      7. Visualization with discrete colour mapping is present.
+    """
+    ok = True
+
+    # 1. RowSelect
+    if "row_sel" in code:
+        print("✅ RowSelect found")
+    else:
+        print("❌ RowSelect missing")
+        ok = False
+
+    # 2. BatchNorm
+    if "BatchNorm" in code:
+        print("✅ BatchNorm found")
+    else:
+        print("❌ BatchNorm missing")
+        ok = False
+
+    # 3. LeakyReLU
+    if "leaky_relu" in code:
+        print("✅ LeakyReLU activation used")
+    else:
+        print("❌ LeakyReLU not found")
+        ok = False
+
+    # 4. CrossEntropyLoss
+    if "CrossEntropyLoss" in code:
+        print("✅ CrossEntropyLoss")
+    else:
+        print("❌ CrossEntropyLoss missing")
+        ok = False
+
+    # 5. Output activations
+    if "torch.softmax(x, dim=-1)" in code:
+        print("✅ Softmax on prediction port")
+    else:
+        print("❌ Softmax missing")
+        ok = False
+    if "torch.argmax(x, dim=-1)" in code:
+        print("✅ Argmax on evaluation port")
+    else:
+        print("❌ Argmax missing")
+        ok = False
+
+    # 6. Accuracy > 80%
+    output = proc.stdout
+    import re
+
+    acc_match = re.search(r"Accuracy: ([0-9.]+)", output)
+    if acc_match:
+        acc = float(acc_match.group(1))
+        if acc > 0.8:
+            print(f"✅ Accuracy {acc:.4f} > 0.8")
+        else:
+            print(f"❌ Accuracy {acc:.4f} ≤ 0.8")
+            ok = False
+    else:
+        print("❌ Could not parse Accuracy from output")
+        ok = False
+
+    # 7. Visualization with colour
+    if "ListedColormap" in code:
+        print("✅ Discrete colour mapping present")
+    else:
+        print("❌ No discrete colour mapping found")
+        ok = False
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
@@ -454,6 +533,7 @@ MODEL_CHECKS = {
     4: check_model4,
     5: check_model5,
     6: check_model6,
+    6: check_model7,
 }
 
 
