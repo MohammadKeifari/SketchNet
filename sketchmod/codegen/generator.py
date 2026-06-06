@@ -95,7 +95,9 @@ class CodeGenerator:
         return re.sub(r"[^a-zA-Z0-9_]", "_", id_str)
 
     def _has_training(self) -> bool:
-        """Return True if any model node is in the training set."""
+        # training is required if there is an optimizer
+        if self.flow.get("optimizer") is not None:
+            return True
         return any(
             self.graph.nodes[nid].type in MODEL_TYPES
             for nid in self.flow.get("train_set", set())
@@ -124,11 +126,21 @@ class CodeGenerator:
         self._write_header(w)
         self._write_load_and_preprocess(w)
 
-        if self._has_training():
+        # Determine if we need to generate training/evaluation code
+        has_optimizer = self.flow.get("optimizer") is not None
+        has_model = (
+            any(
+                self.graph.nodes[nid].type in MODEL_TYPES
+                for nid in self.flow.get("train_set", set())
+            )
+            or has_optimizer
+        )  # optimizer implies model
+
+        if has_model:
             self._write_model_class(w)
             self._write_training(w)
         else:
-            w.line("# No training phase – model and training loop skipped.")
+            w.line("# No model layers found – model and training loop skipped.")
 
         if self._has_evaluation():
             self._write_evaluate_function(w)
@@ -252,58 +264,6 @@ class CodeGenerator:
 
         self._write_preprocessing_visualizations(w)
 
-        # # 3. Train branch data transforms (strict execution; if not active, pass through)
-        # train_data_nodes = [
-        #     nid
-        #     for nid in self.flow["train_order"]
-        #     if nid not in self.flow["preprocessing_order"]
-        #     and self.graph.nodes[nid].type not in MODEL_TYPES
-        # ]
-        # w.line("")
-        # w.line("# --- Train branch data transforms ---")
-        # for nid in train_data_nodes:
-        #     if self._node_active_strict(nid, "training"):
-        #         self.translators[nid].data_code(w, "train")
-        #     else:
-        #         node = self.graph.nodes[nid]
-        #         src_id = None
-        #         for link in self.graph.links:
-        #             if link.id_to in {p.id for p in node.inputs}:
-        #                 src_id = self.graph.ports[link.id_from].node_id
-        #                 break
-        #         if src_id and src_id in self.var_map:
-        #             self.var_map[nid] = self.var_map[src_id]
-        #             w.line(
-        #                 f"# {nid} is not active in training; reusing {self.var_map[src_id]}"
-        #             )
-        #             w.line(f"{nid}_out = {self.var_map[src_id]}")
-
-        # # 4. Eval branch data transforms (strict execution; if not active, pass through)
-        # eval_data_nodes = [
-        #     nid
-        #     for nid in self.flow["eval_order"]
-        #     if nid not in self.flow["preprocessing_order"]
-        #     and self.graph.nodes[nid].type not in MODEL_TYPES
-        # ]
-        # w.line("")
-        # w.line("# --- Test branch data transforms ---")
-        # for nid in eval_data_nodes:
-        #     if self._node_active_strict(nid, "evaluation"):
-        #         self.translators[nid].data_code(w, "eval")
-        #     else:
-        #         node = self.graph.nodes[nid]
-        #         src_id = None
-        #         for link in self.graph.links:
-        #             if link.id_to in {p.id for p in node.inputs}:
-        #                 src_id = self.graph.ports[link.id_from].node_id
-        #                 break
-        #         if src_id and src_id in self.var_map:
-        #             self.var_map[nid] = self.var_map[src_id]
-        #             w.line(
-        #                 f"# {nid} is not active in evaluation; reusing {self.var_map[src_id]}"
-        #             )
-        #             w.line(f"{nid}_out = {self.var_map[src_id]}")
-
         # 5. Determine variable names for the return
         train_feed = self._get_var_for_first_model_input("train")
         train_labels = self._get_var_for_optimizer_labels()
@@ -393,10 +353,20 @@ class CodeGenerator:
             for port in viz.inputs:
                 for link in self.graph.links:
                     if link.id_to == port.id:
-                        src_id = self.graph.ports[link.id_from].node_id
-                        if src_id in self.var_map:
-                            w.line(f"viz_data['{port.id}'] = {self.var_map[src_id]}")
-                        break
+                        src_port_id = link.id_from
+                        # 1) Try exact source port ID
+                        if src_port_id in self.var_map:
+                            w.line(
+                                f"viz_data['{port.id}'] = {self.var_map[src_port_id]}"
+                            )
+                        else:
+                            # 2) Fallback to source node ID
+                            src_id = self.graph.ports[src_port_id].node_id
+                            if src_id in self.var_map:
+                                w.line(
+                                    f"viz_data['{port.id}'] = {self.var_map[src_id]}"
+                                )
+                        break  # important: stop after first matching link
 
         # ---- 6. Predictions ----
         pred_port_id = None
@@ -535,8 +505,11 @@ class CodeGenerator:
         w.indent()
         w.line("super().__init__()")
         model_nodes = set()
+        pre_set = self.flow.get("preprocessing_set", set())
         for phase in ("train_order", "eval_order"):
             for nid in self.flow.get(phase, []):
+                if nid in pre_set:
+                    continue
                 if self.graph.nodes[nid].type in MODEL_TYPES:
                     model_nodes.add(nid)
         ordered = []
@@ -606,6 +579,15 @@ class CodeGenerator:
         w.line("lr = config.get('learning_rate', 0.001)")
         w.line("loss_type = config.get('loss_type', 'mse')")
         w.line("")
+
+        # --- Ensure labels are long for classification losses ---
+        w.line("if loss_type in ('cross_entropy', 'nll'):")
+        w.indent()
+        w.line("y_train = y_train.long()")
+        w.line("if y_test is not None: y_test = y_test.long()")
+        w.dedent()
+        w.line("")
+
         w.line("train_dataset = TensorDataset(X_train, y_train)")
         w.line(
             "train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=config.get('shuffle', True))"
@@ -822,13 +804,13 @@ class CodeGenerator:
 
     # ------------------------------------------------------------------
     def _write_main(self, w):
-        """Emit the if __name__ == '__main__' entry point."""
         w.line("if __name__ == '__main__':")
         w.indent()
         w.line("X_train, y_train, X_test, y_test, pre_data = load_and_preprocess()")
 
-        # ---- float conversion (only for tensors that exist) ----
-        if self._has_training():
+        has_optimizer = self.flow.get("optimizer") is not None
+
+        if has_optimizer:
             w.line("X_train = X_train.float()")
             w.line("if y_train is not None: y_train = y_train.float()")
         if self._has_evaluation() and self._x_test_var != "None":
@@ -837,8 +819,7 @@ class CodeGenerator:
 
         w.line("")
 
-        # ---- training ----
-        if self._has_training():
+        if has_optimizer:
             opt_node = self.flow.get("optimizer")
             if opt_node:
                 config_code = self.translators[opt_node.id].optimizer_code(w)
@@ -853,9 +834,8 @@ class CodeGenerator:
             w.line('print("Training complete.")')
             w.line("")
 
-        # ---- evaluation ----
         if self._has_evaluation():
-            if not self._has_training():
+            if not has_optimizer:
                 w.line("# No model created – evaluation skipped")
             else:
                 w.line(
