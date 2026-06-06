@@ -27,13 +27,12 @@ class CodeGenerator:
     def __init__(self, graph_data: dict):
         self.graph = parse_graph(graph_data)
         self.flow = analyze_phases(self.graph)
-        self.var_map = {}  # port/node id → variable name
+        self.var_map = {}
         self.translators = {}
 
         for nid, node in self.graph.nodes.items():
             self.translators[nid] = get_translator(node, self.graph, self.var_map)
 
-    # ------------------------------------------------------------------
     def generate(self) -> str:
         w = CodeWriter()
         self._emit_header(w)
@@ -57,7 +56,6 @@ class CodeGenerator:
         self._emit_main(w)
         return str(w)
 
-    # ------------------------------------------------------------------
     def _emit_header(self, w):
         w.line("import torch")
         w.line("import torch.nn as nn")
@@ -69,7 +67,6 @@ class CodeGenerator:
         w.line("device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')")
         w.line("")
 
-    # ------------------------------------------------------------------
     def _emit_load_and_preprocess(self, w):
         w.line("def load_and_preprocess():")
         w.indent()
@@ -78,7 +75,6 @@ class CodeGenerator:
         for nid in order:
             self.translators[nid].generate(w, "preprocessing", "data")
 
-        # Build pre_data using ONLY terminal ports that carry training/eval
         w.line("pre_data = {")
         for port_id in self.flow["train_seed_ports"]:
             if port_id in self.var_map:
@@ -86,7 +82,6 @@ class CodeGenerator:
         for port_id in self.flow["eval_seed_ports"]:
             if port_id in self.var_map:
                 w.line(f"    '{port_id}': {self.var_map[port_id]},")
-        # Param outputs needed later
         for nid in order:
             node = self.graph.nodes[nid]
             if node.type == "onehot" and node.paramOutputs:
@@ -104,7 +99,6 @@ class CodeGenerator:
         w.dedent()
         w.line("")
 
-    # ------------------------------------------------------------------
     def _emit_model_class(self, w):
         train_order = self.flow["train_order"]
         w.line("class Model(nn.Module):")
@@ -119,14 +113,15 @@ class CodeGenerator:
         w.line("def forward(self, inputs_dict):")
         w.indent()
         w.line("outputs = {}")
-        for nid in train_order:
-            self.translators[nid].generate(w, "training", "forward")
+        for idx, nid in enumerate(train_order):
+            self.translators[nid].generate(
+                w, "training", "forward", is_first=(idx == 0)
+            )
         w.line("return outputs")
         w.dedent()
         w.dedent()
         w.line("")
 
-    # ------------------------------------------------------------------
     def _emit_train_model(self, w):
         opt_node = self.flow["optimizer"]
         w.line("def train_model(model, pre_data, config):")
@@ -147,7 +142,6 @@ class CodeGenerator:
         )
         w.line("")
 
-        # Loss & optimizer (no branching – translator writes concrete lines)
         translator = self.translators[opt_node.id]
         translator.emit_training_setup(w)
 
@@ -187,7 +181,6 @@ class CodeGenerator:
         w.line("avg_train_loss = total_loss / len(loader.dataset)")
         w.line("print(f'Epoch {epoch+1:3d}  Train Loss: {avg_train_loss:.6f}')")
 
-        # Validation – only if test labels exist
         test_label_var = self._get_var_for_eval_labels()
         if test_label_var != "None":
             w.line(
@@ -230,12 +223,11 @@ class CodeGenerator:
             w.dedent()
             w.dedent()
 
-        w.dedent()  # end epoch loop
+        w.dedent()
         w.line("return model")
         w.dedent()
         w.line("")
 
-    # ------------------------------------------------------------------
     def _emit_evaluate(self, w):
         w.line("def evaluate(model, pre_data):")
         w.indent()
@@ -294,7 +286,6 @@ class CodeGenerator:
         w.dedent()
         w.line("")
 
-    # ------------------------------------------------------------------
     def _emit_main(self, w):
         w.line("if __name__ == '__main__':")
         w.indent()
@@ -317,7 +308,6 @@ class CodeGenerator:
 
         if has_eval:
             w.line("viz_data = evaluate(model, pre_data)")
-            # plt.show() already called inside each visualization translator
 
         w.dedent()
 
@@ -328,7 +318,6 @@ class CodeGenerator:
         return re.sub(r"[^a-zA-Z0-9_]", "_", id_str)
 
     def _unpack_pre_data(self, w):
-        """Write lines to unpack pre_data dict into local variables."""
         for port_id in self.flow["train_seed_ports"]:
             if port_id in self.var_map:
                 var = self.var_map[port_id]
@@ -337,7 +326,6 @@ class CodeGenerator:
             if port_id in self.var_map:
                 var = self.var_map[port_id]
                 w.line(f"{var} = pre_data['{port_id}']")
-        # Param outputs
         for nid in self.flow["preprocessing_order"]:
             node = self.graph.nodes[nid]
             if node.type == "onehot" and node.paramOutputs:
@@ -353,7 +341,6 @@ class CodeGenerator:
         w.line("")
 
     def _get_first_model_node_id(self, phase):
-        """Return the first MODEL node in the given phase's execution order."""
         order = self.flow[f"{phase}_order"]
         for nid in order:
             if self.graph.nodes[nid].type in MODEL_TYPES:
@@ -361,7 +348,6 @@ class CodeGenerator:
         return None
 
     def _get_feed_key(self, phase: str):
-        """Return (source_node_id, variable_name) for the model input."""
         PHASE_MAP = {"train": "training", "eval": "evaluation"}
         full_phase = PHASE_MAP[phase]
         nid = self._get_first_model_node_id(phase)
@@ -378,7 +364,6 @@ class CodeGenerator:
                             src_node_id
                         )
                         return src_node_id, var
-        # Fallback
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
