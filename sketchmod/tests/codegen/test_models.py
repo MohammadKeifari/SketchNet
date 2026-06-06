@@ -149,20 +149,16 @@ def check_model1(proc, code, graph):
         print("✅ Evaluation port (softmax)")
 
     # 2) OneHot → DeOneHot parameter sharing
-    # The DeOneHot code block (for d23) should contain d23_out = torch.argmax(...)
-    # and must NOT contain torch.arange (which would indicate missing sharing).
-    if "d23_out = torch.argmax" not in code:
+    eval_section = code.split("def evaluate(")[1] if "def evaluate(" in code else code
+    # In evaluation section, find the DeOneHot part (which produces d23_out)
+    d23_match = re.search(r"d23_out\s*=\s*torch\.argmax", eval_section)
+    if not d23_match:
         print("❌ DeOneHot d23 not found")
         ok = False
-    elif "torch.arange" in code.split("d23_out = torch.argmax")[0]:
-        # If torch.arange appears before d23_out, it's from OneHot, which is fine.
-        # We care about the DeOneHot block after that line.
-        pass
     else:
-        # Check the block after d23_out for torch.arange
-        d23_index = code.find("d23_out = torch.argmax")
-        rest = code[d23_index:]
-        if "torch.arange" in rest:
+        # Everything after d23_out until next function or end
+        d23_block = eval_section[d23_match.start() :]
+        if "torch.arange" in d23_block:
             print("❌ DeOneHot creates its own categories (missing parameter sharing)")
             ok = False
         else:
