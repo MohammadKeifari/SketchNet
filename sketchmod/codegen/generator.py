@@ -1,6 +1,12 @@
 """
 Main code generation engine for SketchNet.
+
 Orchestrates the conversion of a graph into a runnable PyTorch script.
+The generator:
+1. Parses the front-end JSON into a Graph.
+2. Runs phase analysis to partition nodes into preprocessing, training, and evaluation.
+3. Uses translators to emit code for each node in the appropriate context.
+4. Handles special nodes (optimizer, output, visualizations) with dedicated logic.
 """
 
 import json
@@ -12,16 +18,26 @@ from .translators import get_translator
 
 
 class CodeGenerator:
+    """Generates PyTorch training code from a SketchNet graph."""
+
     def __init__(self, graph_data: dict):
+        """
+        Initialize with JSON graph data.
+
+        Args:
+            graph_data: dictionary with "nodes", "links", "ports", "nodeCounter".
+        """
         self.graph = parse_graph(graph_data)
         self.flow = analyze_phases(self.graph)
-        self.var_map = {}
-        self.translators = {}
+        self.var_map = {}  # port/node id -> variable name
+        self.translators = {}  # node id -> translator instance
 
         for nid, node in self.graph.nodes.items():
             self.translators[nid] = get_translator(node, self.graph, self.var_map)
 
+    # ------------------------------------------------------------------
     def generate(self) -> str:
+        """Produce the complete PyTorch script."""
         w = CodeWriter()
         self._emit_header(w)
         self._emit_load_and_preprocess(w)
@@ -44,7 +60,11 @@ class CodeGenerator:
         self._emit_main(w)
         return str(w)
 
-    def _emit_header(self, w):
+    # ------------------------------------------------------------------
+    #  HEADER
+    # ------------------------------------------------------------------
+    def _emit_header(self, w: CodeWriter):
+        """Write imports and device selection."""
         w.line("import torch")
         w.line("import torch.nn as nn")
         w.line("import torch.optim as optim")
@@ -55,7 +75,16 @@ class CodeGenerator:
         w.line("device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')")
         w.line("")
 
-    def _emit_load_and_preprocess(self, w):
+    # ------------------------------------------------------------------
+    #  LOAD & PREPROCESS
+    # ------------------------------------------------------------------
+    def _emit_load_and_preprocess(self, w: CodeWriter):
+        """Emit the load_and_preprocess function.
+
+        Executes all preprocessing nodes in topological order and returns a
+        `pre_data` dictionary containing only the terminal outputs needed by
+        training or evaluation.
+        """
         w.line("def load_and_preprocess():")
         w.indent()
 
@@ -63,6 +92,7 @@ class CodeGenerator:
         for nid in order:
             self.translators[nid].generate(w, "preprocessing", "data")
 
+        # Build pre_data with train/eval seed ports and param-sharing variables
         w.line("pre_data = {")
         for port_id in self.flow["train_seed_ports"]:
             if port_id in self.var_map:
@@ -70,6 +100,8 @@ class CodeGenerator:
         for port_id in self.flow["eval_seed_ports"]:
             if port_id in self.var_map:
                 w.line(f"    '{port_id}': {self.var_map[port_id]},")
+
+        # Include param outputs (OneHot categories, Normalize statistics)
         for nid in order:
             node = self.graph.nodes[nid]
             if node.type == "onehot" and node.paramOutputs:
@@ -82,19 +114,61 @@ class CodeGenerator:
                     key = pid + suffix
                     if key in self.var_map:
                         w.line(f"    '{key}': {self.var_map[key]},")
+
         w.line("}")
         w.line("return pre_data")
         w.dedent()
         w.line("")
 
-    def _emit_model_class(self, w):
-        train_order = self.flow["train_order"]
-        # Exclude optimizer and visualization from the model
-        model_nodes = [
+    # ------------------------------------------------------------------
+    #  MODEL CLASS
+    # ------------------------------------------------------------------
+    def _get_model_nodes(self):
+        """
+        Identify training‑order nodes that belong to the model.
+
+        The model consists of all nodes reachable backward from the output
+        node via links whose ports are active in the training phase.
+        Excludes preprocessing nodes (they already ran).
+        """
+        train_set = self.flow["train_set"]
+        output_id = None
+        for nid in train_set:
+            if self.graph.nodes[nid].type == "output":
+                output_id = nid
+                break
+        if output_id is None:
+            return []
+
+        reachable = set()
+        queue = [output_id]
+        while queue:
+            cur = queue.pop(0)
+            if cur in reachable:
+                continue
+            reachable.add(cur)
+            for pred in self.graph.predecessors(cur):
+                if pred in train_set and pred not in reachable:
+                    queue.append(pred)
+
+        pre_set = self.flow.get("preprocessing_set", set())
+        # Keep only nodes that are NOT in preprocessing
+        return [
             nid
-            for nid in train_order
-            if self.graph.nodes[nid].type not in ("optimizer", "visualization")
+            for nid in self.flow["train_order"]
+            if nid in reachable and nid not in pre_set
         ]
+
+    def _emit_model_class(self, w: CodeWriter):
+        """Write the Model(nn.Module) class.
+
+        All model nodes (as determined by _get_model_nodes) become part of
+        the class.  Non‑model training nodes (label processing, etc.) are
+        executed once before the training loop.
+        """
+        model_nodes = self._get_model_nodes()
+        if not model_nodes:
+            return
 
         w.line("class Model(nn.Module):")
         w.indent()
@@ -116,18 +190,57 @@ class CodeGenerator:
         w.dedent()
         w.line("")
 
-    def _emit_train_model(self, w):
+    # ------------------------------------------------------------------
+    #  TRAIN MODEL
+    # ------------------------------------------------------------------
+    def _emit_train_model(self, w: CodeWriter):
+        """Emit the train_model function with training loop.
+
+        Non‑model training nodes that process labels are executed once before
+        the loop.  Analytics (Print, Accuracy) that depend on model outputs
+        are executed inside the loop after the forward pass.
+        """
         opt_node = self.flow["optimizer"]
         w.line("def train_model(model, pre_data, config):")
         w.indent()
 
         self._unpack_pre_data(w)
 
+        model_nodes = set(self._get_model_nodes())
+        pre_set = self.flow.get("preprocessing_set", set())
+
+        # ---- Execute label‑processing nodes (non‑model, no dependency on model) ----
+        for nid in self.flow["train_order"]:
+            if nid in model_nodes or nid in pre_set:
+                continue
+            node = self.graph.nodes[nid]
+            if node.type in ("optimizer", "visualization"):
+                continue
+            # Check if this node reads from a model node
+            reads_from_model = False
+            for port in node.inputs:
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src_nid = self.graph.ports[link.id_from].node_id
+                        if src_nid in model_nodes:
+                            reads_from_model = True
+                            break
+                if reads_from_model:
+                    break
+            if reads_from_model:
+                continue  # will run inside the loop
+            self.translators[nid].generate(w, "training", "data")
+
+        # ---- Feature & label extraction ----
         feat_var = self._get_var_for_first_model_input("train")
         label_var = self._get_var_for_optimizer_labels()
 
         w.line(f"features = {feat_var}.float()")
         w.line(f"labels = {label_var}")
+
+        # ---- Loss & optimizer setup (including label cast) ----
+        translator = self.translators[opt_node.id]
+        translator.emit_training_setup(w)
 
         w.line("batch_size = config.get('batch_size', 32)")
         w.line("dataset = TensorDataset(features, labels)")
@@ -135,9 +248,6 @@ class CodeGenerator:
             "loader = DataLoader(dataset, batch_size=batch_size, shuffle=config.get('shuffle', True))"
         )
         w.line("")
-
-        translator = self.translators[opt_node.id]
-        translator.emit_training_setup(w)
 
         w.line("best_loss = float('inf')")
         w.line(
@@ -171,10 +281,43 @@ class CodeGenerator:
         w.line("loss.backward()")
         w.line("optimizer.step()")
         w.line("total_loss += loss.item() * batch_X.size(0)")
-        w.dedent()
+
+        # ---- Run output‑dependent analytics (Print, Accuracy) ----
+        # Store output port variables so they can be referenced
+        output_node = next(
+            (n for n in self.graph.nodes.values() if n.type == "output"), None
+        )
+        if output_node:
+            for port in output_node.outputs:
+                sanitized = self._sanitize(port.id) + "_tensor"
+                w.line(f"{sanitized} = outputs['{port.id}']")
+                self.var_map[port.id] = sanitized
+
+        for nid in self.flow["train_order"]:
+            if nid in model_nodes or nid in pre_set:
+                continue
+            node = self.graph.nodes[nid]
+            if node.type in ("optimizer", "visualization"):
+                continue
+            reads_from_model = False
+            for port in node.inputs:
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src_nid = self.graph.ports[link.id_from].node_id
+                        if src_nid in model_nodes:
+                            reads_from_model = True
+                            break
+                if reads_from_model:
+                    break
+            if not reads_from_model:
+                continue  # already executed before the loop
+            self.translators[nid].generate(w, "training", "data")
+
+        w.dedent()  # end batch loop
         w.line("avg_train_loss = total_loss / len(loader.dataset)")
         w.line("print(f'Epoch {epoch+1:3d}  Train Loss: {avg_train_loss:.6f}')")
 
+        # Validation (only if test labels exist)
         test_label_var = self._get_var_for_eval_labels()
         if test_label_var != "None":
             w.line(
@@ -222,7 +365,15 @@ class CodeGenerator:
         w.dedent()
         w.line("")
 
-    def _emit_evaluate(self, w):
+    # ------------------------------------------------------------------
+    #  EVALUATE
+    # ------------------------------------------------------------------
+    def _emit_evaluate(self, w: CodeWriter):
+        """Emit the evaluate function.
+
+        Runs the trained model on evaluation data and then executes
+        any evaluation‑only nodes (DeOneHot, visualizations, etc.).
+        """
         w.line("def evaluate(model, pre_data):")
         w.indent()
         self._unpack_pre_data(w)
@@ -252,12 +403,14 @@ class CodeGenerator:
         else:
             w.line("# No trained model – running evaluation nodes untrained")
 
+        # Run evaluation‑only nodes not already executed by the model
         train_set = set(self.flow["train_order"])
         for nid in self.flow["eval_order"]:
             if nid in train_set:
                 continue
             self.translators[nid].generate(w, "evaluation", "data")
 
+        # Collect visualization data
         viz_nodes = [
             nid
             for nid in self.flow["eval_order"]
@@ -280,7 +433,11 @@ class CodeGenerator:
         w.dedent()
         w.line("")
 
-    def _emit_main(self, w):
+    # ------------------------------------------------------------------
+    #  MAIN
+    # ------------------------------------------------------------------
+    def _emit_main(self, w: CodeWriter):
+        """Write the __main__ block."""
         w.line("if __name__ == '__main__':")
         w.indent()
         w.line("pre_data = load_and_preprocess()")
@@ -306,12 +463,14 @@ class CodeGenerator:
         w.dedent()
 
     # ------------------------------------------------------------------
-    # Helpers
+    #  HELPERS
     # ------------------------------------------------------------------
     def _sanitize(self, id_str: str) -> str:
+        """Convert a graph ID into a valid Python variable name."""
         return re.sub(r"[^a-zA-Z0-9_]", "_", id_str)
 
-    def _unpack_pre_data(self, w):
+    def _unpack_pre_data(self, w: CodeWriter):
+        """Write lines that unpack pre_data into local variables."""
         for port_id in self.flow["train_seed_ports"]:
             if port_id in self.var_map:
                 var = self.var_map[port_id]
@@ -334,37 +493,27 @@ class CodeGenerator:
                         w.line(f"{self.var_map[key]} = pre_data['{key}']")
         w.line("")
 
-    def _get_first_model_node_id(self, phase, use_training_order=False):
-        """
-        Return the node ID that serves as the model's entry point.
-        - For training: the first node in the training execution order.
-        - For evaluation: the first node in the **training** order (the model is
-        defined by training, and we reuse it for evaluation).
-        """
-        if use_training_order or phase == "train":
-            order = self.flow["train_order"]
-        else:
-            order = self.flow[f"{phase}_order"]
+    def _get_first_model_node_id(self, phase: str) -> str | None:
+        """Return the first node in the training order as the model entry point."""
+        order = self.flow.get("train_order", [])
         if order:
             return order[0]
         return None
 
     def _get_feed_key(self, phase: str):
-        """
-        Return (source_node_id, variable_name) that should be used as the
-        model input dictionary key and value for the given phase ('train' or 'eval').
+        """Return (source_node_id, variable_name) for the model input.
 
-        For evaluation we prefer a source port that carries "evaluation" so that
-        test data is fed to the model rather than training data.
+        For evaluation, prefers a source port that carries the evaluation
+        phase to feed test data instead of training data.
         """
         PHASE_MAP = {"train": "training", "eval": "evaluation"}
         full_phase = PHASE_MAP[phase]
-        nid = self._get_first_model_node_id(phase, use_training_order=(phase == "eval"))
+        nid = self._get_first_model_node_id(phase)
         if nid is None:
             return None, None
         node = self.graph.nodes[nid]
 
-        # ---- First try sources whose output port has the exact phase ----
+        # Prefer a source whose output port has the exact phase
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -377,7 +526,7 @@ class CodeGenerator:
                         if var:
                             return src_node_id, var
 
-        # ---- Fallback: any connected source that has a variable defined ----
+        # Fallback: any connected source
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -387,14 +536,15 @@ class CodeGenerator:
                     )
                     if var:
                         return src_node_id, var
-
         return None, None
 
-    def _get_var_for_first_model_input(self, phase):
+    def _get_var_for_first_model_input(self, phase: str) -> str:
+        """Return the variable name that feeds the first model node."""
         _, var = self._get_feed_key(phase)
         return var if var else "None"
 
-    def _get_var_for_optimizer_labels(self):
+    def _get_var_for_optimizer_labels(self) -> str:
+        """Return the variable connected to the optimizer's label input."""
         opt = self.flow.get("optimizer")
         if not opt or len(opt.inputs) < 2:
             return "None"
@@ -409,7 +559,8 @@ class CodeGenerator:
                     return self.var_map[src_nid]
         return "None"
 
-    def _get_var_for_eval_labels(self):
+    def _get_var_for_eval_labels(self) -> str:
+        """Return the test‑label variable connected to the output node."""
         output_node = next(
             (n for n in self.graph.nodes.values() if n.type == "output"), None
         )
@@ -429,7 +580,8 @@ class CodeGenerator:
                                     return self.var_map[src_nid]
         return "None"
 
-    def _get_loss_port_id(self):
+    def _get_loss_port_id(self) -> str | None:
+        """Return the ID of the output port designated for loss computation."""
         output_node = next(
             (n for n in self.graph.nodes.values() if n.type == "output"), None
         )
