@@ -852,8 +852,10 @@ class AccuracyTranslator(BaseTranslator):
             return
         n = self.node
         show_cm = n.properties.get("showConfusion", False)
-        pred_var = None
-        label_var = None
+
+        # ---- find source port IDs ----
+        pred_src = None
+        label_src = None
         if placement == "forward":
             sources = []
             for port in n.inputs:
@@ -862,38 +864,81 @@ class AccuracyTranslator(BaseTranslator):
                         sources.append(link.id_from)
                         break
             if len(sources) >= 2:
-                pred_var = (
-                    f"outputs.get('{sources[0]}', inputs_dict.get('{sources[0]}'))"
-                )
-                label_var = (
-                    f"outputs.get('{sources[1]}', inputs_dict.get('{sources[1]}'))"
-                )
+                pred_src = sources[0]
+                label_src = sources[1]
         else:
             for port in n.inputs:
                 for link in self.graph.links:
                     if link.id_to == port.id:
-                        src = self.var_map.get(link.id_from)
-                        if src is None:
-                            src_nid = self.graph.ports[link.id_from].node_id
-                            src = self.var_map.get(src_nid, "None")
                         if port.index == 0:
-                            pred_var = src
+                            pred_src = link.id_from
                         else:
-                            label_var = src
+                            label_src = link.id_from
                         break
 
-        if not pred_var or not label_var:
+        if not pred_src or not label_src:
             w.line("# Accuracy node missing inputs")
             return
 
-        w.line(
-            f"pred_labels = {pred_var}.argmax(dim=1) if {pred_var}.dim() == 2 else {pred_var}"
-        )
-        w.line(
-            f"true_labels = {label_var}.argmax(dim=1) if {label_var}.dim() == 2 else {label_var}"
-        )
+        # ---- variable names ----
+        pred_var = self.var_map.get(pred_src)
+        label_var = self.var_map.get(label_src)
+        if pred_var is None:
+            pred_nid = self.graph.ports[pred_src].node_id
+            pred_var = self.var_map.get(pred_nid, "None")
+        if label_var is None:
+            label_nid = self.graph.ports[label_src].node_id
+            label_var = self.var_map.get(label_nid, "None")
+
+        # ---- decide how to handle predictions ----
+        pred_op = ""  # what to write after "pred_labels = "
+        pred_port = self.graph.ports[pred_src]
+        src_node = self.graph.nodes[pred_port.node_id]
+        if src_node.type == "output":
+            role = pred_port.role
+            act = src_node.properties.get("outputActivations", {}).get(role, "none")
+            if act == "argmax":
+                pred_op = pred_var  # already 1D class indices
+            elif act == "softmax":
+                pred_op = f"{pred_var}.argmax(dim=1)"  # probabilities → class indices
+            else:  # none → raw logits
+                pred_op = f"{pred_var}.argmax(dim=1)"
+        else:
+            # not an output node – check shape
+            shape = pred_port.shape
+            if shape and shape.shape and len(shape.shape) >= 2:
+                try:
+                    last_dim = int(str(shape.shape[-1]))
+                    if last_dim > 1:
+                        pred_op = f"{pred_var}.argmax(dim=1)"
+                    else:
+                        pred_op = f"{pred_var}.squeeze(-1).long()"
+                except ValueError:
+                    pred_op = f"{pred_var}.argmax(dim=1)"  # fallback
+            else:
+                pred_op = pred_var  # no shape info, assume correct
+
+        # ---- decide how to handle labels ----
+        label_op = ""
+        label_port = self.graph.ports[label_src]
+        shape = label_port.shape
+        if shape and shape.shape and len(shape.shape) >= 2:
+            try:
+                last_dim = int(str(shape.shape[-1]))
+                if last_dim > 1:
+                    label_op = f"{label_var}.argmax(dim=1)"
+                else:
+                    label_op = f"{label_var}.squeeze(-1).long()"
+            except ValueError:
+                label_op = f"{label_var}.squeeze(-1).long()"
+        else:
+            label_op = label_var
+
+        w.line(f"pred_labels = {pred_op}")
+        w.line(f"true_labels = {label_op}")
         w.line("acc = (pred_labels == true_labels).float().mean()")
         w.line('print(f"Accuracy: {acc.item():.4f}")')
+
         if show_cm:
             w.line("from sklearn.metrics import confusion_matrix")
             w.line("cm = confusion_matrix(true_labels.cpu(), pred_labels.cpu())")
