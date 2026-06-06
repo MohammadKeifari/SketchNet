@@ -23,11 +23,11 @@ from typing import Set, List, Dict, Any
 def _is_port_active(port, phase: str) -> bool:
     """
     Check if a port is active during a given phase.
-    
+
     Args:
         port (Port): The port to check.
         phase (str): The phase name ("preprocessing", "training", or "evaluation").
-        
+
     Returns:
         bool: True if the phase is in the port's activationPhases list.
     """
@@ -40,15 +40,15 @@ def _is_port_active(port, phase: str) -> bool:
 def _active_nodes_strict(graph: Graph, phase: str) -> Set[str]:
     """
     Determine nodes active in a phase using strict rules.
-    
+
     A node is considered active only when ALL connected input and output ports
     have the given phase in their activation_phases. This is used for visualization
     highlighting to show only the guaranteed execution path.
-    
+
     Args:
         graph (Graph): The computation graph.
         phase (str): The phase to analyze ("preprocessing", "training", "evaluation").
-        
+
     Returns:
         Set[str]: Set of node IDs that are active in this phase.
     """
@@ -81,15 +81,15 @@ def _active_nodes_strict(graph: Graph, phase: str) -> Set[str]:
 def _traverse_preprocessing(graph: Graph) -> Set[str]:
     """
     Traverse the graph to find all nodes in the preprocessing phase.
-    
+
     Uses breadth-first search starting from input-data nodes, following only
     links where both the source and target ports have "preprocessing" in their
     activation phases. This determines which data transformations occur before
     the train/eval split.
-    
+
     Args:
         graph (Graph): The computation graph.
-        
+
     Returns:
         Set[str]: Set of node IDs in the preprocessing phase.
     """
@@ -151,22 +151,11 @@ def _traverse_preprocessing(graph: Graph) -> Set[str]:
 
 def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str]:
     """
-    Traverse the graph to find all nodes active during training or evaluation.
-    
-    Uses iterative refinement to find all nodes that can be activated during
-    the given phase. Implements "carry-over" logic where preprocessing nodes
-    can feed into training/evaluation nodes even if their ports don't explicitly
-    mark those phases (since preprocessing data is available).
-    
-    Special handling for output nodes: only requires one active input instead of all.
-    
-    Args:
-        graph (Graph): The computation graph.
-        phase (str): The phase to analyze ("training" or "evaluation").
-        pre_set (Set[str]): Set of preprocessing node IDs (for carry-over logic).
-        
-    Returns:
-        Set[str]: Set of node IDs active in this phase.
+    Training / Evaluation traversal.
+    - Links from preprocessing nodes (in pre_set) are allowed even if the source
+      port lacks the phase (carry‑over).
+    - OutputNode only needs one active input and one active output.
+    - Param ports from preprocessing nodes are always satisfied (carry‑over).
     """
     active = set()
     changed = True
@@ -191,6 +180,8 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
                                 src_nid in active
                                 and _is_port_active(src_port, phase)
                                 and _is_port_active(in_port, phase)
+                            ) or (
+                                src_nid in pre_set and _is_port_active(in_port, phase)
                             ):
                                 inputs_ok = True
                                 break
@@ -206,20 +197,17 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
                         if link.id_to == in_port.id:
                             src_port = graph.ports[link.id_from]
                             src_nid = src_port.node_id
-
-                            # Allow the link if:
-                            #  - the source is already active in the current phase, OR
-                            #  - the source is a preprocessing node (carry‑over)
-                            # and both the source and target ports have the required phase.
+                            # Normal flow
                             if (
-                                (src_nid in active or src_nid in pre_set)
+                                src_nid in active
                                 and _is_port_active(src_port, phase)
                                 and _is_port_active(in_port, phase)
+                            ) or (
+                                src_nid in pre_set and _is_port_active(in_port, phase)
                             ):
                                 port_satisfied = True
                                 break
-
-                            # Param port carry‑over remains unchanged
+                            # Param port carry‑over: ignore phase if source is preprocessing
                             if in_port.port_kind == "param" and src_nid in pre_set:
                                 port_satisfied = True
                                 break
@@ -256,14 +244,14 @@ def _traverse_train_eval(graph: Graph, phase: str, pre_set: Set[str]) -> Set[str
 def _topo_sort(nids: Set[str], graph: Graph) -> List[str]:
     """
     Topologically sort a set of nodes.
-    
+
     Uses Kahn's algorithm (BFS-based topological sort) to order nodes
     such that dependencies are satisfied (predecessors come before successors).
-    
+
     Args:
         nids (Set[str]): Set of node IDs to sort.
         graph (Graph): The computation graph.
-        
+
     Returns:
         List[str]: Topologically sorted list of node IDs.
     """
@@ -289,15 +277,15 @@ def _topo_sort(nids: Set[str], graph: Graph) -> List[str]:
 def analyze_phases(graph: Graph) -> Dict[str, Any]:
     """
     Analyze the computation graph to determine execution phases and node ordering.
-    
+
     Performs three main tasks:
     1. Identifies which nodes are active in preprocessing, training, and evaluation
     2. Topologically sorts nodes within each phase for execution order
     3. Locates special nodes (optimizer, visualizations)
-    
+
     Args:
         graph (Graph): The computation graph.
-        
+
     Returns:
         dict: Analysis results with keys:
             - "preprocessing_order": List of node IDs in preprocessing execution order
@@ -340,14 +328,14 @@ def analyze_phases(graph: Graph) -> Dict[str, Any]:
 def highlight_path(graph_data: dict, phase: str) -> dict:
     """
     Determine which nodes and links to highlight for a given execution phase.
-    
+
     Used by the frontend to visually show the execution path through the graph
     for a specific phase. Uses strict mode to only highlight guaranteed paths.
-    
+
     Args:
         graph_data (dict): JSON graph data.
         phase (str): The phase to highlight ("preprocessing", "training", "evaluation").
-        
+
     Returns:
         dict: Highlighting information with keys:
             - "nodes": List of active node IDs
