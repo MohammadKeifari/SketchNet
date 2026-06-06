@@ -334,20 +334,37 @@ class CodeGenerator:
                         w.line(f"{self.var_map[key]} = pre_data['{key}']")
         w.line("")
 
-    def _get_first_model_node_id(self, phase):
-        """Return the first node in the given phase's execution order."""
-        order = self.flow[f"{phase}_order"]
+    def _get_first_model_node_id(self, phase, use_training_order=False):
+        """
+        Return the node ID that serves as the model's entry point.
+        - For training: the first node in the training execution order.
+        - For evaluation: the first node in the **training** order (the model is
+        defined by training, and we reuse it for evaluation).
+        """
+        if use_training_order or phase == "train":
+            order = self.flow["train_order"]
+        else:
+            order = self.flow[f"{phase}_order"]
         if order:
             return order[0]
         return None
 
     def _get_feed_key(self, phase: str):
+        """
+        Return (source_node_id, variable_name) that should be used as the
+        model input dictionary key and value for the given phase ('train' or 'eval').
+
+        For evaluation we prefer a source port that carries "evaluation" so that
+        test data is fed to the model rather than training data.
+        """
         PHASE_MAP = {"train": "training", "eval": "evaluation"}
         full_phase = PHASE_MAP[phase]
-        nid = self._get_first_model_node_id(phase)
+        nid = self._get_first_model_node_id(phase, use_training_order=(phase == "eval"))
         if nid is None:
             return None, None
         node = self.graph.nodes[nid]
+
+        # ---- First try sources whose output port has the exact phase ----
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -357,7 +374,10 @@ class CodeGenerator:
                         var = self.var_map.get(src_port.id) or self.var_map.get(
                             src_node_id
                         )
-                        return src_node_id, var
+                        if var:
+                            return src_node_id, var
+
+        # ---- Fallback: any connected source that has a variable defined ----
         for port in node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -365,7 +385,9 @@ class CodeGenerator:
                     var = self.var_map.get(link.id_from) or self.var_map.get(
                         src_node_id
                     )
-                    return src_node_id, var
+                    if var:
+                        return src_node_id, var
+
         return None, None
 
     def _get_var_for_first_model_input(self, phase):

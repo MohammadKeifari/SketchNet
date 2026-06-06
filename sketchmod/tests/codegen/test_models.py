@@ -320,20 +320,12 @@ def check_model4(proc, code, graph):
 
 
 def check_model5(proc, code, graph):
-    """
-    model5 checks:
-      1. Three Train/Test Split nodes (t1, t2, t3) are present.
-      2. Training loop is generated (layers have training phases).
-      3. Evaluation function is generated (visualization v1 is active).
-      4. Visualization v1 is present in the code.
-      5. No shape-mismatch warning is emitted (graph uses proper 1D columns).
-      6. The generated code runs without crash.
-    """
     ok = True
 
-    # 1. Three splits
+    # 1. Three Train/Test Split nodes (t1, t2, t3) are present – check for the
+    #    new variable names: train_data_t1, train_data_t2, train_data_t3.
     for s in ("t1", "t2", "t3"):
-        if f"{s}_output_0" in code:
+        if f"train_data_{s}" in code:
             print(f"✅ Split node {s} found")
         else:
             print(f"❌ Split node {s} missing")
@@ -520,7 +512,7 @@ MODEL_CHECKS = {
     4: check_model4,
     5: check_model5,
     6: check_model6,
-    6: check_model7,
+    7: check_model7,
 }
 
 

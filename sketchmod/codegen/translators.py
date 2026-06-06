@@ -384,15 +384,18 @@ class NeuronTranslator(BaseTranslator):
             in_f = self._guess_in_features()
             w.line(f"self.fc_{sid} = nn.Linear({in_f}, 1)")
         elif placement == "forward":
-            if is_first:
-                # Build chained inputs_dict.get(...)
-                src_ids = []
-                for port in n.inputs:
-                    for link in self.graph.links:
-                        if link.id_to == port.id:
-                            src = self.graph.ports[link.id_from].node_id
-                            if src not in src_ids:
-                                src_ids.append(src)
+            # Collect all distinct source node IDs
+            src_ids = []
+            for port in n.inputs:
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src = self.graph.ports[link.id_from].node_id
+                        if src not in src_ids:
+                            src_ids.append(src)
+
+            if is_first or len(src_ids) > 1:
+                # Build chained inputs_dict.get(...) for the very first node
+                # OR for any node that has multiple sources (parallel branches).
                 if not src_ids:
                     expr = "None"
                 else:
@@ -402,8 +405,8 @@ class NeuronTranslator(BaseTranslator):
                     expr += ")"
                 w.line(f"x = {expr}")
             else:
-                # Subsequent layers use outputs
-                src = self.graph.predecessors(n.id)[0]
+                # Single source – read from outputs of the previous node
+                src = src_ids[0]
                 w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
 
             w.line(f"x = self.fc_{sid}(x)")
