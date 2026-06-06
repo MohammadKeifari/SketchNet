@@ -29,6 +29,8 @@ class GraphValidator:
         self._check_accuracy_inputs(warnings)
         self._check_visualization_shapes(warnings)
 
+        self._check_accuracy_label_dim(warnings)
+
         return {
             "errors": errors,
             "warnings": warnings,
@@ -262,3 +264,33 @@ class GraphValidator:
                             }
                         )
                         break
+
+    def _check_accuracy_label_dim(self, warnings):
+        """Warn if the accuracy label input is one‑hot encoded."""
+        for node in self.graph.nodes.values():
+            if node.type != "accuracy":
+                continue
+            label_port = node.inputs[1] if len(node.inputs) >= 2 else None
+            if not label_port:
+                continue
+            for link in self.graph.links:
+                if link.id_to == label_port.id:
+                    src_port = self.graph.ports[link.id_from]
+                    shape = src_port.shape
+                    if shape and shape.shape and len(shape.shape) == 2:
+                        try:
+                            last_dim = int(str(shape.shape[-1]))
+                            if last_dim > 1:
+                                warnings.append(
+                                    {
+                                        "message": (
+                                            f"Accuracy label input port '{label_port.id}' "
+                                            f"appears to be one‑hot encoded (shape {shape.shape}). "
+                                            "It will be argmax‑ed automatically. Consider connecting class indices instead."
+                                        ),
+                                        "portId": label_port.id,
+                                    }
+                                )
+                        except ValueError:
+                            pass
+                    break
