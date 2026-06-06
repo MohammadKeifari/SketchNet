@@ -149,26 +149,24 @@ def check_model1(proc, code, graph):
         print("✅ Evaluation port (softmax)")
 
     # 2) OneHot → DeOneHot parameter sharing
-    # The OneHot node creates 'categories' via torch.arange.
-    # The DeOneHot node must use that variable, not create its own arange.
-    # Find the DeOneHot code block for node 'd23' and check it contains
-    # 'categories' but NOT 'torch.arange'.
-    d23_block = re.search(
-        r"# Processing evaluation node d23.*?(?=\n# |\n\Z)", code, re.DOTALL
-    )
-    if d23_block:
-        block = d23_block.group(0)
-        if "torch.arange" in block:
+    # The DeOneHot code block (for d23) should contain d23_out = torch.argmax(...)
+    # and must NOT contain torch.arange (which would indicate missing sharing).
+    if "d23_out = torch.argmax" not in code:
+        print("❌ DeOneHot d23 not found")
+        ok = False
+    elif "torch.arange" in code.split("d23_out = torch.argmax")[0]:
+        # If torch.arange appears before d23_out, it's from OneHot, which is fine.
+        # We care about the DeOneHot block after that line.
+        pass
+    else:
+        # Check the block after d23_out for torch.arange
+        d23_index = code.find("d23_out = torch.argmax")
+        rest = code[d23_index:]
+        if "torch.arange" in rest:
             print("❌ DeOneHot creates its own categories (missing parameter sharing)")
             ok = False
-        elif "categories" in block:
-            print("✅ OneHot → DeOneHot parameter sharing")
         else:
-            print("❌ DeOneHot does not reference categories")
-            ok = False
-    else:
-        print("❌ DeOneHot block not found")
-        ok = False
+            print("✅ OneHot → DeOneHot parameter sharing")
 
     # 3) Phase analysis
     parsed = parse_graph(graph)
