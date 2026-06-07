@@ -926,16 +926,16 @@
             "numParamInputs": 0,
             "numParamOutputs": 0,
             "lossType": "cross_entropy",
-            "optimizerType": "adam",
-            "learningRate": 0.01,
+            "optimizerType": "sgd",
+            "learningRate": 0.0115,
             "adamBeta1": 0.9,
             "adamBeta2": 0.999,
             "adamEpsilon": 1e-8,
             "sgdMomentum": 0.9,
             "weightDecay": 0,
-            "nesterov": false,
+            "nesterov": true,
             "epochs": 200,
-            "batchSize": 32,
+            "batchSize": 10,
             "shuffle": true,
             "gradientClip": null,
             "earlyStopping": true,
@@ -1115,6 +1115,72 @@
             "numParamInputs": 1,
             "numParamOutputs": 0,
             "method": "standard"
+        },
+        {
+            "id": "p3",
+            "type": "print",
+            "x": 566.0143542809303,
+            "y": 831.8632558503847,
+            "inputPorts": [
+                {
+                    "id": "p3_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["180", "1"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "outputPorts": [],
+            "numInputs": 1,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "label": ""
+        },
+        {
+            "id": "p4",
+            "type": "print",
+            "x": 1197.8073637688988,
+            "y": 706.0494556172233,
+            "inputPorts": [
+                {
+                    "id": "p4_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["180", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "outputPorts": [],
+            "numInputs": 1,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "label": ""
         }
     ],
     "links": [
@@ -1308,6 +1374,20 @@
         {
             "from": "output-main_output_2",
             "to": "viz_eval_input_2",
+            "weight": 1,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "c_test_y_output_0",
+            "to": "p3_input_0",
+            "weight": 1,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "output-main_output_1",
+            "to": "p4_input_0",
             "weight": 1,
             "weightShape": null,
             "hasWeight": false
@@ -1999,7 +2079,37 @@
             "bias": 0,
             "portKind": "param",
             "activationPhases": ["preprocessing"]
+        },
+        {
+            "id": "p3_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["180", "1"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["evaluation"]
+        },
+        {
+            "id": "p4_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["180", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["evaluation"]
         }
     ],
-    "nodeCounter": 2
+    "nodeCounter": 4
 }
