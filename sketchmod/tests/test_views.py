@@ -5,7 +5,7 @@ from django.urls import reverse
 
 User = get_user_model()
 
-# Minimal valid graph JSON that the validator and exporter can process
+# Minimal graph that passes validation (no errors, only warnings)
 VALID_GRAPH = {
     "nodes": [
         {
@@ -111,7 +111,7 @@ VALID_GRAPH = {
         },
     ],
     "links": [],
-    "ports": [],  # will be populated by canvas.js normally, but backend doesn't require ports array for validation
+    "ports": [],
     "nodeCounter": 2,
 }
 
@@ -129,11 +129,11 @@ class ViewsTest(TestCase):
         self.validate_url = reverse("sketchmod:validate_api")
         self.highlight_url = reverse("sketchmod:highlight_path_api")
 
-    # ---------- Canvas View ----------
+    # ---------- Canvas ----------
     def test_canvas_requires_login(self):
         """Verify canvas requires login."""
         response = self.client.get(self.canvas_url)
-        self.assertEqual(response.status_code, 302)  # redirect to login
+        self.assertEqual(response.status_code, 302)
 
     def test_canvas_authenticated(self):
         """Verify canvas authenticated."""
@@ -194,9 +194,13 @@ class ViewsTest(TestCase):
         self.assertIn("errors", data)
         self.assertIn("warnings", data)
         self.assertIn("isValid", data)
+        # With no optimizer we get a warning but no errors
+        self.assertTrue(data["isValid"])
+        self.assertEqual(len(data["errors"]), 0)
+        self.assertGreaterEqual(len(data["warnings"]), 1)
 
     def test_validate_missing_optimizer_warning(self):
-        """Validator should warn about missing optimizer."""
+        """Validator warns about missing optimizer."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.post(
             self.validate_url,
@@ -204,9 +208,70 @@ class ViewsTest(TestCase):
             content_type="application/json",
         )
         data = response.json()
+        warnings = data["warnings"]
+        self.assertTrue(any("No optimizer node" in w["message"] for w in warnings))
+
+    def test_validate_optimizer_wrong_phase_error(self):
+        """Validator reports error if optimizer is not in training phase."""
+        graph = json.loads(json.dumps(VALID_GRAPH))
+        # add optimizer node in preprocessing
+        opt_node = {
+            "id": "opt",
+            "type": "optimizer",
+            "x": 0,
+            "y": 0,
+            "inputPorts": [
+                {
+                    "id": "opt_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "role",
+                    "activationPhases": ["preprocessing"],
+                    "role": "loss",
+                },
+                {
+                    "id": "opt_input_1",
+                    "type": "input",
+                    "index": 1,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "role",
+                    "activationPhases": ["preprocessing"],
+                    "role": "labels",
+                },
+            ],
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": False,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "lossType": "mse",
+            "optimizerType": "adam",
+            "learningRate": 0.001,
+        }
+        graph["nodes"].append(opt_node)
+        self.client.login(username="testuser", password="testpass123")
+        response = self.client.post(
+            self.validate_url,
+            data=json.dumps({"graph": json.dumps(graph)}),
+            content_type="application/json",
+        )
+        data = response.json()
+        self.assertFalse(data["isValid"])
         errors = data["errors"]
         self.assertTrue(
-            any("Optimizer node is required" in e["message"] for e in errors)
+            any(
+                "Optimizer node must be in the training phase" in e["message"]
+                for e in errors
+            )
         )
 
     # ---------- Highlight Path API ----------
@@ -233,7 +298,7 @@ class ViewsTest(TestCase):
         self.assertIn("nodes", data)
         self.assertIn("links", data)
 
-    # ---------- Dataset Columns API (public) ----------
+    # ---------- Dataset Columns API ----------
     def test_dataset_columns_nonexistent(self):
         """Verify dataset columns nonexistent."""
         url = reverse("sketchmod:api_dataset_columns", args=["nonexist"])
