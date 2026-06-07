@@ -1,5 +1,9 @@
 """
 Graph validation for SketchNet code generation.
+
+Checks the graph for errors (block code generation) and warnings
+(informational).  The validator is phase‑agnostic: any node can appear
+in any phase, but some combinations are suspicious.
 """
 
 from .graph import parse_graph
@@ -28,8 +32,7 @@ class GraphValidator:
         self._check_label_loss_compatibility(warnings)
         self._check_accuracy_inputs(warnings)
         self._check_visualization_shapes(warnings)
-
-        self._check_accuracy_label_dim(warnings)
+        self._check_accuracy_label_reshape(warnings)
 
         return {
             "errors": errors,
@@ -265,8 +268,8 @@ class GraphValidator:
                         )
                         break
 
-    def _check_accuracy_label_dim(self, warnings):
-        """Warn if the accuracy label input is one‑hot encoded."""
+    def _check_accuracy_label_reshape(self, warnings):
+        """Warn if the accuracy label input will be automatically squeezed or argmaxed."""
         for node in self.graph.nodes.values():
             if node.type != "accuracy":
                 continue
@@ -278,19 +281,30 @@ class GraphValidator:
                     src_port = self.graph.ports[link.id_from]
                     shape = src_port.shape
                     if shape and shape.shape and len(shape.shape) == 2:
+                        dim = shape.shape[-1]
                         try:
-                            last_dim = int(str(shape.shape[-1]))
-                            if last_dim > 1:
-                                warnings.append(
-                                    {
-                                        "message": (
-                                            f"Accuracy label input port '{label_port.id}' "
-                                            f"appears to be one‑hot encoded (shape {shape.shape}). "
-                                            "It will be argmax‑ed automatically. Consider connecting class indices instead."
-                                        ),
-                                        "portId": label_port.id,
-                                    }
-                                )
-                        except ValueError:
-                            pass
+                            last_dim = int(dim) if dim.is_concrete else -1
+                        except (ValueError, TypeError):
+                            last_dim = -1
+                        if last_dim > 1:
+                            warnings.append(
+                                {
+                                    "message": (
+                                        f"Accuracy label input port '{label_port.id}' "
+                                        f"appears to be one‑hot encoded (shape {shape.shape}). "
+                                        "It will be argmax‑ed automatically."
+                                    ),
+                                    "portId": label_port.id,
+                                }
+                            )
+                        elif last_dim == 1:
+                            warnings.append(
+                                {
+                                    "message": (
+                                        f"Accuracy label input port '{label_port.id}' "
+                                        f"has shape (N,1) – automatically squeezed to (N)."
+                                    ),
+                                    "portId": label_port.id,
+                                }
+                            )
                     break
