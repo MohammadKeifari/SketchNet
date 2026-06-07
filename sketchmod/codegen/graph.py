@@ -560,6 +560,16 @@ def _shape_deonehot(node, graph):
 
 def _shape_output(node, graph):
     inp = _first_input_shape(node, graph)
-    if inp:
-        for port in node.outputs:
-            port.shape = inp
+    if not inp or not inp.shape:
+        return
+    activations = node.properties.get("outputActivations", {})
+    for port in node.outputs:
+        role = port.role
+        act = activations.get(role, "none")
+        if act == "argmax":
+            # 1-D tensor: (batch,)
+            new_shape = [inp.shape[0]]
+        else:
+            # same as input: (batch, features)
+            new_shape = list(inp.shape)
+        port.shape = ShapeInfo(shape=new_shape)
