@@ -46,7 +46,6 @@ class BaseTranslator:
             self.var_map[self.node.outputs[0].id] = var_name
 
     def _in_var_forward(self):
-        """Return expression that reads from outputs/inputs_dict using the source node ID."""
         for port in self.node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -384,7 +383,6 @@ class NeuronTranslator(BaseTranslator):
             in_f = self._guess_in_features()
             w.line(f"self.fc_{sid} = nn.Linear({in_f}, 1)")
         elif placement == "forward":
-            # Collect all distinct source node IDs
             src_ids = []
             for port in n.inputs:
                 for link in self.graph.links:
@@ -394,8 +392,6 @@ class NeuronTranslator(BaseTranslator):
                             src_ids.append(src)
 
             if is_first or len(src_ids) > 1:
-                # Build chained inputs_dict.get(...) for the very first node
-                # OR for any node that has multiple sources (parallel branches).
                 if not src_ids:
                     expr = "None"
                 else:
@@ -405,7 +401,6 @@ class NeuronTranslator(BaseTranslator):
                     expr += ")"
                 w.line(f"x = {expr}")
             else:
-                # Single source – read from outputs of the previous node
                 src = src_ids[0]
                 w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
 
@@ -625,7 +620,6 @@ class OutputTranslator(BaseTranslator):
         n = self.node
         if placement != "forward":
             return
-        # find the source node feeding any input
         src = None
         for port in n.inputs:
             for link in self.graph.links:
@@ -634,21 +628,23 @@ class OutputTranslator(BaseTranslator):
                     break
             if src:
                 break
-        if not src:
-            w.line("x = None")
+        if src:
+            w.line(f"if '{src}' in outputs or '{src}' in inputs_dict:")
+            w.indent()
+            w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
+            for out_port in n.outputs:
+                role = out_port.role
+                act = n.properties.get("outputActivations", {}).get(role, "none")
+                if role == "loss" or act == "none":
+                    w.line(f"outputs['{out_port.id}'] = x")
+                elif act == "softmax":
+                    w.line(f"outputs['{out_port.id}'] = torch.softmax(x, dim=-1)")
+                elif act == "argmax":
+                    w.line(f"outputs['{out_port.id}'] = torch.argmax(x, dim=-1)")
+            w.line(f"outputs['{n.id}'] = x")
+            w.dedent()
+        else:
             w.line(f"outputs['{n.id}'] = None")
-            return
-
-        w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
-        for out_port in n.outputs:
-            role = out_port.role
-            act = n.properties.get("outputActivations", {}).get(role, "none")
-            if role == "loss" or act == "none":
-                w.line(f"outputs['{out_port.id}'] = x")
-            elif act == "softmax":
-                w.line(f"outputs['{out_port.id}'] = torch.softmax(x, dim=-1)")
-            elif act == "argmax":
-                w.line(f"outputs['{out_port.id}'] = torch.argmax(x, dim=-1)")
 
 
 # ============================================================
@@ -738,24 +734,35 @@ class VisualizationTranslator(BaseTranslator):
         var_names = []
         for i, port in enumerate(coord_ports):
             vname = f"data_{_sanitize(port.id)}"
+            src_var = None
             for link in self.graph.links:
                 if link.id_to == port.id:
                     src = self.var_map.get(link.id_from)
                     if src is None:
                         src_nid = self.graph.ports[link.id_from].node_id
                         src = self.var_map.get(src_nid, "None")
-                    w.line(f"{vname} = {src}")
-                    var_names.append(vname)
+                    src_var = src
                     break
+            if src_var:
+                w.line(f"{vname} = {src_var}")
+            else:
+                w.line(f"{vname} = None")
+            var_names.append(vname)
+
         if color_port:
+            src_var = None
             for link in self.graph.links:
                 if link.id_to == color_port.id:
                     src = self.var_map.get(link.id_from)
                     if src is None:
                         src_nid = self.graph.ports[link.id_from].node_id
                         src = self.var_map.get(src_nid, "None")
-                    w.line(f"colors = {src}")
+                    src_var = src
                     break
+            if src_var:
+                w.line(f"colors = {src_var}")
+            else:
+                w.line("colors = None")
         else:
             w.line("colors = None")
 
@@ -818,7 +825,6 @@ class PrintTranslator(BaseTranslator):
         n = self.node
         label = n.properties.get("label", "") or n.id
         if placement == "forward":
-            # Find the port ID that feeds this node
             src_port_id = None
             for port in n.inputs:
                 for link in self.graph.links:
@@ -829,9 +835,9 @@ class PrintTranslator(BaseTranslator):
                     break
             if src_port_id:
                 expr = f"outputs.get('{src_port_id}', inputs_dict.get('{src_port_id}'))"
-                w.line(f"print('{label}:', {expr}.shape, {expr})")
+                w.line(f'print("{label}:", {expr}.shape, {expr})')
             else:
-                w.line(f"print('{label}: no input')")
+                w.line(f'print("{label}: no input")')
         else:
             for i, port in enumerate(n.inputs):
                 for link in self.graph.links:
@@ -890,35 +896,23 @@ class AccuracyTranslator(BaseTranslator):
             label_nid = self.graph.ports[label_src].node_id
             label_var = self.var_map.get(label_nid, "None")
 
-        # ---- decide how to handle predictions ----
-        pred_op = ""  # what to write after "pred_labels = "
+        # ---- prediction handling (purely shape‑based) ----
+        pred_op = ""
         pred_port = self.graph.ports[pred_src]
-        src_node = self.graph.nodes[pred_port.node_id]
-        if src_node.type == "output":
-            role = pred_port.role
-            act = src_node.properties.get("outputActivations", {}).get(role, "none")
-            if act == "argmax":
-                pred_op = pred_var  # already 1D class indices
-            elif act == "softmax":
-                pred_op = f"{pred_var}.argmax(dim=1)"  # probabilities → class indices
-            else:  # none → raw logits
-                pred_op = f"{pred_var}.argmax(dim=1)"
+        shape = pred_port.shape
+        if shape and shape.shape and len(shape.shape) >= 2:
+            try:
+                last_dim = int(str(shape.shape[-1]))
+                if last_dim > 1:
+                    pred_op = f"{pred_var}.argmax(dim=1)"
+                else:
+                    pred_op = f"{pred_var}.squeeze(-1).long()"
+            except ValueError:
+                pred_op = f"{pred_var}.argmax(dim=1)"  # fallback
         else:
-            # not an output node – check shape
-            shape = pred_port.shape
-            if shape and shape.shape and len(shape.shape) >= 2:
-                try:
-                    last_dim = int(str(shape.shape[-1]))
-                    if last_dim > 1:
-                        pred_op = f"{pred_var}.argmax(dim=1)"
-                    else:
-                        pred_op = f"{pred_var}.squeeze(-1).long()"
-                except ValueError:
-                    pred_op = f"{pred_var}.argmax(dim=1)"  # fallback
-            else:
-                pred_op = pred_var  # no shape info, assume correct
+            pred_op = f"{pred_var}.long()"
 
-        # ---- decide how to handle labels ----
+        # ---- label handling (purely shape‑based) ----
         label_op = ""
         label_port = self.graph.ports[label_src]
         shape = label_port.shape
@@ -932,13 +926,12 @@ class AccuracyTranslator(BaseTranslator):
             except ValueError:
                 label_op = f"{label_var}.squeeze(-1).long()"
         else:
-            label_op = label_var
+            label_op = f"{label_var}.long()"
 
         w.line(f"pred_labels = {pred_op}")
         w.line(f"true_labels = {label_op}")
         w.line("acc = (pred_labels == true_labels).float().mean()")
         w.line('print(f"Accuracy: {acc.item():.4f}")')
-
         if show_cm:
             w.line("from sklearn.metrics import confusion_matrix")
             w.line("cm = confusion_matrix(true_labels.cpu(), pred_labels.cpu())")
