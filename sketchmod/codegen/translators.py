@@ -440,8 +440,8 @@ class Conv2DTranslator(BaseTranslator):
                     src = self.graph.ports[link.id_from]
                     if src.shape and src.shape.shape and len(src.shape.shape) >= 2:
                         try:
-                            return int(str(src.shape.shape[1]))
-                        except ValueError:
+                            return int(src.shape.shape[1])
+                        except (ValueError, TypeError):
                             pass
         return 1
 
@@ -537,9 +537,10 @@ class BatchNormTranslator(BaseTranslator):
                 if link.id_to == port.id:
                     src = self.graph.ports[link.id_from]
                     if src.shape and src.shape.shape and len(src.shape.shape) >= 2:
+                        dim = src.shape.shape[-1]
                         try:
-                            return int(str(src.shape.shape[-1]))
-                        except ValueError:
+                            return int(dim) if dim.is_concrete else 1
+                        except (ValueError, TypeError):
                             pass
         for nid in self.graph.predecessors(self.node.id):
             pred = self.graph.nodes[nid]
@@ -901,14 +902,15 @@ class AccuracyTranslator(BaseTranslator):
         pred_port = self.graph.ports[pred_src]
         shape = pred_port.shape
         if shape and shape.shape and len(shape.shape) >= 2:
-            try:
-                last_dim = int(str(shape.shape[-1]))
-                if last_dim > 1:
+            dim = shape.shape[-1]
+            if dim.is_concrete:
+                if int(dim) > 1:
                     pred_op = f"{pred_var}.argmax(dim=1)"
                 else:
                     pred_op = f"{pred_var}.squeeze(-1).long()"
-            except ValueError:
-                pred_op = f"{pred_var}.argmax(dim=1)"  # fallback
+            else:
+                # symbolic last dim → assume >1 and argmax
+                pred_op = f"{pred_var}.argmax(dim=1)"
         else:
             pred_op = f"{pred_var}.long()"
 
@@ -917,14 +919,14 @@ class AccuracyTranslator(BaseTranslator):
         label_port = self.graph.ports[label_src]
         shape = label_port.shape
         if shape and shape.shape and len(shape.shape) >= 2:
-            try:
-                last_dim = int(str(shape.shape[-1]))
-                if last_dim > 1:
+            dim = shape.shape[-1]
+            if dim.is_concrete:
+                if int(dim) > 1:
                     label_op = f"{label_var}.argmax(dim=1)"
                 else:
                     label_op = f"{label_var}.squeeze(-1).long()"
-            except ValueError:
-                label_op = f"{label_var}.squeeze(-1).long()"
+            else:
+                label_op = f"{label_var}.argmax(dim=1)"
         else:
             label_op = f"{label_var}.long()"
 
@@ -932,6 +934,7 @@ class AccuracyTranslator(BaseTranslator):
         w.line(f"true_labels = {label_op}")
         w.line("acc = (pred_labels == true_labels).float().mean()")
         w.line('print(f"Accuracy: {acc.item():.4f}")')
+
         if show_cm:
             w.line("from sklearn.metrics import confusion_matrix")
             w.line("cm = confusion_matrix(true_labels.cpu(), pred_labels.cpu())")
