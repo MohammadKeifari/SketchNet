@@ -24,7 +24,12 @@ class ShapeDim:
         if isinstance(value, int):
             self._value = sympy.Integer(value)
         elif isinstance(value, str):
-            self._value = sympy.symbols(value.strip())
+            s = value.strip()
+            # if the string is a plain integer (possibly negative), use it directly
+            if s.isdigit() or (s.startswith("-") and s[1:].isdigit()):
+                self._value = sympy.Integer(int(s))
+            else:
+                self._value = sympy.symbols(s)
         elif isinstance(value, sympy.Expr):
             self._value = value
         else:
