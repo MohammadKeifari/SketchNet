@@ -1079,6 +1079,38 @@ class ValidatorTest(unittest.TestCase):
         self.assertEqual(len(r["errors"]), 0, msg=f"Unexpected errors: {r['errors']}")
         self.assertTrue(r["isValid"])
 
+    def test_reshape_infeasible_warning(self):
+        g = deepcopy(self._base())
+        reshape = {
+            "id": "r",
+            "type": "reshape",
+            "x": 200,
+            "y": 200,
+            "targetShape": "(10, 10)",
+            "inputPorts": [
+                {
+                    "id": "r_in",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": ["preprocessing"],
+                    "portKind": "data",
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "r_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": ["preprocessing"],
+                    "portKind": "data",
+                }
+            ],
+        }
+        g["nodes"].append(reshape)
+        g["links"].append({"from": "inp_out", "to": "r_in", "weight": 1})
+        r = GraphValidator(g).validate()
+        self._assert_has_message(r["warnings"], "total elements mismatch")
+
 
 if __name__ == "__main__":
     unittest.main()
