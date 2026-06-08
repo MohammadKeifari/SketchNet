@@ -1,158 +1,491 @@
-from django.test import SimpleTestCase
+"""
+Unit tests for the main code generator.
+Checks that the generated code contains expected patterns.
+"""
+
+import unittest
+import json
 from sketchmod.codegen.generator import CodeGenerator
 
-GRAPH_WITH_OPTIMIZER = {
-    "nodes": [
-        {
-            "id": "input-main",
-            "type": "input-data",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [],
-            "outputPorts": [
+
+class GeneratorTest(unittest.TestCase):
+    def setUp(self):
+        # Minimal classification graph with evaluation path
+        self.minimal_graph = {
+            "nodes": [
                 {
-                    "id": "input-main_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
+                    "id": "inp",
+                    "type": "input-data",
+                    "x": 0,
+                    "y": 0,
+                    "inputPorts": [],
+                    "outputPorts": [
+                        {
+                            "id": "inp_out_0",
+                            "type": "output",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["preprocessing"],
+                        }
+                    ],
+                    "numInputs": 0,
+                    "numOutputs": 1,
                     "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                }
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "datasetId": None,
+                    "datasetName": None,
+                    "dataShape": "(100, 5)",
+                },
+                {
+                    "id": "split",
+                    "type": "train-test",
+                    "x": 50,
+                    "y": 50,
+                    "inputPorts": [
+                        {
+                            "id": "split_in",
+                            "type": "input",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["preprocessing"],
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "split_train",
+                            "type": "output",
+                            "index": 0,
+                            "subType": "train",
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["preprocessing"],
+                        },
+                        {
+                            "id": "split_test",
+                            "type": "output",
+                            "index": 1,
+                            "subType": "test",
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["preprocessing"],
+                        },
+                    ],
+                    "numInputs": 1,
+                    "numOutputs": 2,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "trainRatio": 0.7,
+                    "testRatio": 0.3,
+                    "randomSeed": 42,
+                },
+                {
+                    "id": "feat_col",
+                    "type": "column-select",
+                    "x": 100,
+                    "y": 30,
+                    "inputPorts": [
+                        {
+                            "id": "feat_col_in",
+                            "type": "input",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["preprocessing"],
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "feat_col_out",
+                            "type": "output",
+                            "index": 0,
+                            "subType": "features",
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["preprocessing", "training"],
+                        }
+                    ],
+                    "numInputs": 1,
+                    "numOutputs": 1,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "selectedColumns": [0, 1, 2],
+                    "columnInput": "0:2",
+                },
+                {
+                    "id": "label_col",
+                    "type": "column-select",
+                    "x": 100,
+                    "y": 150,
+                    "inputPorts": [
+                        {
+                            "id": "label_col_in",
+                            "type": "input",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["preprocessing"],
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "label_col_out",
+                            "type": "output",
+                            "index": 0,
+                            "subType": "labels",
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["preprocessing", "training"],
+                        }
+                    ],
+                    "numInputs": 1,
+                    "numOutputs": 1,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "selectedColumns": [4],
+                    "columnInput": "4",
+                },
+                # ---- Evaluation path: normalize test features ----
+                {
+                    "id": "norm_test",
+                    "type": "normalize",
+                    "x": 100,
+                    "y": 250,
+                    "inputPorts": [
+                        {
+                            "id": "norm_test_in",
+                            "type": "input",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["preprocessing"],
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "norm_test_out",
+                            "type": "output",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["preprocessing", "evaluation"],
+                        }
+                    ],
+                    "numInputs": 1,
+                    "numOutputs": 1,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "method": "standard",
+                },
+                {
+                    "id": "layer1",
+                    "type": "layer",
+                    "x": 200,
+                    "y": 50,
+                    "inputPorts": [
+                        {
+                            "id": "layer1_in",
+                            "type": "input",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "multi",
+                            "activationPhases": ["training", "evaluation"],
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "layer1_out",
+                            "type": "output",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["training", "evaluation"],
+                        }
+                    ],
+                    "numInputs": 1,
+                    "numOutputs": 1,
+                    "activation": "relu",
+                    "numNeurons": 16,
+                    "bias": 0,
+                    "hasBias": True,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                },
+                {
+                    "id": "output",
+                    "type": "output",
+                    "x": 300,
+                    "y": 50,
+                    "inputPorts": [
+                        {
+                            "id": "output_in_train",
+                            "type": "input",
+                            "index": 0,
+                            "subType": "train",
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["training"],
+                        },
+                        {
+                            "id": "output_in_test",
+                            "type": "input",
+                            "index": 1,
+                            "subType": "test",
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["evaluation"],
+                        },
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "loss_port",
+                            "type": "output",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "role",
+                            "activationPhases": ["training"],
+                            "role": "loss",
+                        },
+                        {
+                            "id": "pred_port",
+                            "type": "output",
+                            "index": 1,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "role",
+                            "activationPhases": ["evaluation"],
+                            "role": "prediction",
+                        },
+                        {
+                            "id": "eval_port",
+                            "type": "output",
+                            "index": 2,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "role",
+                            "activationPhases": ["evaluation"],
+                            "role": "evaluation",
+                        },
+                    ],
+                    "numInputs": 2,
+                    "numOutputs": 3,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "outputActivations": {
+                        "loss": "none",
+                        "prediction": "none",
+                        "evaluation": "none",
+                    },
+                },
+                {
+                    "id": "opt",
+                    "type": "optimizer",
+                    "x": 400,
+                    "y": 50,
+                    "inputPorts": [
+                        {
+                            "id": "opt_loss",
+                            "type": "input",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "role",
+                            "activationPhases": ["training"],
+                            "role": "loss",
+                        },
+                        {
+                            "id": "opt_labels",
+                            "type": "input",
+                            "index": 1,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "role",
+                            "activationPhases": ["training"],
+                            "role": "labels",
+                        },
+                    ],
+                    "outputPorts": [],
+                    "numInputs": 2,
+                    "numOutputs": 0,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "lossType": "mse",
+                    "optimizerType": "adam",
+                    "learningRate": 0.01,
+                    "epochs": 5,
+                    "batchSize": 16,
+                    "shuffle": False,
+                },
             ],
-            "numInputs": 0,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "datasetId": None,
-            "datasetName": None,
-            "dataShape": "(100, 2)",
-        },
-        {
-            "id": "output-main",
-            "type": "output",
-            "x": 0,
-            "y": 0,
+            "links": [
+                {"from": "inp_out_0", "to": "split_in", "weight": 1},
+                # training branch
+                {"from": "split_train", "to": "feat_col_in", "weight": 1},
+                {"from": "split_train", "to": "label_col_in", "weight": 1},
+                {
+                    "from": "feat_col_out",
+                    "to": "layer1_in",
+                    "weight": 1,
+                    "weightShape": {"shape": [16, 3], "dtype": "float32"},
+                    "hasWeight": True,
+                },
+                {"from": "layer1_out", "to": "output_in_train", "weight": 1},
+                {"from": "loss_port", "to": "opt_loss", "weight": 1},
+                {"from": "label_col_out", "to": "opt_labels", "weight": 1},
+                # evaluation branch
+                {"from": "split_test", "to": "norm_test_in", "weight": 1},
+                {
+                    "from": "norm_test_out",
+                    "to": "layer1_in",
+                    "weight": 1,
+                    "weightShape": {"shape": [16, 3], "dtype": "float32"},
+                    "hasWeight": True,
+                },
+                {"from": "layer1_out", "to": "output_in_test", "weight": 1},
+            ],
+            "ports": [],
+            "nodeCounter": 0,
+        }
+
+    # ---------- basic generation ----------
+    def test_generate_minimal_training_script(self):
+        gen = CodeGenerator(self.minimal_graph)
+        code = gen.generate()
+        self.assertIn("class Model(nn.Module):", code)
+        self.assertIn("def train_model(", code)
+        self.assertIn("def evaluate(", code)  # now present!
+        self.assertIn("criterion = nn.MSELoss()", code)
+        self.assertIn("optimizer = optim.Adam(model.parameters(), lr=0.01", code)
+        self.assertIn("for epoch in range(config.get('epochs', 10)):", code)
+
+    def test_no_optimizer_skips_training(self):
+        graph = json.loads(json.dumps(self.minimal_graph))
+        # remove optimizer node AND its links
+        opt_node_ids = {"opt_loss", "opt_labels"}
+        graph["links"] = [
+            l
+            for l in graph["links"]
+            if l["from"] not in opt_node_ids and l["to"] not in opt_node_ids
+        ]
+        graph["nodes"] = [n for n in graph["nodes"] if n["type"] != "optimizer"]
+        gen = CodeGenerator(graph)
+        code = gen.generate()
+        self.assertIn("# No training phase with optimizer – training skipped.", code)
+        self.assertNotIn("class Model", code)
+
+    def test_evaluation_present(self):
+        gen = CodeGenerator(self.minimal_graph)
+        code = gen.generate()
+        self.assertIn("def evaluate(model, pre_data):", code)
+        self.assertIn("model.eval()", code)
+
+    def test_pre_data_only_seeds(self):
+        gen = CodeGenerator(self.minimal_graph)
+        code = gen.generate()
+        self.assertIn("'feat_col_out'", code)
+        self.assertIn("'label_col_out'", code)
+        self.assertIn("'norm_test_out'", code)  # evaluation seed
+        self.assertNotIn("'split_train'", code)  # only preprocessing
+
+    def test_output_activation_softmax(self):
+        graph = json.loads(json.dumps(self.minimal_graph))
+        graph["nodes"][6]["outputActivations"] = {
+            "prediction": "softmax",
+            "loss": "none",
+            "evaluation": "none",
+        }
+        gen = CodeGenerator(graph)
+        code = gen.generate()
+        self.assertIn("torch.softmax(x, dim=-1)", code)
+
+    def test_crossentropy_cast_long(self):
+        graph = json.loads(json.dumps(self.minimal_graph))
+        graph["nodes"][-1]["lossType"] = "cross_entropy"
+        gen = CodeGenerator(graph)
+        code = gen.generate()
+        self.assertIn("labels = labels.long()", code)
+        self.assertIn("nn.CrossEntropyLoss()", code)
+
+    def test_visualization_skipped_in_training(self):
+        graph = json.loads(json.dumps(self.minimal_graph))
+        viz = {
+            "id": "viz_train",
+            "type": "visualization",
+            "x": 500,
+            "y": 500,
             "inputPorts": [
                 {
-                    "id": "output-main_input_0",
+                    "id": "viz_in",
                     "type": "input",
                     "index": 0,
-                    "subType": "train",
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                },
-                {
-                    "id": "output-main_input_1",
-                    "type": "input",
-                    "index": 1,
-                    "subType": "test",
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["evaluation"],
-                },
-            ],
-            "outputPorts": [
-                {
-                    "id": "output-main_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["training"],
-                    "role": "loss",
-                }
-            ],
-            "numInputs": 2,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-        },
-        {
-            "id": "l1",
-            "type": "layer",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "l1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "multi",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "l1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
+                    "subType": "coord",
                     "shape": None,
                     "bias": 0,
                     "portKind": "data",
                     "activationPhases": ["training"],
                 }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": True,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "activation": "relu",
-            "numNeurons": 32,
-        },
-        {
-            "id": "o1",
-            "type": "optimizer",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "o1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["training"],
-                    "role": "loss",
-                },
-                {
-                    "id": "o1_input_1",
-                    "type": "input",
-                    "index": 1,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["training"],
-                    "role": "labels",
-                },
             ],
             "outputPorts": [],
-            "numInputs": 2,
+            "numInputs": 1,
             "numOutputs": 0,
             "bias": 0,
             "hasBias": False,
@@ -160,92 +493,14 @@ GRAPH_WITH_OPTIMIZER = {
             "paramOutputs": [],
             "numParamInputs": 0,
             "numParamOutputs": 0,
-            "lossType": "mse",
-            "optimizerType": "adam",
-            "learningRate": 0.001,
-            "adamBeta1": 0.9,
-            "adamBeta2": 0.999,
-            "adamEpsilon": 1e-8,
-            "sgdMomentum": 0.9,
-            "weightDecay": 0,
-            "nesterov": False,
-            "epochs": 5,
-            "batchSize": 16,
-            "shuffle": True,
-            "gradientClip": None,
-            "earlyStopping": False,
-            "earlyStoppingPatience": 10,
-        },
-    ],
-    "links": [
-        {
-            "from": "input-main_output_0",
-            "to": "l1_input_0",
-            "weight": 1.0,
-            "weightShape": None,
-            "hasWeight": True,
-        },
-        {
-            "from": "l1_output_0",
-            "to": "output-main_input_0",
-            "weight": 0,
-            "weightShape": None,
-            "hasWeight": False,
-        },
-        {
-            "from": "output-main_output_0",
-            "to": "o1_input_0",
-            "weight": 0,
-            "weightShape": None,
-            "hasWeight": False,
-        },
-        {
-            "from": "input-main_output_0",
-            "to": "o1_input_1",
-            "weight": 0,
-            "weightShape": None,
-            "hasWeight": False,
-        },
-    ],
-    "nodeCounter": 4,
-}
-
-
-class GeneratorTest(SimpleTestCase):
-    def test_generate_returns_string(self):
-        """Verify generate returns string."""
-        gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
+            "colorMode": "none",
+        }
+        graph["nodes"].append(viz)
+        graph["links"].append({"from": "layer1_out", "to": "viz_in", "weight": 1})
+        gen = CodeGenerator(graph)
         code = gen.generate()
-        self.assertIsInstance(code, str)
-        self.assertTrue(len(code) > 0)
+        self.assertNotIn("plt.figure()", code)
 
-    def test_generated_code_has_imports(self):
-        """Verify generated code has imports."""
-        gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
-        code = gen.generate()
-        self.assertIn("import torch", code)
-        self.assertIn("import torch.nn as nn", code)
 
-    def test_generated_code_has_load_and_preprocess(self):
-        """Verify generated code has load and preprocess."""
-        gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
-        code = gen.generate()
-        self.assertIn("def load_and_preprocess():", code)
-
-    def test_generated_code_has_model_class(self):
-        """Verify generated code has model class."""
-        gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
-        code = gen.generate()
-        self.assertIn("class Model(nn.Module):", code)
-
-    def test_generated_code_has_train_model(self):
-        """Verify generated code has train model."""
-        gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
-        code = gen.generate()
-        self.assertIn("def train_model(", code)
-
-    def test_generated_code_has_main_block(self):
-        """Verify generated code has main block."""
-        gen = CodeGenerator(GRAPH_WITH_OPTIMIZER)
-        code = gen.generate()
-        self.assertIn("if __name__ == '__main__':", code)
+if __name__ == "__main__":
+    unittest.main()
