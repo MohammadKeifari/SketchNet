@@ -1,17 +1,294 @@
-from django.test import SimpleTestCase
+"""
+Comprehensive tests for GraphValidator.
+Covers every error and warning condition.
+"""
+
+import unittest
+from copy import deepcopy
 from sketchmod.codegen.validator import GraphValidator
 
-SIMPLE_GRAPH = {
-    "nodes": [
-        {
-            "id": "input-main",
-            "type": "input-data",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [],
+
+class ValidatorTest(unittest.TestCase):
+    # ----------------------------------------------------------------
+    # Helpers
+    # ----------------------------------------------------------------
+    @staticmethod
+    def _base():
+        """
+        Well‑formed graph with NO errors.
+        inp_out carries all three phases, so it can seed training & evaluation.
+        """
+        return {
+            "nodes": [
+                {
+                    "id": "inp",
+                    "type": "input-data",
+                    "x": 0,
+                    "y": 0,
+                    "inputPorts": [],
+                    "outputPorts": [
+                        {
+                            "id": "inp_out",
+                            "type": "output",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": [
+                                "preprocessing",
+                                "training",
+                                "evaluation",
+                            ],
+                        }
+                    ],
+                    "numInputs": 0,
+                    "numOutputs": 1,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "dataShape": "(100, 5)",
+                },
+                {
+                    "id": "out",
+                    "type": "output",
+                    "x": 300,
+                    "y": 0,
+                    "inputPorts": [
+                        {
+                            "id": "out_in_train",
+                            "type": "input",
+                            "index": 0,
+                            "subType": "train",
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["training"],
+                        },
+                        {
+                            "id": "out_in_test",
+                            "type": "input",
+                            "index": 1,
+                            "subType": "test",
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["evaluation"],
+                        },
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "loss_p",
+                            "type": "output",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "role",
+                            "activationPhases": ["training"],
+                            "role": "loss",
+                        },
+                        {
+                            "id": "pred_p",
+                            "type": "output",
+                            "index": 1,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "role",
+                            "activationPhases": ["evaluation"],
+                            "role": "prediction",
+                        },
+                        {
+                            "id": "eval_p",
+                            "type": "output",
+                            "index": 2,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "role",
+                            "activationPhases": ["evaluation"],
+                            "role": "evaluation",
+                        },
+                    ],
+                    "numInputs": 2,
+                    "numOutputs": 3,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                },
+                {
+                    "id": "layer",
+                    "type": "layer",
+                    "x": 200,
+                    "y": 0,
+                    "inputPorts": [
+                        {
+                            "id": "layer_in",
+                            "type": "input",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "multi",
+                            "activationPhases": ["training", "evaluation"],
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "layer_out",
+                            "type": "output",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["training", "evaluation"],
+                        }
+                    ],
+                    "numInputs": 1,
+                    "numOutputs": 1,
+                    "activation": "relu",
+                    "numNeurons": 16,
+                    "bias": 0,
+                    "hasBias": True,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                },
+                {
+                    "id": "opt",
+                    "type": "optimizer",
+                    "x": 400,
+                    "y": 0,
+                    "inputPorts": [
+                        {
+                            "id": "opt_loss",
+                            "type": "input",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "role",
+                            "activationPhases": ["training"],
+                            "role": "loss",
+                        },
+                        {
+                            "id": "opt_labels",
+                            "type": "input",
+                            "index": 1,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "role",
+                            "activationPhases": ["training"],
+                            "role": "labels",
+                        },
+                    ],
+                    "outputPorts": [],
+                    "numInputs": 2,
+                    "numOutputs": 0,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "lossType": "mse",
+                    "optimizerType": "adam",
+                    "learningRate": 0.01,
+                    "epochs": 5,
+                    "batchSize": 16,
+                    "shuffle": False,
+                },
+            ],
+            "links": [
+                {
+                    "from": "inp_out",
+                    "to": "layer_in",
+                    "weight": 1,
+                    "weightShape": {"shape": [16, "?"], "dtype": "float32"},
+                    "hasWeight": True,
+                },
+                {"from": "inp_out", "to": "opt_labels", "weight": 1},
+                {"from": "layer_out", "to": "out_in_train", "weight": 1},
+                {"from": "layer_out", "to": "out_in_test", "weight": 1},
+                {"from": "loss_p", "to": "opt_loss", "weight": 1},
+            ],
+            "ports": [],
+            "nodeCounter": 0,
+        }
+
+    def _assert_has_message(self, collection, substring, msg=None):
+        for item in collection:
+            if substring in item.get("message", ""):
+                return
+        self.fail(msg or f"No message containing '{substring}' found in {collection}")
+
+    # ----------------------------------------------------------------
+    # ERRORS
+    # ----------------------------------------------------------------
+    def test_missing_input_data_error(self):
+        g = self._base()
+        g["nodes"] = [n for n in g["nodes"] if n["id"] != "inp"]
+        g["links"] = [l for l in g["links"] if "inp_out" not in (l["from"], l["to"])]
+        r = GraphValidator(g).validate()
+        self._assert_has_message(r["errors"], "Missing Input Data node")
+        self.assertFalse(r["isValid"])
+
+    def test_missing_output_error(self):
+        g = self._base()
+        g["nodes"] = [n for n in g["nodes"] if n["id"] != "out"]
+        out_ports = {"out_in_train", "out_in_test", "loss_p", "pred_p", "eval_p"}
+        g["links"] = [
+            l
+            for l in g["links"]
+            if l["from"] not in out_ports and l["to"] not in out_ports
+        ]
+        r = GraphValidator(g).validate()
+        self._assert_has_message(r["errors"], "Missing Output node")
+        self.assertFalse(r["isValid"])
+
+    def test_optimizer_wrong_phase_error(self):
+        g = deepcopy(self._base())
+        opt = next(n for n in g["nodes"] if n["type"] == "optimizer")
+        opt["inputPorts"][0]["activationPhases"] = ["preprocessing"]
+        opt["inputPorts"][1]["activationPhases"] = ["preprocessing"]
+        r = GraphValidator(g).validate()
+        self._assert_has_message(
+            r["errors"], "Optimizer node must be in the training phase"
+        )
+        self.assertFalse(r["isValid"])
+
+    def test_param_port_cycle_error(self):
+        g = deepcopy(self._base())
+        n1 = {
+            "id": "n1",
+            "type": "normalize",
+            "x": 100,
+            "y": 100,
+            "inputPorts": [
+                {
+                    "id": "n1_in",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing"],
+                }
+            ],
             "outputPorts": [
                 {
-                    "id": "input-main_output_0",
+                    "id": "n1_out",
                     "type": "output",
                     "index": 0,
                     "subType": None,
@@ -21,7 +298,139 @@ SIMPLE_GRAPH = {
                     "activationPhases": ["preprocessing"],
                 }
             ],
-            "numInputs": 0,
+            "paramInputs": [
+                {
+                    "id": "n1_pin",
+                    "type": "input",
+                    "index": 0,
+                    "portKind": "param",
+                    "activationPhases": ["preprocessing"],
+                }
+            ],
+            "paramOutputs": [
+                {
+                    "id": "n1_pout",
+                    "type": "output",
+                    "index": 0,
+                    "portKind": "param",
+                    "activationPhases": ["preprocessing"],
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "numParamInputs": 1,
+            "numParamOutputs": 1,
+            "bias": 0,
+            "hasBias": False,
+            "method": "standard",
+        }
+        n2 = {
+            "id": "n2",
+            "type": "normalize",
+            "x": 200,
+            "y": 100,
+            "inputPorts": [
+                {
+                    "id": "n2_in",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing"],
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "n2_out",
+                    "type": "output",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing"],
+                }
+            ],
+            "paramInputs": [
+                {
+                    "id": "n2_pin",
+                    "type": "input",
+                    "index": 0,
+                    "portKind": "param",
+                    "activationPhases": ["preprocessing"],
+                }
+            ],
+            "paramOutputs": [
+                {
+                    "id": "n2_pout",
+                    "type": "output",
+                    "index": 0,
+                    "portKind": "param",
+                    "activationPhases": ["preprocessing"],
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "numParamInputs": 1,
+            "numParamOutputs": 1,
+            "bias": 0,
+            "hasBias": False,
+            "method": "standard",
+        }
+        g["nodes"].extend([n1, n2])
+        g["links"].extend(
+            [
+                {"from": "inp_out", "to": "n1_in", "weight": 1},
+                {"from": "n1_out", "to": "n2_in", "weight": 1},
+                {"from": "n1_pout", "to": "n2_pin", "weight": 1},
+                {"from": "n2_pout", "to": "n1_pin", "weight": 1},
+            ]
+        )
+        r = GraphValidator(g).validate()
+        self._assert_has_message(r["errors"], "Param‑port cycle detected")
+        self.assertFalse(r["isValid"])
+
+    def test_layer_no_input_error(self):
+        g = deepcopy(self._base())
+        g["links"] = [l for l in g["links"] if l["to"] != "layer_in"]
+        r = GraphValidator(g).validate()
+        self._assert_has_message(r["errors"], "requires at least 1 input connection")
+        self.assertFalse(r["isValid"])
+
+    def test_add_wrong_input_count_error(self):
+        g = deepcopy(self._base())
+        add = {
+            "id": "add",
+            "type": "add",
+            "x": 200,
+            "y": 200,
+            "inputPorts": [
+                {
+                    "id": "add_in",
+                    "type": "input",
+                    "index": 0,
+                    "subType": "main",
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "multi",
+                    "activationPhases": ["training"],
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "add_out",
+                    "type": "output",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["training"],
+                }
+            ],
+            "numInputs": 1,
             "numOutputs": 1,
             "bias": 0,
             "hasBias": False,
@@ -29,223 +438,647 @@ SIMPLE_GRAPH = {
             "paramOutputs": [],
             "numParamInputs": 0,
             "numParamOutputs": 0,
-            "datasetId": None,
-            "datasetName": None,
-            "dataShape": None,
-        },
-        {
-            "id": "output-main",
-            "type": "output",
-            "x": 0,
-            "y": 0,
+        }
+        g["nodes"].append(add)
+        g["links"].append({"from": "layer_out", "to": "add_in", "weight": 1})
+        r = GraphValidator(g).validate()
+        self._assert_has_message(
+            r["errors"], "Add node 'add' requires exactly 2 inputs"
+        )
+        self.assertFalse(r["isValid"])
+
+    def test_concat_insufficient_inputs_error(self):
+        g = deepcopy(self._base())
+        concat = {
+            "id": "concat",
+            "type": "concat",
+            "x": 200,
+            "y": 200,
             "inputPorts": [
                 {
-                    "id": "output-main_input_0",
+                    "id": "concat_in",
                     "type": "input",
                     "index": 0,
-                    "subType": "train",
+                    "subType": None,
                     "shape": None,
                     "bias": 0,
-                    "portKind": "data",
+                    "portKind": "multi",
                     "activationPhases": ["training"],
-                },
-                {
-                    "id": "output-main_input_1",
-                    "type": "input",
-                    "index": 1,
-                    "subType": "test",
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["evaluation"],
-                },
+                }
             ],
             "outputPorts": [
                 {
-                    "id": "output-main_output_0",
+                    "id": "concat_out",
                     "type": "output",
                     "index": 0,
                     "subType": None,
                     "shape": None,
                     "bias": 0,
-                    "portKind": "role",
+                    "portKind": "data",
                     "activationPhases": ["training"],
-                    "role": "loss",
-                },
-                {
-                    "id": "output-main_output_1",
-                    "type": "output",
-                    "index": 1,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["evaluation"],
-                    "role": "prediction",
-                },
-                {
-                    "id": "output-main_output_2",
-                    "type": "output",
-                    "index": 2,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["evaluation"],
-                    "role": "evaluation",
-                },
+                }
             ],
-            "numInputs": 2,
-            "numOutputs": 3,
+            "numInputs": 1,
+            "numOutputs": 1,
+            "axis": -1,
             "bias": 0,
             "hasBias": False,
             "paramInputs": [],
             "paramOutputs": [],
             "numParamInputs": 0,
             "numParamOutputs": 0,
-        },
-    ],
-    "links": [],
-    "nodeCounter": 2,
-}
+        }
+        g["nodes"].append(concat)
+        g["links"].append({"from": "layer_out", "to": "concat_in", "weight": 1})
+        r = GraphValidator(g).validate()
+        self._assert_has_message(
+            r["errors"], "Concat node 'concat' requires at least 2 inputs"
+        )
+        self.assertFalse(r["isValid"])
 
+    # ----------------------------------------------------------------
+    # WARNINGS
+    # ----------------------------------------------------------------
+    def test_optimizer_missing_warning(self):
+        g = deepcopy(self._base())
+        g["nodes"] = [n for n in g["nodes"] if n["type"] != "optimizer"]
+        g["links"] = [
+            l
+            for l in g["links"]
+            if "opt_loss" not in (l["from"], l["to"])
+            and "opt_labels" not in (l["from"], l["to"])
+        ]
+        r = GraphValidator(g).validate()
+        self._assert_has_message(r["warnings"], "No optimizer node")
+        self.assertTrue(r["isValid"])
 
-class ValidatorTest(SimpleTestCase):
-    def test_validate_returns_errors_and_warnings(self):
-        """Verify validate returns errors and warnings."""
-        validator = GraphValidator(SIMPLE_GRAPH)
-        result = validator.validate()
-        self.assertIn("errors", result)
-        self.assertIn("warnings", result)
-        self.assertIn("isValid", result)
-
-    def test_missing_optimizer_error(self):
-        """Verify missing optimizer error."""
-        validator = GraphValidator(SIMPLE_GRAPH)
-        result = validator.validate()
-        errors = result["errors"]
-        self.assertTrue(
-            any("Optimizer node is required" in e["message"] for e in errors)
+    def test_model_in_preprocessing_warning(self):
+        g = deepcopy(self._base())
+        layer = next(n for n in g["nodes"] if n["type"] == "layer")
+        layer["inputPorts"][0]["activationPhases"] = ["preprocessing"]
+        layer["outputPorts"][0]["activationPhases"] = ["preprocessing"]
+        r = GraphValidator(g).validate()
+        self._assert_has_message(
+            r["warnings"], "is in preprocessing and will be untrained"
         )
 
-    def test_missing_input_data_error(self):
-        """Verify missing input data error."""
-        graph = {
-            "nodes": [
+    def test_model_eval_without_train_warning(self):
+        g = deepcopy(self._base())
+        layer = next(n for n in g["nodes"] if n["type"] == "layer")
+        # Put the layer only in evaluation – training will still be present for
+        # the optimizer (inp_out has all phases, so opt_labels gets a training seed).
+        layer["inputPorts"][0]["activationPhases"] = ["evaluation"]
+        layer["outputPorts"][0]["activationPhases"] = ["evaluation"]
+        r = GraphValidator(g).validate()
+        self._assert_has_message(r["warnings"], "is in evaluation but not training")
+
+    def test_visualization_in_training_warning(self):
+        g = deepcopy(self._base())
+        viz = {
+            "id": "viz",
+            "type": "visualization",
+            "x": 500,
+            "y": 500,
+            "inputPorts": [
                 {
-                    "id": "output-main",
+                    "id": "viz_x",
+                    "type": "input",
+                    "index": 0,
+                    "subType": "coord",
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["training"],
+                },
+                {
+                    "id": "viz_y",
+                    "type": "input",
+                    "index": 1,
+                    "subType": "coord",
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["training"],
+                },
+            ],
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": False,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "colorMode": "none",
+        }
+        g["nodes"].append(viz)
+        g["links"].append({"from": "layer_out", "to": "viz_x", "weight": 1})
+        g["links"].append({"from": "layer_out", "to": "viz_y", "weight": 1})
+        r = GraphValidator(g).validate()
+        self._assert_has_message(
+            r["warnings"],
+            "Visualization 'viz' is in the training phase and will be skipped",
+        )
+
+    def test_preprocessing_only_warning(self):
+        g = deepcopy(self._base())
+        # Remove optimizer entirely, then remove training/eval from all ports
+        # so that only preprocessing remains.
+        g["nodes"] = [n for n in g["nodes"] if n["type"] != "optimizer"]
+        g["links"] = [
+            l
+            for l in g["links"]
+            if "opt_loss" not in (l["from"], l["to"])
+            and "opt_labels" not in (l["from"], l["to"])
+        ]
+        layer = next(n for n in g["nodes"] if n["type"] == "layer")
+        layer["inputPorts"][0]["activationPhases"] = ["preprocessing"]
+        layer["outputPorts"][0]["activationPhases"] = ["preprocessing"]
+        inp_out = g["nodes"][0]["outputPorts"][0]
+        inp_out["activationPhases"] = ["preprocessing"]
+        r = GraphValidator(g).validate()
+        self._assert_has_message(
+            r["warnings"], "Preprocessing does not reach training or evaluation"
+        )
+
+    def test_onehot_crossentropy_warning(self):
+        g = deepcopy(self._base())
+        opt = next(n for n in g["nodes"] if n["type"] == "optimizer")
+        opt["lossType"] = "cross_entropy"
+        oh = {
+            "id": "oh",
+            "type": "onehot",
+            "x": 100,
+            "y": 200,
+            "inputPorts": [
+                {
+                    "id": "oh_in",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing"],
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "oh_out",
                     "type": "output",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [],
-                    "numInputs": 0,
-                    "numOutputs": 0,
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
                     "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing", "training"],
                 }
             ],
-            "links": [],
-            "nodeCounter": 1,
+            "numInputs": 1,
+            "numOutputs": 1,
+            "numClasses": 5,
+            "bias": 0,
+            "hasBias": False,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
         }
-        validator = GraphValidator(graph)
-        result = validator.validate()
-        self.assertTrue(
-            any("Missing Input Data node" in e["message"] for e in result["errors"])
+        g["nodes"].append(oh)
+        g["links"].append({"from": "inp_out", "to": "oh_in", "weight": 1})
+        g["links"] = [l for l in g["links"] if l["to"] != "opt_labels"]
+        g["links"].append({"from": "oh_out", "to": "opt_labels", "weight": 1})
+        r = GraphValidator(g).validate()
+        self._assert_has_message(
+            r["warnings"],
+            "CrossEntropyLoss expects class indices, but labels come from a OneHot node",
         )
 
-    def test_link_weight_zero_warning(self):
-        """Verify link weight zero warning."""
-        graph = {
-            "nodes": [
+    def test_bce_without_onehot_warning(self):
+        g = deepcopy(self._base())
+        opt = next(n for n in g["nodes"] if n["type"] == "optimizer")
+        opt["lossType"] = "bce"
+        r = GraphValidator(g).validate()
+        self._assert_has_message(
+            r["warnings"], "BCEWithLogitsLoss expects one‑hot labels"
+        )
+
+    def test_accuracy_missing_inputs_warning(self):
+        g = deepcopy(self._base())
+        acc = {
+            "id": "acc",
+            "type": "accuracy",
+            "x": 500,
+            "y": 500,
+            "inputPorts": [
                 {
-                    "id": "input-main",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "input-main_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["preprocessing"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
+                    "id": "acc_pred",
+                    "type": "input",
+                    "index": 0,
+                    "subType": "predictions",
+                    "shape": None,
                     "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
                 },
                 {
-                    "id": "l1",
-                    "type": "layer",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [
-                        {
-                            "id": "l1_input_0",
-                            "type": "input",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "multi",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "outputPorts": [
-                        {
-                            "id": "l1_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 1,
-                    "numOutputs": 1,
+                    "id": "acc_label",
+                    "type": "input",
+                    "index": 1,
+                    "subType": "labels",
+                    "shape": None,
                     "bias": 0,
-                    "hasBias": True,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "activation": "relu",
-                    "numNeurons": 64,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
                 },
             ],
-            "links": [
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": False,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "showConfusion": False,
+        }
+        g["nodes"].append(acc)
+        g["links"].append({"from": "pred_p", "to": "acc_pred", "weight": 1})
+        r = GraphValidator(g).validate()
+        self._assert_has_message(r["warnings"], "Accuracy node 'acc' expects 2 inputs")
+
+    def test_visualization_shape_mismatch_warning(self):
+        g = self._base()
+        # Create two branches with different sample sizes:
+        # inp -> layer (100,) -> output -> prediction port
+        # inp -> column-select (80,) -> output -> evaluation port
+        # Change inp data shape to produce 100 rows, then add a train-test split?
+        # Simpler: manually adjust the layer output shape? No, we need a natural mismatch.
+        # We'll add a train-test split that gives different sizes.
+        split = {
+            "id": "split",
+            "type": "train-test",
+            "x": 100,
+            "y": 50,
+            "inputPorts": [
                 {
-                    "from": "input-main_output_0",
-                    "to": "l1_input_0",
-                    "weight": 0,
-                    "weightShape": None,
-                    "hasWeight": True,
+                    "id": "split_in",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing"],
                 }
             ],
-            "nodeCounter": 2,
+            "outputPorts": [
+                {
+                    "id": "split_train",
+                    "type": "output",
+                    "index": 0,
+                    "subType": "train",
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing", "evaluation"],
+                },
+                {
+                    "id": "split_test",
+                    "type": "output",
+                    "index": 1,
+                    "subType": "test",
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing", "evaluation"],
+                },
+            ],
+            "numInputs": 1,
+            "numOutputs": 2,
+            "bias": 0,
+            "hasBias": False,
+            "trainRatio": 0.7,
+            "randomSeed": 42,
         }
-        validator = GraphValidator(graph)
-        result = validator.validate()
-        self.assertTrue(
-            any("Link weight is 0" in w["message"] for w in result["warnings"])
+        # Use column-selects to extract a single column for each coord
+        col1 = {
+            "id": "col1",
+            "type": "column-select",
+            "x": 200,
+            "y": 80,
+            "inputPorts": [
+                {
+                    "id": "col1_in",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "col1_out",
+                    "type": "output",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "selectedColumns": [0],
+        }
+        col2 = {
+            "id": "col2",
+            "type": "column-select",
+            "x": 200,
+            "y": 120,
+            "inputPorts": [
+                {
+                    "id": "col2_in",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "col2_out",
+                    "type": "output",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "selectedColumns": [0],
+        }
+        viz = {
+            "id": "viz",
+            "type": "visualization",
+            "x": 500,
+            "y": 500,
+            "inputPorts": [
+                {
+                    "id": "viz_x",
+                    "type": "input",
+                    "index": 0,
+                    "subType": "coord",
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                },
+                {
+                    "id": "viz_y",
+                    "type": "input",
+                    "index": 1,
+                    "subType": "coord",
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                },
+            ],
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": False,
+            "colorMode": "none",
+        }
+        g["nodes"].extend([split, col1, col2, viz])
+        # Remove old connections to layer; plug split between inp and layer
+        g["links"] = [
+            l for l in g["links"] if l["from"] != "inp_out" and l["to"] != "layer_in"
+        ]
+        g["links"].extend(
+            [
+                {"from": "inp_out", "to": "split_in", "weight": 1},
+                {"from": "split_train", "to": "col1_in", "weight": 1},
+                {"from": "split_test", "to": "col2_in", "weight": 1},
+                {"from": "col1_out", "to": "viz_x", "weight": 1},
+                {"from": "col2_out", "to": "viz_y", "weight": 1},
+            ]
         )
+        r = GraphValidator(g).validate()
+        self._assert_has_message(r["warnings"], "different sample sizes")
+
+    def test_accuracy_label_onehot_warning(self):
+        g = deepcopy(self._base())
+        # Add a column-select to extract a single column for the onehot input
+        col = {
+            "id": "col_labels",
+            "type": "column-select",
+            "x": 100,
+            "y": 200,
+            "inputPorts": [
+                {
+                    "id": "col_labels_in",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing"],
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "col_labels_out",
+                    "type": "output",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing", "evaluation"],
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "selectedColumns": [0],
+        }
+        oh = {
+            "id": "oh",
+            "type": "onehot",
+            "x": 150,
+            "y": 250,
+            "inputPorts": [
+                {
+                    "id": "oh_in",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing"],
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "oh_out",
+                    "type": "output",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing", "evaluation"],
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "numClasses": 5,
+            "bias": 0,
+            "hasBias": False,
+            "paramInputs": [],
+            "paramOutputs": [],
+        }
+        acc = {
+            "id": "acc",
+            "type": "accuracy",
+            "x": 500,
+            "y": 500,
+            "inputPorts": [
+                {
+                    "id": "acc_pred",
+                    "type": "input",
+                    "index": 0,
+                    "subType": "predictions",
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                },
+                {
+                    "id": "acc_label",
+                    "type": "input",
+                    "index": 1,
+                    "subType": "labels",
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                },
+            ],
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": False,
+            "showConfusion": False,
+        }
+        g["nodes"].extend([col, oh, acc])
+        g["links"].append({"from": "inp_out", "to": "col_labels_in", "weight": 1})
+        g["links"].append({"from": "col_labels_out", "to": "oh_in", "weight": 1})
+        g["links"].append({"from": "oh_out", "to": "acc_label", "weight": 1})
+        g["links"].append({"from": "pred_p", "to": "acc_pred", "weight": 1})
+        r = GraphValidator(g).validate()
+        self._assert_has_message(r["warnings"], "appears to be one‑hot encoded")
+
+    def test_accuracy_label_squeeze_warning(self):
+        g = deepcopy(self._base())
+        # Add a column-select that extracts a single column (shape N,1)
+        col = {
+            "id": "col",
+            "type": "column-select",
+            "x": 100,
+            "y": 200,
+            "inputPorts": [
+                {
+                    "id": "col_in",
+                    "type": "input",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing"],
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "col_out",
+                    "type": "output",
+                    "index": 0,
+                    "subType": None,
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["preprocessing", "evaluation"],
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "selectedColumns": [0],
+        }
+        acc = {
+            "id": "acc",
+            "type": "accuracy",
+            "x": 500,
+            "y": 500,
+            "inputPorts": [
+                {
+                    "id": "acc_pred",
+                    "type": "input",
+                    "index": 0,
+                    "subType": "predictions",
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                },
+                {
+                    "id": "acc_label",
+                    "type": "input",
+                    "index": 1,
+                    "subType": "labels",
+                    "shape": None,
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation"],
+                },
+            ],
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0,
+            "bias": 0,
+            "hasBias": False,
+            "showConfusion": False,
+        }
+        g["nodes"].extend([col, acc])
+        g["links"].append({"from": "inp_out", "to": "col_in", "weight": 1})
+        g["links"].append({"from": "col_out", "to": "acc_label", "weight": 1})
+        g["links"].append({"from": "pred_p", "to": "acc_pred", "weight": 1})
+        r = GraphValidator(g).validate()
+        self._assert_has_message(r["warnings"], "automatically squeezed to (N)")
+
+    def test_no_errors_valid_graph(self):
+        g = self._base()
+        r = GraphValidator(g).validate()
+        self.assertEqual(len(r["errors"]), 0, msg=f"Unexpected errors: {r['errors']}")
+        self.assertTrue(r["isValid"])
+
+
+if __name__ == "__main__":
+    unittest.main()
