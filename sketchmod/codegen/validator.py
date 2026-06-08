@@ -250,9 +250,15 @@ class GraphValidator:
             coord_ports = [p for p in node.inputs if p.sub_type == "coord"]
             first_dims = []
             for port in coord_ports:
-                shape = port.shape
-                if shape and shape.shape and len(shape.shape) >= 1:
-                    first_dims.append((port.id, shape.shape[0]))
+                # Follow the link to get the source port's shape
+                src_shape = None
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src_port = self.graph.ports[link.id_from]
+                        src_shape = src_port.shape
+                        break
+                if src_shape and src_shape.shape and len(src_shape.shape) >= 1:
+                    first_dims.append((port.id, src_shape.shape[0]))
             if len(first_dims) >= 2:
                 first_id, first_val = first_dims[0]
                 for other_id, other_val in first_dims[1:]:
