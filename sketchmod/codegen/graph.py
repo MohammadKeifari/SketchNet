@@ -356,6 +356,8 @@ def _propagate_shapes(graph: Graph):
             _shape_deonehot(node, graph)
         elif node.type == "output":
             _shape_output(node, graph)
+        elif node.type == "reshape":
+            _shape_reshape(node, graph)
 
 
 # ---------------------------------------------------------------------------
@@ -573,3 +575,42 @@ def _shape_output(node, graph):
             # same as input: (batch, features)
             new_shape = list(inp.shape)
         port.shape = ShapeInfo(shape=new_shape)
+
+
+def _shape_reshape(node, graph):
+    inp = _first_input_shape(node, graph)
+    if not inp or not inp.shape:
+        return
+    target_str = node.properties.get("targetShape", "(batch, -1)")
+    parts = _parse_target_shape(target_str)
+    if not parts:
+        return
+    # total input elements
+    total_inp = sympy.Integer(1)
+    for d in inp.shape:
+        total_inp = total_inp * d._value
+    infer_idx = -1
+    concrete_product = sympy.Integer(1)
+    for i, p in enumerate(parts):
+        if p == "-1":
+            if infer_idx != -1:
+                return  # only one -1 allowed
+            infer_idx = i
+        else:
+            try:
+                concrete_product = concrete_product * int(p)
+            except ValueError:
+                pass  # symbolic dim, keep as is
+    if infer_idx >= 0:
+        inferred = sympy.floor(total_inp / concrete_product)
+        parts[infer_idx] = str(inferred) if inferred.is_Integer else str(inferred)
+    out_shape = [ShapeDim(p) for p in parts]
+    _set_output_shape(node, ShapeInfo(shape=out_shape))
+
+
+def _parse_target_shape(target_str: str) -> List[str]:
+    """Parse a shape string like '(batch, -1)' into a list of dimension strings."""
+    cleaned = target_str.strip("()")
+    if not cleaned:
+        return []
+    return [x.strip() for x in cleaned.split(",")]
