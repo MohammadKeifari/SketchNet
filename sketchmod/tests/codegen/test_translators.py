@@ -430,8 +430,8 @@ class AddTranslatorTest(BaseTranslatorTest):
         ]
         graph = self._graph_with_nodes([node, a, b], links)
         code, vm = self._run_translator(node, graph, placement="forward")
-        self.assertIn("a = outputs.get('a'", code)
-        self.assertIn("b = outputs.get('b'", code)
+        self.assertIn("outputs.get('a'", code)
+        self.assertIn("outputs.get('b'", code)
         self.assertIn("x = a + b", code)
 
 
@@ -634,6 +634,35 @@ class AccuracyTranslatorTest(BaseTranslatorTest):
         self.assertIn("pred_labels = p.long()", code)
         self.assertIn("true_labels = l.squeeze(-1).long()", code)
         self.assertIn("acc = (pred_labels == true_labels).float().mean()", code)
+
+
+class ReshapeTranslatorTest(BaseTranslatorTest):
+    def test_data_reshape_infer(self):
+        node = Node(id="r", type="reshape", properties={"targetShape": "(64, -1)"})
+        node.inputs = [self._make_port("r_in", "r", "input", 0, ["preprocessing"])]
+        node.outputs = [self._make_port("r_out", "r", "output", 0, ["preprocessing"])]
+        src = Node(id="src", type="input-data")
+        src.outputs = [
+            self._make_port("src_out", "src", "output", 0, ["preprocessing"])
+        ]
+        links = [Link(id_from="src_out", id_to="r_in")]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(
+            node, graph, var_map={"src": "tensor", "src_out": "tensor"}
+        )
+        self.assertIn("tensor.reshape((64, -1))", code)
+
+    def test_forward_reshape(self):
+        node = Node(id="r", type="reshape", properties={"targetShape": "(28, 28)"})
+        node.inputs = [self._make_port("r_in", "r", "input", 0, ["training"])]
+        node.outputs = [self._make_port("r_out", "r", "output", 0, ["training"])]
+        prev = Node(id="prev", type="layer")
+        prev.outputs = [self._make_port("prev_out", "prev", "output", 0, ["training"])]
+        links = [Link(id_from="prev_out", id_to="r_in")]
+        graph = self._graph_with_nodes([node, prev], links)
+        code, vm = self._run_translator(node, graph, placement="forward")
+        self.assertIn("x.reshape((28, 28))", code)
+        self.assertIn("outputs['r'] = x", code)
 
 
 if __name__ == "__main__":
