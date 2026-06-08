@@ -453,6 +453,61 @@ class GraphParsingTest(unittest.TestCase):
         graph = parse_graph(json_data)
         self.assertEqual(graph.ports["inp_out"].shape.shape, [])
 
+    def test_reshape_infer(self):
+        json_data = {
+            "nodes": [
+                {
+                    "id": "inp",
+                    "type": "input-data",
+                    "x": 0,
+                    "y": 0,
+                    "dataShape": "(64, 3, 32, 32)",
+                    "outputPorts": [
+                        {
+                            "id": "inp_out",
+                            "type": "output",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        }
+                    ],
+                },
+                {
+                    "id": "r",
+                    "type": "reshape",
+                    "x": 100,
+                    "y": 0,
+                    "targetShape": "(64, -1)",
+                    "inputPorts": [
+                        {
+                            "id": "r_in",
+                            "type": "input",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "r_out",
+                            "type": "output",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        }
+                    ],
+                },
+            ],
+            "links": [{"from": "inp_out", "to": "r_in", "weight": 1}],
+            "ports": [],
+            "nodeCounter": 2,
+        }
+        graph = parse_graph(json_data)
+        out_shape = graph.ports["r_out"].shape
+        self.assertEqual(len(out_shape.shape), 2)
+        self.assertEqual(int(out_shape.shape[0]), 64)
+        self.assertEqual(int(out_shape.shape[1]), 3 * 32 * 32)
+
 
 if __name__ == "__main__":
     unittest.main()
