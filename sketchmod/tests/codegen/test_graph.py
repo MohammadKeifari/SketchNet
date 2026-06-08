@@ -1,192 +1,458 @@
-from django.test import SimpleTestCase
-from sketchmod.codegen.graph import parse_graph
+"""
+Unit tests for graph parsing and symbolic shape propagation.
+"""
 
-VALID_GRAPH = {
-    "nodes": [
-        {
-            "id": "input-main",
-            "type": "input-data",
-            "x": 100,
-            "y": 100,
-            "inputPorts": [],
-            "outputPorts": [
-                {
-                    "id": "input-main_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                }
-            ],
-            "numInputs": 0,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "datasetId": None,
-            "datasetName": None,
-            "dataShape": None,
-        },
-        {
-            "id": "output-main",
-            "type": "output",
-            "x": 300,
-            "y": 100,
-            "inputPorts": [
-                {
-                    "id": "output-main_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": "train",
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                },
-                {
-                    "id": "output-main_input_1",
-                    "type": "input",
-                    "index": 1,
-                    "subType": "test",
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["evaluation"],
-                },
-            ],
-            "outputPorts": [
-                {
-                    "id": "output-main_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["training"],
-                    "role": "loss",
-                },
-                {
-                    "id": "output-main_output_1",
-                    "type": "output",
-                    "index": 1,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["evaluation"],
-                    "role": "prediction",
-                },
-                {
-                    "id": "output-main_output_2",
-                    "type": "output",
-                    "index": 2,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["evaluation"],
-                    "role": "evaluation",
-                },
-            ],
-            "numInputs": 2,
-            "numOutputs": 3,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-        },
-    ],
-    "links": [],
-    "nodeCounter": 2,
-}
+import unittest
+from sketchmod.codegen.graph import parse_graph, ShapeInfo, ShapeDim
 
 
-class GraphTest(SimpleTestCase):
-    def test_parse_valid_graph(self):
-        """Verify parse valid graph."""
-        graph = parse_graph(VALID_GRAPH)
-        self.assertEqual(len(graph.nodes), 2)
-        self.assertIn("input-main", graph.nodes)
-        self.assertIn("output-main", graph.nodes)
-
-    def test_input_data_node_parsed(self):
-        """Verify input data node parsed."""
-        graph = parse_graph(VALID_GRAPH)
-        node = graph.nodes["input-main"]
-        self.assertEqual(node.type, "input-data")
-        self.assertEqual(len(node.outputs), 1)
-        port = node.outputs[0]
-        self.assertEqual(port.activation_phases, ["preprocessing"])
-
-    def test_output_node_parsed(self):
-        """Verify output node parsed."""
-        graph = parse_graph(VALID_GRAPH)
-        node = graph.nodes["output-main"]
-        self.assertEqual(node.type, "output")
-        self.assertEqual(len(node.inputs), 2)
-        self.assertEqual(node.inputs[0].sub_type, "train")
-        self.assertEqual(node.inputs[1].sub_type, "test")
-        self.assertEqual(len(node.outputs), 3)
-
-    def test_default_phases_applied(self):
-        """Even if activationPhases is empty, defaults should be applied."""
-        g = {
+class GraphParsingTest(unittest.TestCase):
+    def setUp(self):
+        self.basic_json = {
             "nodes": [
                 {
-                    "id": "n1",
-                    "type": "layer",
+                    "id": "inp",
+                    "type": "input-data",
                     "x": 0,
                     "y": 0,
-                    "inputPorts": [
-                        {
-                            "id": "n1_input_0",
-                            "type": "input",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "multi",
-                            "activationPhases": [],
-                        }
-                    ],
+                    "inputPorts": [],
                     "outputPorts": [
                         {
-                            "id": "n1_output_0",
+                            "id": "inp_out_0",
                             "type": "output",
                             "index": 0,
                             "subType": None,
                             "shape": None,
                             "bias": 0,
                             "portKind": "data",
-                            "activationPhases": [],
+                            "activationPhases": ["preprocessing"],
+                        }
+                    ],
+                    "numInputs": 0,
+                    "numOutputs": 1,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "datasetId": "ds1",
+                    "datasetName": "Data",
+                    "dataShape": "(100, 3)",
+                    "datasetFile": "data.csv",
+                    "datasetFormat": "csv",
+                },
+                {
+                    "id": "layer1",
+                    "type": "layer",
+                    "x": 100,
+                    "y": 100,
+                    "inputPorts": [
+                        {
+                            "id": "layer1_in_0",
+                            "type": "input",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "multi",
+                            "activationPhases": ["training", "evaluation"],
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "layer1_out_0",
+                            "type": "output",
+                            "index": 0,
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                            "portKind": "data",
+                            "activationPhases": ["training", "evaluation"],
                         }
                     ],
                     "numInputs": 1,
                     "numOutputs": 1,
+                    "activation": "relu",
+                    "numNeurons": 32,
                     "bias": 0,
                     "hasBias": True,
                     "paramInputs": [],
                     "paramOutputs": [],
                     "numParamInputs": 0,
                     "numParamOutputs": 0,
-                    "activation": "relu",
-                    "numNeurons": 64,
+                },
+            ],
+            "links": [
+                {
+                    "from": "inp_out_0",
+                    "to": "layer1_in_0",
+                    "weight": 1.0,
+                    "weightShape": {"shape": [32, 3], "dtype": "float32"},
+                    "hasWeight": True,
                 }
             ],
+            "ports": [],
+            "nodeCounter": 2,
+        }
+
+    # ---------- basic parsing ----------
+    def test_parse_basic_graph(self):
+        graph = parse_graph(self.basic_json)
+        self.assertIn("inp", graph.nodes)
+        self.assertIn("layer1", graph.nodes)
+        self.assertEqual(len(graph.links), 1)
+        self.assertEqual(graph.ports["inp_out_0"].node_id, "inp")
+
+    def test_activation_phases_preserved(self):
+        graph = parse_graph(self.basic_json)
+        self.assertEqual(
+            graph.ports["layer1_in_0"].activation_phases, ["training", "evaluation"]
+        )
+
+    def test_link_weight_shape(self):
+        graph = parse_graph(self.basic_json)
+        link = graph.links[0]
+        self.assertTrue(link.has_weight)
+        self.assertEqual(link.weight_shape, {"shape": [32, 3], "dtype": "float32"})
+
+    # ---------- shape propagation ----------
+    def test_input_data_shape(self):
+        graph = parse_graph(self.basic_json)
+        inp_port = graph.ports["inp_out_0"]
+        self.assertIsNotNone(inp_port.shape)
+        self.assertEqual(len(inp_port.shape.shape), 2)
+        self.assertEqual(int(inp_port.shape.shape[0]), 100)
+        self.assertEqual(int(inp_port.shape.shape[1]), 3)
+
+    def test_layer_shape_propagation(self):
+        graph = parse_graph(self.basic_json)
+        layer_out = graph.ports["layer1_out_0"]
+        self.assertIsNotNone(layer_out.shape)
+        self.assertEqual(len(layer_out.shape.shape), 2)
+        self.assertEqual(int(layer_out.shape.shape[0]), 100)
+        self.assertEqual(int(layer_out.shape.shape[1]), 32)
+
+    def test_column_select_shape(self):
+        json_data = {
+            "nodes": [
+                {
+                    "id": "inp",
+                    "type": "input-data",
+                    "x": 0,
+                    "y": 0,
+                    "inputPorts": [],
+                    "outputPorts": [
+                        {
+                            "id": "inp_out",
+                            "type": "output",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                        }
+                    ],
+                    "numInputs": 0,
+                    "numOutputs": 1,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "datasetId": None,
+                    "dataShape": "(50, 10)",
+                },
+                {
+                    "id": "col",
+                    "type": "column-select",
+                    "x": 100,
+                    "y": 100,
+                    "inputPorts": [
+                        {
+                            "id": "col_in",
+                            "type": "input",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "col_out",
+                            "type": "output",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                            "subType": None,
+                            "shape": None,
+                            "bias": 0,
+                        }
+                    ],
+                    "numInputs": 1,
+                    "numOutputs": 1,
+                    "bias": 0,
+                    "hasBias": False,
+                    "paramInputs": [],
+                    "paramOutputs": [],
+                    "numParamInputs": 0,
+                    "numParamOutputs": 0,
+                    "selectedColumns": [0, 1],
+                    "columnInput": "0:1",
+                },
+            ],
+            "links": [
+                {
+                    "from": "inp_out",
+                    "to": "col_in",
+                    "weight": 1,
+                    "weightShape": None,
+                    "hasWeight": False,
+                }
+            ],
+            "ports": [],
+            "nodeCounter": 2,
+        }
+        graph = parse_graph(json_data)
+        col_out = graph.ports["col_out"]
+        self.assertIsNotNone(col_out.shape)
+        self.assertEqual(len(col_out.shape.shape), 2)
+        self.assertEqual(int(col_out.shape.shape[0]), 50)
+        self.assertEqual(int(col_out.shape.shape[1]), 2)
+
+    def test_train_test_split_shapes(self):
+        json_data = {
+            "nodes": [
+                {
+                    "id": "inp",
+                    "type": "input-data",
+                    "x": 0,
+                    "y": 0,
+                    "inputPorts": [],
+                    "outputPorts": [
+                        {
+                            "id": "inp_out",
+                            "type": "output",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        }
+                    ],
+                    "numInputs": 0,
+                    "numOutputs": 1,
+                    "bias": 0,
+                    "hasBias": False,
+                    "dataShape": "(200, 5)",
+                },
+                {
+                    "id": "split",
+                    "type": "train-test",
+                    "x": 100,
+                    "y": 100,
+                    "inputPorts": [
+                        {
+                            "id": "split_in",
+                            "type": "input",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "split_train",
+                            "type": "output",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        },
+                        {
+                            "id": "split_test",
+                            "type": "output",
+                            "index": 1,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        },
+                    ],
+                    "numInputs": 1,
+                    "numOutputs": 2,
+                    "trainRatio": 0.7,
+                    "randomSeed": 42,
+                },
+            ],
+            "links": [{"from": "inp_out", "to": "split_in", "weight": 1}],
+            "ports": [],
+            "nodeCounter": 2,
+        }
+        graph = parse_graph(json_data)
+        train_port = graph.ports["split_train"]
+        test_port = graph.ports["split_test"]
+        self.assertIsNotNone(train_port.shape)
+        self.assertIsNotNone(test_port.shape)
+        self.assertEqual(int(train_port.shape.shape[0]), 140)  # floor(200 * 0.7)
+        self.assertEqual(int(test_port.shape.shape[0]), 60)  # 200 - 140
+        self.assertEqual(train_port.shape.shape[1], 5)
+
+    def test_output_node_argmax_shape(self):
+        json_data = {
+            "nodes": [
+                {
+                    "id": "inp",
+                    "type": "input-data",
+                    "x": 0,
+                    "y": 0,
+                    "inputPorts": [],
+                    "outputPorts": [
+                        {
+                            "id": "inp_out",
+                            "type": "output",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        }
+                    ],
+                    "dataShape": "(50, 10)",
+                },
+                {
+                    "id": "out",
+                    "type": "output",
+                    "x": 100,
+                    "y": 100,
+                    "inputPorts": [
+                        {
+                            "id": "out_in",
+                            "type": "input",
+                            "index": 0,
+                            "activationPhases": ["training"],
+                            "portKind": "data",
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "loss",
+                            "type": "output",
+                            "index": 0,
+                            "role": "loss",
+                            "activationPhases": ["training"],
+                            "portKind": "role",
+                        },
+                        {
+                            "id": "pred",
+                            "type": "output",
+                            "index": 1,
+                            "role": "prediction",
+                            "activationPhases": ["evaluation"],
+                            "portKind": "role",
+                        },
+                    ],
+                    "numInputs": 1,
+                    "numOutputs": 2,
+                    "outputActivations": {"prediction": "argmax", "loss": "none"},
+                },
+            ],
+            "links": [{"from": "inp_out", "to": "out_in", "weight": 1}],
+            "ports": [],
+            "nodeCounter": 2,
+        }
+        graph = parse_graph(json_data)
+        loss_shape = graph.ports["loss"].shape
+        pred_shape = graph.ports["pred"].shape
+        self.assertEqual(len(loss_shape.shape), 2)
+        self.assertEqual(int(loss_shape.shape[1]), 10)
+        self.assertEqual(len(pred_shape.shape), 1)  # argmax → 1D
+        self.assertEqual(int(pred_shape.shape[0]), 50)
+
+    def test_onehot_shape(self):
+        json_data = {
+            "nodes": [
+                {
+                    "id": "inp",
+                    "type": "input-data",
+                    "x": 0,
+                    "y": 0,
+                    "inputPorts": [],
+                    "outputPorts": [
+                        {
+                            "id": "inp_out",
+                            "type": "output",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        }
+                    ],
+                    "dataShape": "(100, 1)",
+                },
+                {
+                    "id": "oh",
+                    "type": "onehot",
+                    "x": 100,
+                    "y": 100,
+                    "inputPorts": [
+                        {
+                            "id": "oh_in",
+                            "type": "input",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        }
+                    ],
+                    "outputPorts": [
+                        {
+                            "id": "oh_out",
+                            "type": "output",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        }
+                    ],
+                    "numInputs": 1,
+                    "numOutputs": 1,
+                    "numClasses": 5,
+                },
+            ],
+            "links": [{"from": "inp_out", "to": "oh_in", "weight": 1}],
+            "ports": [],
+            "nodeCounter": 2,
+        }
+        graph = parse_graph(json_data)
+        oh_shape = graph.ports["oh_out"].shape
+        self.assertEqual(len(oh_shape.shape), 2)
+        self.assertEqual(int(oh_shape.shape[0]), 100)
+        self.assertEqual(int(oh_shape.shape[1]), 5)
+
+    def test_unknown_shape_handled(self):
+        json_data = {
+            "nodes": [
+                {
+                    "id": "inp",
+                    "type": "input-data",
+                    "x": 0,
+                    "y": 0,
+                    "inputPorts": [],
+                    "outputPorts": [
+                        {
+                            "id": "inp_out",
+                            "type": "output",
+                            "index": 0,
+                            "activationPhases": ["preprocessing"],
+                            "portKind": "data",
+                        }
+                    ],
+                    "dataShape": None,
+                },
+            ],
             "links": [],
+            "ports": [],
             "nodeCounter": 1,
         }
-        graph = parse_graph(g)
-        node = graph.nodes["n1"]
-        # Both ports should have been set to ["training", "evaluation"] by default
-        self.assertEqual(node.inputs[0].activation_phases, ["training", "evaluation"])
-        self.assertEqual(node.outputs[0].activation_phases, ["training", "evaluation"])
+        graph = parse_graph(json_data)
+        self.assertEqual(graph.ports["inp_out"].shape.shape, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
