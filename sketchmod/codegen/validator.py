@@ -33,6 +33,7 @@ class GraphValidator:
         self._check_accuracy_inputs(warnings)
         self._check_visualization_shapes(warnings)
         self._check_accuracy_label_reshape(warnings)
+        self._check_reshape_feasibility(warnings)
 
         return {
             "errors": errors,
@@ -314,3 +315,59 @@ class GraphValidator:
                                 }
                             )
                     break
+
+    def _check_reshape_feasibility(self, warnings):
+        import sympy
+
+        for node in self.graph.nodes.values():
+            if node.type != "reshape":
+                continue
+            inp = None
+            for port in node.inputs:
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src_port = self.graph.ports[link.id_from]
+                        inp = src_port.shape
+                        break
+                if inp:
+                    break
+            if not inp or not inp.shape:
+                continue
+            target_str = node.properties.get("targetShape", "")
+            parts = [x.strip() for x in target_str.strip("()").split(",") if x.strip()]
+            infer_count = sum(1 for p in parts if p == "-1")
+            if infer_count > 1:
+                warnings.append(
+                    {
+                        "message": f"Reshape node '{node.id}' has multiple -1 dimensions – PyTorch cannot infer.",
+                        "nodeId": node.id,
+                    }
+                )
+                continue
+            total_inp = sympy.Integer(1)
+            for d in inp.shape:
+                total_inp = total_inp * d._value
+            total_target = sympy.Integer(1)
+            for p in parts:
+                if p == "-1":
+                    continue
+                try:
+                    total_target = total_target * int(p)
+                except ValueError:
+                    pass  # symbolic, can't verify
+            if infer_count == 0:
+                if total_target != total_inp:
+                    warnings.append(
+                        {
+                            "message": f"Reshape node '{node.id}' total elements mismatch ({total_inp} vs {total_target}).",
+                            "nodeId": node.id,
+                        }
+                    )
+            else:
+                if total_inp % total_target != 0:
+                    warnings.append(
+                        {
+                            "message": f"Reshape node '{node.id}' cannot infer dimension – {total_inp} not divisible by {total_target}.",
+                            "nodeId": node.id,
+                        }
+                    )
