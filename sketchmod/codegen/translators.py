@@ -942,6 +942,39 @@ class AccuracyTranslator(BaseTranslator):
             w.line("print(cm)")
 
 
+class ReshapeTranslator(BaseTranslator):
+    node_type = "reshape"
+
+    def generate(self, w, phase, placement, is_first=False):
+        n = self.node
+        sid = _sanitize(n.id)
+        target_str = n.properties.get("targetShape", "(batch, -1)")
+        parts = [x.strip() for x in target_str.strip("()").split(",") if x.strip()]
+        tuple_parts = []
+        for p in parts:
+            if p == "-1":
+                tuple_parts.append("-1")
+            else:
+                try:
+                    int(p)
+                    tuple_parts.append(p)
+                except ValueError:
+                    # assume symbolic name, can't be used directly – treat as -1
+                    tuple_parts.append("-1")
+        target_tuple = "(" + ", ".join(tuple_parts) + ")"
+
+        if placement == "data":
+            in_var = self._in_var()
+            out_var = f"{sid}_out"
+            w.line(f"{out_var} = {in_var}.reshape({target_tuple})")
+            self._store_output(out_var)
+        elif placement == "forward":
+            in_expr = self._in_var_forward()
+            w.line(f"x = {in_expr}")
+            w.line(f"x = x.reshape({target_tuple})")
+            w.line(f"outputs['{n.id}'] = x")
+
+
 # ============================================================
 #  REGISTRY
 # ============================================================
@@ -967,6 +1000,7 @@ TRANSLATOR_REGISTRY = {
     "visualization": VisualizationTranslator,
     "print": PrintTranslator,
     "accuracy": AccuracyTranslator,
+    "reshape": ReshapeTranslator,
 }
 
 
