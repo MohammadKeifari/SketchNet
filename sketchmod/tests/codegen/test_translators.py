@@ -1,1975 +1,640 @@
-from django.test import SimpleTestCase
-from sketchmod.codegen.graph import parse_graph
+"""
+Comprehensive tests for every translator in translators.py.
+Covers data, init, and forward placements.
+"""
+
+import unittest
+from sketchmod.codegen.graph import Graph, Node, Port, Link
 from sketchmod.codegen.writer import CodeWriter
 from sketchmod.codegen.translators import get_translator
 
 
-class BaseGraphMixin:
-    """Helper to create a minimal graph with a single node of given type."""
+class BaseTranslatorTest(unittest.TestCase):
+    """Common helpers for building test graphs and running translators."""
 
-    def _make_graph(self, node_dict, links=None):
-        """Build a minimal graph fixture for translator tests."""
-        return {"nodes": [node_dict], "links": links or [], "nodeCounter": 1}
+    @staticmethod
+    def _make_port(
+        port_id,
+        node_id,
+        port_type,
+        index,
+        activation_phases=None,
+        port_kind="data",
+        role=None,
+        sub_type=None,
+        shape=None,
+    ):
+        return Port(
+            id=port_id,
+            node_id=node_id,
+            type=port_type,
+            index=index,
+            activation_phases=activation_phases or [],
+            port_kind=port_kind,
+            role=role,
+            sub_type=sub_type,
+            shape=shape,
+        )
 
-    def _get_translator(self, node_dict, links=None):
-        """Instantiate the translator for a node type."""
-        graph = parse_graph(self._make_graph(node_dict, links))
-        node = graph.nodes[node_dict["id"]]
-        var_map = {}
-        return get_translator(node, graph, var_map), var_map
+    def _graph_with_nodes(self, node_list, link_list):
+        graph = Graph()
+        for n in node_list:
+            graph.nodes[n.id] = n
+            for p in n.inputs + n.outputs + n.paramInputs + n.paramOutputs:
+                graph.ports[p.id] = p
+        graph.links = link_list
+        return graph
 
-
-class InputDataTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_data_code_manual_shape(self):
-        """Verify data code manual shape."""
-        node = {
-            "id": "input-main",
-            "type": "input-data",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [],
-            "outputPorts": [
-                {
-                    "id": "input-main_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                }
-            ],
-            "numInputs": 0,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "datasetId": None,
-            "datasetName": None,
-            "dataShape": "(200, 10)",
-        }
-        t, var_map = self._get_translator(node)
+    def _run_translator(
+        self,
+        node,
+        graph,
+        var_map=None,
+        phase="preprocessing",
+        placement="data",
+        is_first=False,
+    ):
+        if var_map is None:
+            var_map = {}
         w = CodeWriter()
-        t.data_code(w, "pre")
-        code = str(w)
+        t = get_translator(node, graph, var_map)
+        t.generate(w, phase, placement, is_first=is_first)
+        return str(w), var_map
+
+
+# ----------------------------------------------------------------
+# InputData
+# ----------------------------------------------------------------
+class InputDataTranslatorTest(BaseTranslatorTest):
+    def test_random_data_fallback(self):
+        node = Node(id="inp", type="input-data")
+        node.outputs = [
+            self._make_port("inp_out", "inp", "output", 0, ["preprocessing"])
+        ]
+        graph = self._graph_with_nodes([node], [])
+        code, vm = self._run_translator(node, graph)
         self.assertIn("raw_data = torch.randn(200, 10)", code)
-        self.assertIn("raw_data", var_map.get("input-main", ""))
+        self.assertEqual(vm["inp"], "raw_data")
 
-    def test_data_code_no_shape(self):
-        """Verify data code no shape."""
-        node = {
-            "id": "input-main",
-            "type": "input-data",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [],
-            "outputPorts": [
-                {
-                    "id": "input-main_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                }
-            ],
-            "numInputs": 0,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "datasetId": None,
-            "datasetName": None,
-            "dataShape": None,
+    def test_manual_shape(self):
+        node = Node(id="inp", type="input-data", properties={"dataShape": "(64, 3)"})
+        node.outputs = [
+            self._make_port("inp_out", "inp", "output", 0, ["preprocessing"])
+        ]
+        graph = self._graph_with_nodes([node], [])
+        code, vm = self._run_translator(node, graph)
+        self.assertIn("raw_data = torch.randn(64, 3)", code)
+
+    def test_csv_dataset(self):
+        node = Node(
+            id="inp",
+            type="input-data",
+            properties={
+                "datasetId": "ds1",
+                "datasetFile": "data.csv",
+                "datasetFormat": "csv",
+            },
+        )
+        node.outputs = [
+            self._make_port("inp_out", "inp", "output", 0, ["preprocessing"])
+        ]
+        graph = self._graph_with_nodes([node], [])
+        code, vm = self._run_translator(node, graph)
+        self.assertIn("pd.read_csv('data/data.csv')", code)
+
+
+# ----------------------------------------------------------------
+# ColumnSelect
+# ----------------------------------------------------------------
+class ColumnSelectTranslatorTest(BaseTranslatorTest):
+    def test_data_with_selected_columns(self):
+        node = Node(
+            id="col", type="column-select", properties={"selectedColumns": [0, 1]}
+        )
+        node.inputs = [self._make_port("col_in", "col", "input", 0, ["preprocessing"])]
+        node.outputs = [
+            self._make_port("col_out", "col", "output", 0, ["preprocessing"])
+        ]
+        src = Node(id="src", type="input-data")
+        src.outputs = [
+            self._make_port("src_out", "src", "output", 0, ["preprocessing"])
+        ]
+        links = [Link(id_from="src_out", id_to="col_in")]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(
+            node, graph, var_map={"src": "raw_data", "src_out": "raw_data"}
+        )
+        self.assertIn("col_out = raw_data[:, [0, 1]]", code)
+        self.assertEqual(vm["col"], "col_out")
+
+    def test_forward_placement(self):
+        node = Node(id="col", type="column-select", properties={"selectedColumns": [0]})
+        node.inputs = [self._make_port("col_in", "col", "input", 0, ["training"])]
+        node.outputs = [self._make_port("col_out", "col", "output", 0, ["training"])]
+        src = Node(id="src", type="layer")
+        src.outputs = [self._make_port("src_out", "src", "output", 0, ["training"])]
+        links = [Link(id_from="src_out", id_to="col_in")]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(node, graph, placement="forward")
+        self.assertIn("x = outputs.get('src', inputs_dict.get('src'))", code)
+        self.assertIn("x = x[:, [0]]", code)
+        self.assertIn("outputs['col'] = x", code)
+
+
+# ----------------------------------------------------------------
+# RowSelect
+# ----------------------------------------------------------------
+class RowSelectTranslatorTest(BaseTranslatorTest):
+    def _row_node(self, method, value="100", seed=42):
+        return Node(
+            id="row",
+            type="row-select",
+            properties={"method": method, "value": value, "randomSeed": seed},
+        )
+
+    def _row_graph(self):
+        node = self._row_node("first-n")
+        node.inputs = [self._make_port("row_in", "row", "input", 0, ["preprocessing"])]
+        node.outputs = [
+            self._make_port("row_out", "row", "output", 0, ["preprocessing"])
+        ]
+        src = Node(id="src", type="input-data")
+        src.outputs = [
+            self._make_port("src_out", "src", "output", 0, ["preprocessing"])
+        ]
+        links = [Link(id_from="src_out", id_to="row_in")]
+        graph = self._graph_with_nodes([node, src], links)
+        return node, graph
+
+    def test_first_n(self):
+        node, graph = self._row_graph()
+        code, vm = self._run_translator(
+            node, graph, var_map={"src": "data", "src_out": "data"}
+        )
+        self.assertIn("row_out = data[:100]", code)
+
+    def test_random(self):
+        node = self._row_node("random")
+        node.inputs = [self._make_port("row_in", "row", "input", 0, ["preprocessing"])]
+        node.outputs = [
+            self._make_port("row_out", "row", "output", 0, ["preprocessing"])
+        ]
+        src = Node(id="src", type="input-data")
+        src.outputs = [
+            self._make_port("src_out", "src", "output", 0, ["preprocessing"])
+        ]
+        links = [Link(id_from="src_out", id_to="row_in")]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(
+            node, graph, var_map={"src": "data", "src_out": "data"}
+        )
+        self.assertIn("perm = torch.randperm(data.size(0)", code)
+        self.assertIn("row_out = data[perm[:100]]", code)
+
+
+# ----------------------------------------------------------------
+# Normalize
+# ----------------------------------------------------------------
+class NormalizeTranslatorTest(BaseTranslatorTest):
+    def test_standard_no_param(self):
+        node = Node(id="norm", type="normalize", properties={"method": "standard"})
+        node.inputs = [
+            self._make_port("norm_in", "norm", "input", 0, ["preprocessing"])
+        ]
+        node.outputs = [
+            self._make_port("norm_out", "norm", "output", 0, ["preprocessing"])
+        ]
+        src = Node(id="src", type="input-data")
+        src.outputs = [
+            self._make_port("src_out", "src", "output", 0, ["preprocessing"])
+        ]
+        links = [Link(id_from="src_out", id_to="norm_in")]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(
+            node, graph, var_map={"src": "X", "src_out": "X"}
+        )
+        self.assertIn("mean = X.mean(dim=0, keepdim=True)", code)
+        self.assertIn("(X - mean) / std", code)
+
+    def test_param_sharing(self):
+        node = Node(id="norm2", type="normalize", properties={"method": "standard"})
+        node.inputs = [
+            self._make_port("norm2_in", "norm2", "input", 0, ["preprocessing"])
+        ]
+        node.outputs = [
+            self._make_port("norm2_out", "norm2", "output", 0, ["preprocessing"])
+        ]
+        node.paramInputs = [
+            self._make_port(
+                "norm2_pin", "norm2", "input", 0, ["preprocessing"], port_kind="param"
+            )
+        ]
+        src = Node(id="src", type="input-data")
+        src.outputs = [
+            self._make_port("src_out", "src", "output", 0, ["preprocessing"])
+        ]
+        links = [Link(id_from="src_out", id_to="norm2_in")]
+        # Simulate a param link from a previous normalizer
+        param_src = Node(id="norm1", type="normalize")
+        param_src.paramOutputs = [
+            self._make_port(
+                "norm1_pout", "norm1", "output", 0, ["preprocessing"], port_kind="param"
+            )
+        ]
+        links.append(Link(id_from="norm1_pout", id_to="norm2_pin"))
+        graph = self._graph_with_nodes([node, src, param_src], links)
+        var_map = {
+            "src": "X",
+            "src_out": "X",
+            "norm1_pout_mean": "m",
+            "norm1_pout_std": "s",
         }
-        t, var_map = self._get_translator(node)
-        w = CodeWriter()
-        t.data_code(w, "pre")
-        code = str(w)
-        self.assertIn("raw_data = torch.randn(200, 10)", code)
+        code, vm = self._run_translator(node, graph, var_map=var_map)
+        self.assertIn("(X - m) / (s + 1e-8)", code)
 
 
-class ColumnSelectTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_data_code_with_columns(self):
-        """Verify data code with columns."""
-        node = {
-            "id": "c1",
-            "type": "column-select",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "c1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "c1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "selectedColumns": [0, 2],
-            "columnInput": "0,2",
-            "availableColumns": [],
-            "columnCount": 0,
-            "datasetId": None,
-        }
-        # Need a source node to connect to input
-        graph = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["preprocessing"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "c1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph)
-        var_map = {"src": "raw_data"}
-        t = get_translator(g.nodes["c1"], g, var_map)
-        w = CodeWriter()
-        t.data_code(w, "pre")
-        code = str(w)
-        self.assertIn("[:, [0, 2]]", code)
-
-
-class NormalizeTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_data_code_standard(self):
-        """Verify data code standard."""
-        node = {
-            "id": "n1",
-            "type": "normalize",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "n1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "n1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "method": "standard",
-        }
-        graph = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["preprocessing"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "n1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph)
-        var_map = {"src": "raw_data"}
-        t = get_translator(g.nodes["n1"], g, var_map)
-        w = CodeWriter()
-        t.data_code(w, "pre")
-        code = str(w)
-        self.assertIn("mean =", code)
-        self.assertIn("std =", code)
-
-
-class OneHotTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_data_code(self):
-        """Verify data code."""
-        node = {
-            "id": "o1",
-            "type": "onehot",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "o1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "o1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "numClasses": 5,
-        }
-        graph = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["preprocessing"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "o1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph)
-        var_map = {"src": "raw_data"}
-        t = get_translator(g.nodes["o1"], g, var_map)
-        w = CodeWriter()
-        t.data_code(w, "pre")
-        code = str(w)
-        self.assertIn("one_hot", code)
-        self.assertIn("num_classes=5", code)
-        self.assertIn("squeeze", code)
-
-
-class DeOneHotTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_data_code(self):
-        """Verify data code."""
-        node = {
-            "id": "d1",
-            "type": "deonehot",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "d1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["evaluation"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "d1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["evaluation"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "numClasses": 5,
-        }
-        graph = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["evaluation"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "d1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph)
-        var_map = {"src": "predictions"}
-        t = get_translator(g.nodes["d1"], g, var_map)
-        w = CodeWriter()
-        t.data_code(w, "eval")
-        code = str(w)
-        self.assertIn("argmax", code)
-
-
-class TrainTestSplitTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_data_code(self):
-        """Verify data code."""
-        node = {
-            "id": "t1",
-            "type": "train-test",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "t1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "t1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": "train",
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                },
-                {
-                    "id": "t1_output_1",
-                    "type": "output",
-                    "index": 1,
-                    "subType": "test",
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["preprocessing"],
-                },
-            ],
-            "numInputs": 1,
-            "numOutputs": 2,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "trainRatio": 0.7,
-            "testRatio": 0.3,
-            "randomSeed": 42,
-        }
-        graph = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["preprocessing"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "t1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph)
-        var_map = {"src": "raw_data"}
-        t = get_translator(g.nodes["t1"], g, var_map)
-        w = CodeWriter()
-        t.data_code(w, "pre")
-        code = str(w)
-        self.assertIn("train_size", code)
-        self.assertIn("train_data", code)
-        self.assertIn("test_data", code)
-
-
-class LayerTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def setUp(self):
-        """Set up test fixtures."""
-        self.node = {
-            "id": "l1",
-            "type": "layer",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "l1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "multi",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "l1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": True,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "activation": "relu",
-            "numNeurons": 64,
-        }
-        graph_data = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                self.node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "l1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": True,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        self.graph = parse_graph(graph_data)
-        self.var_map = {"src": "data"}
-
+# ----------------------------------------------------------------
+# Neuron / Layer
+# ----------------------------------------------------------------
+class NeuronTranslatorTest(BaseTranslatorTest):
     def test_init_code(self):
-        """Verify init code."""
-        node = self.graph.nodes["l1"]
-        t = get_translator(node, self.graph, self.var_map)
-        w = CodeWriter()
-        t.init_code(w)
-        code = str(w)
-        self.assertIn("nn.Linear", code)
-        self.assertIn("64", code)
+        node = Node(id="n", type="neuron", properties={"activation": "relu"})
+        node.inputs = [self._make_port("n_in", "n", "input", 0, ["training"])]
+        # Need weight_shape on link for _guess_in_features
+        src = Node(id="src", type="input-data")
+        src.outputs = [self._make_port("src_out", "src", "output", 0, ["training"])]
+        links = [
+            Link(
+                id_from="src_out",
+                id_to="n_in",
+                weight_shape={"shape": [1, 3], "dtype": "float32"},
+                has_weight=True,
+            )
+        ]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(node, graph, placement="init")
+        self.assertIn("self.fc_n = nn.Linear(3, 1)", code)
 
-    def test_forward_code(self):
-        """Verify forward code."""
-        node = self.graph.nodes["l1"]
-        t = get_translator(node, self.graph, self.var_map)
-        w = CodeWriter()
-        t.forward_code(w)
-        code = str(w)
-        self.assertIn("inputs_dict", code)
-        self.assertIn("outputs", code)
-        self.assertIn("relu", code)
+    def test_forward_first_with_multi_source(self):
+        node = Node(id="n", type="neuron", properties={"activation": "relu"})
+        node.inputs = [
+            self._make_port("n_in", "n", "input", 0, ["training", "evaluation"])
+        ]
+        src1 = Node(id="src1", type="normalize")
+        src2 = Node(id="src2", type="normalize")
+        src1.outputs = [self._make_port("s1_out", "src1", "output", 0, ["training"])]
+        src2.outputs = [self._make_port("s2_out", "src2", "output", 0, ["evaluation"])]
+        links = [
+            Link(id_from="s1_out", id_to="n_in"),
+            Link(id_from="s2_out", id_to="n_in"),
+        ]
+        graph = self._graph_with_nodes([node, src1, src2], links)
+        code, vm = self._run_translator(node, graph, placement="forward", is_first=True)
+        self.assertIn("inputs_dict.get('src1', inputs_dict.get('src2'))", code)
+        self.assertIn("x = torch.relu(x)", code)
 
-
-class NeuronTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_init_code(self):
-        """Verify init code."""
-        node = {
-            "id": "n1",
-            "type": "neuron",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "n1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "multi",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "n1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": True,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "activation": "sigmoid",
-        }
-        graph_data = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "n1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": True,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph_data)
-        var_map = {"src": "data"}
-        t = get_translator(g.nodes["n1"], g, var_map)
-        w = CodeWriter()
-        t.init_code(w)
-        code = str(w)
-        self.assertIn("nn.Linear", code)
-        self.assertIn("1,", code)  # output size 1
-
-    def test_forward_code(self):
-        """Verify forward code."""
-        node = {
-            "id": "n1",
-            "type": "neuron",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "n1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "multi",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "n1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": True,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "activation": "tanh",
-        }
-        graph_data = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "n1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": True,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph_data)
-        var_map = {"src": "data"}
-        t = get_translator(g.nodes["n1"], g, var_map)
-        w = CodeWriter()
-        t.forward_code(w)
-        code = str(w)
-        self.assertIn("tanh", code)
+    def test_forward_not_first(self):
+        node = Node(id="n", type="neuron", properties={"activation": "sigmoid"})
+        node.inputs = [self._make_port("n_in", "n", "input", 0, ["training"])]
+        prev = Node(id="prev", type="layer")
+        prev.outputs = [self._make_port("prev_out", "prev", "output", 0, ["training"])]
+        links = [Link(id_from="prev_out", id_to="n_in")]
+        graph = self._graph_with_nodes([node, prev], links)
+        code, vm = self._run_translator(
+            node, graph, placement="forward", is_first=False
+        )
+        self.assertIn("outputs.get('prev'", code)
+        self.assertIn("torch.sigmoid(x)", code)
 
 
-class FlattenTranslatorTest(SimpleTestCase, BaseGraphMixin):
+class LayerTranslatorTest(BaseTranslatorTest):
+    def test_init_with_num_neurons(self):
+        node = Node(id="l", type="layer", properties={"numNeurons": 64})
+        node.inputs = [self._make_port("l_in", "l", "input", 0, ["training"])]
+        src = Node(id="src", type="input-data")
+        src.outputs = [self._make_port("src_out", "src", "output", 0, ["training"])]
+        links = [
+            Link(
+                id_from="src_out",
+                id_to="l_in",
+                weight_shape={"shape": [64, 8], "dtype": "float32"},
+                has_weight=True,
+            )
+        ]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(node, graph, placement="init")
+        self.assertIn("self.fc_l = nn.Linear(8, 64)", code)
+
+
+# ----------------------------------------------------------------
+# Conv2D
+# ----------------------------------------------------------------
+class Conv2DTranslatorTest(BaseTranslatorTest):
+    def test_init(self):
+        node = Node(
+            id="conv",
+            type="conv2d",
+            properties={"filters": 32, "kernelSize": 3, "stride": 1, "padding": 0},
+        )
+        node.inputs = [self._make_port("conv_in", "conv", "input", 0, ["training"])]
+        # Provide a source with shape so guess_in_channels works
+        src = Node(id="src", type="input-data")
+        src.outputs = [
+            self._make_port(
+                "src_out",
+                "src",
+                "output",
+                0,
+                ["training"],
+                shape=type(
+                    "Shape", (), {"shape": [None, 3, 32, 32], "dtype": "float32"}
+                )(),
+            )
+        ]
+        links = [Link(id_from="src_out", id_to="conv_in")]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(node, graph, placement="init")
+        self.assertIn(
+            "self.conv_conv = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=0, bias=True)",
+            code,
+        )
+
+
+# ----------------------------------------------------------------
+# Flatten / Dropout / BatchNorm
+# ----------------------------------------------------------------
+class FlattenTranslatorTest(BaseTranslatorTest):
+    def test_data_squeeze(self):
+        node = Node(id="flat", type="flatten")
+        node.inputs = [
+            self._make_port("flat_in", "flat", "input", 0, ["preprocessing"])
+        ]
+        node.outputs = [
+            self._make_port("flat_out", "flat", "output", 0, ["preprocessing"])
+        ]
+        src = Node(id="src", type="input-data")
+        src.outputs = [
+            self._make_port("src_out", "src", "output", 0, ["preprocessing"])
+        ]
+        links = [Link(id_from="src_out", id_to="flat_in")]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(
+            node, graph, var_map={"src": "t", "src_out": "t"}
+        )
+        self.assertIn("if t.dim() == 2 and t.size(-1) == 1:", code)
+
+
+class DropoutTranslatorTest(BaseTranslatorTest):
     def test_init_and_forward(self):
-        """Verify init and forward."""
-        node = {
-            "id": "f1",
-            "type": "flatten",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "f1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "f1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-        }
-        graph_data = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "f1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph_data)
-        var_map = {"src": "data"}
-        t = get_translator(g.nodes["f1"], g, var_map)
-        w = CodeWriter()
-        t.init_code(w)
-        self.assertIn("Flatten", str(w))
-        w2 = CodeWriter()
-        t.forward_code(w2)
-        self.assertIn("flatten", str(w2))
+        node = Node(id="drop", type="dropout", properties={"rate": 0.5})
+        node.inputs = [self._make_port("drop_in", "drop", "input", 0, ["training"])]
+        node.outputs = [self._make_port("drop_out", "drop", "output", 0, ["training"])]
+        prev = Node(id="prev", type="layer")
+        prev.outputs = [self._make_port("prev_out", "prev", "output", 0, ["training"])]
+        links = [Link(id_from="prev_out", id_to="drop_in")]
+        graph = self._graph_with_nodes([node, prev], links)
+        code_init, _ = self._run_translator(node, graph, placement="init")
+        self.assertIn("self.dropout_drop = nn.Dropout(p=0.5)", code_init)
+        code_fwd, _ = self._run_translator(node, graph, placement="forward")
+        self.assertIn("self.dropout_drop(x)", code_fwd)
 
 
-class DropoutTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_init_code(self):
-        """Verify init code."""
-        node = {
-            "id": "d1",
-            "type": "dropout",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "d1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
+class BatchNormTranslatorTest(BaseTranslatorTest):
+    def test_init_guess_features(self):
+        node = Node(id="bn", type="batchnorm")
+        node.inputs = [self._make_port("bn_in", "bn", "input", 0, ["training"])]
+        # Provide a predecessor layer to guess num features
+        prev = Node(id="prev", type="layer", properties={"numNeurons": 128})
+        prev.outputs = [self._make_port("prev_out", "prev", "output", 0, ["training"])]
+        links = [Link(id_from="prev_out", id_to="bn_in")]
+        graph = self._graph_with_nodes([node, prev], links)
+        code, vm = self._run_translator(node, graph, placement="init")
+        self.assertIn("self.bn_bn = nn.BatchNorm1d(num_features=128)", code)
+
+
+# ----------------------------------------------------------------
+# Add / Concat
+# ----------------------------------------------------------------
+class AddTranslatorTest(BaseTranslatorTest):
+    def test_two_inputs(self):
+        node = Node(id="add", type="add")
+        node.inputs = [self._make_port("add_in", "add", "input", 0, ["training"])]
+        node.outputs = [self._make_port("add_out", "add", "output", 0, ["training"])]
+        a = Node(id="a", type="layer")
+        a.outputs = [self._make_port("a_out", "a", "output", 0, ["training"])]
+        b = Node(id="b", type="layer")
+        b.outputs = [self._make_port("b_out", "b", "output", 0, ["training"])]
+        links = [
+            Link(id_from="a_out", id_to="add_in"),
+            Link(id_from="b_out", id_to="add_in"),
+        ]
+        graph = self._graph_with_nodes([node, a, b], links)
+        code, vm = self._run_translator(node, graph, placement="forward")
+        self.assertIn("a = outputs.get('a'", code)
+        self.assertIn("b = outputs.get('b'", code)
+        self.assertIn("x = a + b", code)
+
+
+class ConcatTranslatorTest(BaseTranslatorTest):
+    def test_multi_input_concat(self):
+        node = Node(id="cat", type="concat", properties={"axis": -1})
+        node.inputs = [self._make_port("cat_in", "cat", "input", 0, ["training"])]
+        node.outputs = [self._make_port("cat_out", "cat", "output", 0, ["training"])]
+        a = Node(id="a", type="layer")
+        a.outputs = [self._make_port("a_out", "a", "output", 0, ["training"])]
+        b = Node(id="b", type="layer")
+        b.outputs = [self._make_port("b_out", "b", "output", 0, ["training"])]
+        links = [
+            Link(id_from="a_out", id_to="cat_in"),
+            Link(id_from="b_out", id_to="cat_in"),
+        ]
+        graph = self._graph_with_nodes([node, a, b], links)
+        code, vm = self._run_translator(node, graph, placement="forward")
+        self.assertIn("torch.cat(tensors, dim=-1)", code)
+
+
+# ----------------------------------------------------------------
+# Output
+# ----------------------------------------------------------------
+class OutputTranslatorTest(BaseTranslatorTest):
+    def test_per_port_activations(self):
+        node = Node(
+            id="out",
+            type="output",
+            properties={
+                "outputActivations": {
+                    "loss": "none",
+                    "prediction": "softmax",
+                    "evaluation": "argmax",
                 }
-            ],
-            "outputPorts": [
-                {
-                    "id": "d1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "rate": 0.3,
-        }
-        graph_data = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "d1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph_data)
-        var_map = {"src": "data"}
-        t = get_translator(g.nodes["d1"], g, var_map)
+            },
+        )
+        node.inputs = [self._make_port("out_in", "out", "input", 0, ["training"])]
+        node.outputs = [
+            self._make_port("loss_p", "out", "output", 0, ["training"], role="loss"),
+            self._make_port(
+                "pred_p", "out", "output", 1, ["evaluation"], role="prediction"
+            ),
+            self._make_port(
+                "eval_p", "out", "output", 2, ["evaluation"], role="evaluation"
+            ),
+        ]
+        src = Node(id="src", type="layer")
+        src.outputs = [self._make_port("src_out", "src", "output", 0, ["training"])]
+        links = [Link(id_from="src_out", id_to="out_in")]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(node, graph, placement="forward")
+        self.assertIn("outputs['loss_p'] = x", code)
+        self.assertIn("torch.softmax(x, dim=-1)", code)
+        self.assertIn("torch.argmax(x, dim=-1)", code)
+
+
+# ----------------------------------------------------------------
+# Optimizer
+# ----------------------------------------------------------------
+class OptimizerTranslatorTest(BaseTranslatorTest):
+    def test_emit_training_setup_adam_mse(self):
+        node = Node(
+            id="opt",
+            type="optimizer",
+            properties={
+                "lossType": "mse",
+                "optimizerType": "adam",
+                "learningRate": 0.01,
+            },
+        )
         w = CodeWriter()
-        t.init_code(w)
+        t = get_translator(node, Graph(), {})
+        t.emit_training_setup(w)
         code = str(w)
-        self.assertIn("Dropout", code)
-        self.assertIn("0.3", code)
+        self.assertIn("criterion = nn.MSELoss()", code)
+        self.assertIn("optimizer = optim.Adam(model.parameters(), lr=0.01", code)
 
-
-class BatchNormTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_init_code(self):
-        """Verify init code."""
-        node = {
-            "id": "b1",
-            "type": "batchnorm",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "b1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "b1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "eps": 0.001,
-            "momentum": 0.1,
-        }
-        graph_data = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "b1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph_data)
-        var_map = {"src": "data"}
-        t = get_translator(g.nodes["b1"], g, var_map)
+    def test_crossentropy_cast_long(self):
+        node = Node(
+            id="opt",
+            type="optimizer",
+            properties={
+                "lossType": "cross_entropy",
+                "optimizerType": "sgd",
+                "learningRate": 0.1,
+            },
+        )
         w = CodeWriter()
-        t.init_code(w)
+        t = get_translator(node, Graph(), {})
+        t.emit_training_setup(w)
         code = str(w)
-        self.assertIn("BatchNorm1d", code)
+        self.assertIn("criterion = nn.CrossEntropyLoss()", code)
+        self.assertIn("labels = labels.long()", code)
 
 
-class AddTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_forward_code(self):
-        """Verify forward code."""
-        node = {
-            "id": "a1",
-            "type": "add",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "a1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": "main",
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "multi",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "a1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-        }
-        graph_data = {
-            "nodes": [
-                {
-                    "id": "s1",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "s1_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                {
-                    "id": "s2",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "s2_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "s1_output_0",
-                    "to": "a1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                },
-                {
-                    "from": "s2_output_0",
-                    "to": "a1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                },
-            ],
-            "nodeCounter": 3,
-        }
-        g = parse_graph(graph_data)
-        var_map = {"s1": "x", "s2": "y"}
-        t = get_translator(g.nodes["a1"], g, var_map)
-        w = CodeWriter()
-        t.forward_code(w)
-        code = str(w)
-        self.assertIn("a + b", code)
-
-
-class ConcatTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_forward_code(self):
-        """Verify forward code."""
-        node = {
-            "id": "c1",
-            "type": "concat",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "c1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "multi",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "c1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "axis": 1,
-        }
-        graph_data = {
-            "nodes": [
-                {
-                    "id": "s1",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "s1_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                {
-                    "id": "s2",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "s2_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "s1_output_0",
-                    "to": "c1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                },
-                {
-                    "from": "s2_output_0",
-                    "to": "c1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                },
-            ],
-            "nodeCounter": 3,
-        }
-        g = parse_graph(graph_data)
-        var_map = {"s1": "x", "s2": "y"}
-        t = get_translator(g.nodes["c1"], g, var_map)
-        w = CodeWriter()
-        t.forward_code(w)
-        code = str(w)
-        self.assertIn("torch.cat", code)
-
-
-class OutputTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_forward_code(self):
-        """Verify forward code."""
-        node = {
-            "id": "output-main",
-            "type": "output",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "output-main_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": "train",
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "output-main_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["training"],
-                    "role": "loss",
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-        }
-        graph_data = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "layer",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [
-                        {
-                            "id": "src_input_0",
-                            "type": "input",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "multi",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["training"],
-                        }
-                    ],
-                    "numInputs": 1,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": True,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "activation": "relu",
-                    "numNeurons": 10,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "output-main_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph_data)
-        var_map = {"src": "x"}
-        t = get_translator(g.nodes["output-main"], g, var_map)
-        w = CodeWriter()
-        t.forward_code(w)
-        code = str(w)
-        self.assertIn("outputs['output-main_output_0']", code)
-
-
-class OptimizerTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_optimizer_code(self):
-        """Verify optimizer code."""
-        node = {
-            "id": "o1",
-            "type": "optimizer",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "o1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["training"],
-                    "role": "loss",
-                },
-                {
-                    "id": "o1_input_1",
-                    "type": "input",
-                    "index": 1,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["training"],
-                    "role": "labels",
-                },
-            ],
-            "outputPorts": [],
-            "numInputs": 2,
-            "numOutputs": 0,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "lossType": "cross_entropy",
-            "optimizerType": "sgd",
-            "learningRate": 0.01,
-            "adamBeta1": 0.9,
-            "adamBeta2": 0.999,
-            "adamEpsilon": 1e-8,
-            "sgdMomentum": 0.9,
-            "weightDecay": 0.0001,
-            "nesterov": True,
-            "epochs": 20,
-            "batchSize": 64,
-            "shuffle": False,
-            "gradientClip": 1.0,
-            "earlyStopping": True,
-            "earlyStoppingPatience": 5,
-        }
-        t, _ = self._get_translator(node)
-        w = CodeWriter()
-        code = t.optimizer_code(w)
-        self.assertIn("'loss_type': 'cross_entropy'", code)
-        self.assertIn("'optimizer_type': 'sgd'", code)
-        self.assertIn("'learning_rate': 0.01", code)
-        self.assertIn("'epochs': 20", code)
-        self.assertIn("'batch_size': 64", code)
-        self.assertIn("'early_stopping': True", code)
-
-
-class VisualizationTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_visualization_code_discrete(self):
-        """Verify visualization code discrete."""
-        node = {
-            "id": "v1",
-            "type": "visualization",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "v1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": "coord",
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["evaluation"],
-                },
-                {
-                    "id": "v1_input_1",
-                    "type": "input",
-                    "index": 1,
-                    "subType": "coord",
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["evaluation"],
-                },
-                {
-                    "id": "v1_input_2",
-                    "type": "input",
-                    "index": 2,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "role",
-                    "activationPhases": ["evaluation"],
-                    "role": "color",
-                },
-            ],
-            "outputPorts": [],
-            "numInputs": 3,
-            "numOutputs": 0,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "colorMode": "discrete",
-            "colorPalette": ["#ef4444", "#4ade80", "#60a5fa"],
-            "continuousMinColor": "#3b82f6",
-            "continuousMaxColor": "#ef4444",
-        }
-        t, _ = self._get_translator(node)
-        w = CodeWriter()
-        t.visualization_code(w)
-        code = str(w)
+# ----------------------------------------------------------------
+# Visualization
+# ----------------------------------------------------------------
+class VisualizationTranslatorTest(BaseTranslatorTest):
+    def test_scatter_with_discrete_color(self):
+        node = Node(
+            id="viz",
+            type="visualization",
+            properties={
+                "colorMode": "discrete",
+                "colorPalette": ["#ff0000", "#00ff00"],
+            },
+        )
+        node.inputs = [
+            self._make_port("v_x", "viz", "input", 0, ["evaluation"], sub_type="coord"),
+            self._make_port("v_y", "viz", "input", 1, ["evaluation"], sub_type="coord"),
+            self._make_port("v_c", "viz", "input", 2, ["evaluation"], role="color"),
+        ]
+        src = Node(id="src", type="input-data")
+        src.outputs = [
+            self._make_port("sx", "src", "output", 0, ["evaluation"]),
+            self._make_port("sy", "src", "output", 1, ["evaluation"]),
+            self._make_port("sc", "src", "output", 2, ["evaluation"]),
+        ]
+        links = [
+            Link(id_from="sx", id_to="v_x"),
+            Link(id_from="sy", id_to="v_y"),
+            Link(id_from="sc", id_to="v_c"),
+        ]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(
+            node, graph, var_map={"sx": "a", "sy": "b", "sc": "c"}, phase="evaluation"
+        )
         self.assertIn("ListedColormap", code)
-        self.assertIn("#ef4444", code)
-        self.assertIn("plt.scatter", code)
+        self.assertIn("plt.scatter(data_v_x.flatten()", code)
+        self.assertIn("c=colors.flatten()", code)
 
 
-class Conv2DTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_init_code(self):
-        """Verify init code."""
-        node = {
-            "id": "c1",
-            "type": "conv2d",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "c1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "c1_output_0",
-                    "type": "output",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["training"],
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "bias": 0,
-            "hasBias": True,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "filters": 32,
-            "kernelSize": 3,
-            "stride": 2,
-            "padding": 1,
-            "activation": "relu",
-        }
-        t, _ = self._get_translator(node)
-        w = CodeWriter()
-        t.init_code(w)
-        code = str(w)
-        self.assertIn("Conv2d", code)
-        self.assertIn("32", code)
-        self.assertIn("kernel_size=3", code)
-        self.assertIn("stride=2", code)
-        self.assertIn("padding=1", code)
+# ----------------------------------------------------------------
+# Print
+# ----------------------------------------------------------------
+class PrintTranslatorTest(BaseTranslatorTest):
+    def test_data_placement(self):
+        node = Node(id="p", type="print", properties={"label": "debug"})
+        node.inputs = [self._make_port("p_in", "p", "input", 0, ["preprocessing"])]
+        src = Node(id="src", type="input-data")
+        src.outputs = [
+            self._make_port("src_out", "src", "output", 0, ["preprocessing"])
+        ]
+        links = [Link(id_from="src_out", id_to="p_in")]
+        graph = self._graph_with_nodes([node, src], links)
+        code, vm = self._run_translator(node, graph, var_map={"src_out": "tensor"})
+        self.assertIn('print("debug[0]:", tensor.shape, tensor)', code)
 
 
-class PrintTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_data_code(self):
-        """Verify data code."""
-        node = {
-            "id": "p1",
-            "type": "print",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "p1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["evaluation"],
-                }
-            ],
-            "outputPorts": [],
-            "numInputs": 1,
-            "numOutputs": 0,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "label": "Test print",
-        }
-        graph_data = {
-            "nodes": [
-                {
-                    "id": "src",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "src_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["evaluation"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "src_output_0",
-                    "to": "p1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                }
-            ],
-            "nodeCounter": 2,
-        }
-        g = parse_graph(graph_data)
-        var_map = {"src": "some_tensor"}
-        t = get_translator(g.nodes["p1"], g, var_map)
-        w = CodeWriter()
-        t.data_code(w, "eval")
-        code = str(w)
-        self.assertIn("print", code)
-        self.assertIn("Test print", code)
+# ----------------------------------------------------------------
+# Accuracy
+# ----------------------------------------------------------------
+class AccuracyTranslatorTest(BaseTranslatorTest):
+    def test_single_column_label_squeezed(self):
+        from sketchmod.codegen.graph import ShapeInfo, ShapeDim
+
+        node = Node(id="acc", type="accuracy", properties={"showConfusion": False})
+        node.inputs = [
+            self._make_port(
+                "acc_pred", "acc", "input", 0, ["evaluation"], sub_type="predictions"
+            ),
+            self._make_port(
+                "acc_label", "acc", "input", 1, ["evaluation"], sub_type="labels"
+            ),
+        ]
+        # Source for prediction: shape (N,)
+        pred_src = Node(id="pred_src", type="output")
+        pred_src.outputs = [
+            self._make_port(
+                "ps",
+                "pred_src",
+                "output",
+                0,
+                ["evaluation"],
+                shape=ShapeInfo(shape=[ShapeDim(100)]),
+            )
+        ]
+        # Source for label: shape (N, 1) → should be squeezed
+        label_src = Node(id="label_src", type="column-select")
+        label_src.outputs = [
+            self._make_port(
+                "ls",
+                "label_src",
+                "output",
+                0,
+                ["evaluation"],
+                shape=ShapeInfo(shape=[ShapeDim(100), ShapeDim(1)]),
+            )
+        ]
+        links = [
+            Link(id_from="ps", id_to="acc_pred"),
+            Link(id_from="ls", id_to="acc_label"),
+        ]
+        graph = self._graph_with_nodes([node, pred_src, label_src], links)
+        code, vm = self._run_translator(
+            node, graph, var_map={"ps": "p", "ls": "l"}, phase="evaluation"
+        )
+        self.assertIn("pred_labels = p.long()", code)
+        self.assertIn("true_labels = l.squeeze(-1).long()", code)
+        self.assertIn("acc = (pred_labels == true_labels).float().mean()", code)
 
 
-class AccuracyTranslatorTest(SimpleTestCase, BaseGraphMixin):
-    def test_data_code(self):
-        """Verify data code."""
-        node = {
-            "id": "a1",
-            "type": "accuracy",
-            "x": 0,
-            "y": 0,
-            "inputPorts": [
-                {
-                    "id": "a1_input_0",
-                    "type": "input",
-                    "index": 0,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["evaluation"],
-                },
-                {
-                    "id": "a1_input_1",
-                    "type": "input",
-                    "index": 1,
-                    "subType": None,
-                    "shape": None,
-                    "bias": 0,
-                    "portKind": "data",
-                    "activationPhases": ["evaluation"],
-                },
-            ],
-            "outputPorts": [],
-            "numInputs": 2,
-            "numOutputs": 0,
-            "bias": 0,
-            "hasBias": False,
-            "paramInputs": [],
-            "paramOutputs": [],
-            "numParamInputs": 0,
-            "numParamOutputs": 0,
-            "showConfusion": True,
-        }
-        graph_data = {
-            "nodes": [
-                {
-                    "id": "pred",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "pred_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["evaluation"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                {
-                    "id": "labels",
-                    "type": "input-data",
-                    "x": 0,
-                    "y": 0,
-                    "inputPorts": [],
-                    "outputPorts": [
-                        {
-                            "id": "labels_output_0",
-                            "type": "output",
-                            "index": 0,
-                            "subType": None,
-                            "shape": None,
-                            "bias": 0,
-                            "portKind": "data",
-                            "activationPhases": ["evaluation"],
-                        }
-                    ],
-                    "numInputs": 0,
-                    "numOutputs": 1,
-                    "bias": 0,
-                    "hasBias": False,
-                    "paramInputs": [],
-                    "paramOutputs": [],
-                    "numParamInputs": 0,
-                    "numParamOutputs": 0,
-                    "datasetId": None,
-                    "datasetName": None,
-                    "dataShape": None,
-                },
-                node,
-            ],
-            "links": [
-                {
-                    "from": "pred_output_0",
-                    "to": "a1_input_0",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                },
-                {
-                    "from": "labels_output_0",
-                    "to": "a1_input_1",
-                    "weight": 1.0,
-                    "weightShape": None,
-                    "hasWeight": False,
-                },
-            ],
-            "nodeCounter": 3,
-        }
-        g = parse_graph(graph_data)
-        var_map = {"pred": "preds", "labels": "labels"}
-        t = get_translator(g.nodes["a1"], g, var_map)
-        w = CodeWriter()
-        t.data_code(w, "eval")
-        code = str(w)
-        self.assertIn("argmax", code)
-        self.assertIn("Accuracy:", code)
-        self.assertIn("confusion_matrix", code)
+if __name__ == "__main__":
+    unittest.main()
