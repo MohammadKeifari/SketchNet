@@ -3738,6 +3738,16 @@ const SketchMod = {
         this._saveToSession();
         this._render();
     },
+    _updateReshapeTarget(input) {
+        if (SketchMod.selectedNodes.length !== 1) return;
+        const node = SketchMod.selectedNodes[0];
+        if (!(node instanceof ReshapeNode)) return;
+        SketchMod._saveUndoState();
+        node.targetShape = input.value;
+        SketchMod._saveToSession();
+        SketchMod._propagateShapes();
+        SketchMod._render();
+    },
 };
 // ========== PORT BASE CLASS ==========
 class Port {
@@ -7655,6 +7665,102 @@ class VisualizationNode extends RectNode {
         `;
     }
 }
+// ========== RESHAPE NODE ==========
+class ReshapeNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "reshape", 110, 60);
+        this.targetShape = "(batch, -1)";
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+        this.addInput();
+        this.addOutput();
+        this.inputs[0].activationPhases = ["preprocessing"];
+        this.outputs[0].activationPhases = ["preprocessing"];
+        this.updatePorts();
+    }
+
+    drawLabel(ctx) {
+        ctx.font = "bold 12px Inter, sans-serif";
+        ctx.fillText("Reshape", this.x, this.y - 8);
+        ctx.font = "9px Inter, sans-serif";
+        ctx.fillText(this.targetShape, this.x, this.y + 10);
+    }
+
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s) return this._emptyShapes();
+        const target = this._parseTargetShape(s);
+        if (!target) return this._emptyShapes();
+        return this._makeShapes(target, s.symbolic, !!target);
+    }
+
+    _parseTargetShape(inputShape) {
+        const str = this.targetShape.replace(/[()]/g, "").trim();
+        const parts = str.split(",").map((p) => p.trim());
+        let total = 1;
+        let inferIndex = -1;
+        for (let i = 0; i < parts.length; i++) {
+            if (parts[i] === "-1" || parts[i] === "?") {
+                if (inferIndex !== -1) return null; // only one inferred dim allowed
+                inferIndex = i;
+                continue;
+            }
+            const num = parseInt(parts[i]);
+            if (isNaN(num)) {
+                total = null;
+                break;
+            }
+            total *= num;
+        }
+        if (inputShape.shape) {
+            let inputTotal = 1;
+            let allConcrete = true;
+            for (let dim of inputShape.shape) {
+                if (dim instanceof ShapeExpr && dim.isNumber()) {
+                    inputTotal *= dim.toNumber();
+                } else {
+                    allConcrete = false;
+                    break;
+                }
+            }
+            if (allConcrete && total !== null && inferIndex >= 0) {
+                const inferred = Math.floor(inputTotal / total);
+                const result = parts.slice();
+                result[inferIndex] = inferred.toString();
+                return result.map((r) => new ShapeExpr(r));
+            } else if (total !== null && inferIndex < 0) {
+                return parts.map((p) => new ShapeExpr(p));
+            }
+        }
+        // fallback: return symbolic expressions
+        return parts.map((p) => new ShapeExpr(p));
+    }
+
+    getPropertiesHTML() {
+        return `
+            <div class="prop-group">
+                <label>Target Shape</label>
+                <input type="text" id="prop-target-shape" class="prop-input"
+                       value="${this.targetShape}"
+                       onchange="SketchMod._updateReshapeTarget(this)">
+                <p class="prop-hint">Use -1 for one inferred dimension, e.g., (batch, -1) or (28, 28)</p>
+            </div>
+            ${this._getShapeSummaryHTML()}
+        `;
+    }
+
+    toJSON() {
+        const b = super.toJSON();
+        return { ...b, targetShape: this.targetShape };
+    }
+
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.targetShape) this.targetShape = d.targetShape;
+    }
+}
 
 // ========== LINK ==========
 
@@ -8054,6 +8160,16 @@ SketchMod.registerNode({
     icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
         <polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+});
+SketchMod.registerNode({
+    type: "reshape",
+    label: "Reshape",
+    category: "data",
+    class: ReshapeNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <path d="M3 12h18M12 3v18"/>
+    </svg>`,
 });
 // ========== STARTUP ==========
 document.addEventListener("DOMContentLoaded", () => SketchMod.init());
