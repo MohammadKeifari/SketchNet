@@ -947,6 +947,17 @@ const SketchMod = {
             return;
         }
 
+        // Ignore canvas shortcuts when user is typing in an input field
+        const tag = document.activeElement?.tagName;
+        if (
+            tag === "INPUT" ||
+            tag === "TEXTAREA" ||
+            tag === "SELECT" ||
+            document.activeElement?.isContentEditable
+        ) {
+            return;
+        }
+
         if (e.code === "Space") {
             this.spacePressed = true;
             e.preventDefault();
