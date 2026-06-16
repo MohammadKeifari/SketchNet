@@ -7920,8 +7920,8 @@ class Link {
                 fillColor = "#f59e0b";
                 lineWidth = 2.5;
             } else if (selected) {
-                strokeColor = "#ffffff";
-                fillColor = "#ffffff";
+                strokeColor = "#b9b9b9";
+                fillColor = "#b9b9b9";
                 lineWidth = 3;
             } else if (this.hasWeight) {
                 strokeColor = "#000000";
