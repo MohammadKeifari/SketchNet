@@ -1568,6 +1568,35 @@ const SketchMod = {
                 : "var(--text-secondary)";
         const shapeText = port.shapeDisplay();
 
+        // Only show activation phases for non‑param ports
+        const phasesHTML =
+            port instanceof ParamPort
+                ? ""
+                : `
+        <div class="prop-group">
+            <label>Active in phases</label>
+            <div class="checkbox-group" id="prop-activation-phases">
+                <label class="checkbox-label">
+                    <input type="checkbox" value="preprocessing"
+                        ${port.activationPhases.includes("preprocessing") ? "checked" : ""}
+                        onchange="SketchMod._updatePortPhase(this)">
+                    Preprocessing
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" value="training"
+                        ${port.activationPhases.includes("training") ? "checked" : ""}
+                        onchange="SketchMod._updatePortPhase(this)">
+                    Training
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" value="evaluation"
+                        ${port.activationPhases.includes("evaluation") ? "checked" : ""}
+                        onchange="SketchMod._updatePortPhase(this)">
+                    Evaluation
+                </label>
+            </div>
+        </div>`;
+
         content.innerHTML = `
     <div class="prop-group">
         <label>Port</label>
@@ -1582,29 +1611,7 @@ const SketchMod = {
             ${shapeText}
         </p>
     </div>
-    <div class="prop-group">
-        <label>Active in phases</label>
-        <div class="checkbox-group" id="prop-activation-phases">
-            <label class="checkbox-label">
-                <input type="checkbox" value="preprocessing"
-                    ${port.activationPhases.includes("preprocessing") ? "checked" : ""}
-                    onchange="SketchMod._updatePortPhase(this)">
-                Preprocessing
-            </label>
-            <label class="checkbox-label">
-                <input type="checkbox" value="training"
-                    ${port.activationPhases.includes("training") ? "checked" : ""}
-                    onchange="SketchMod._updatePortPhase(this)">
-                Training
-            </label>
-            <label class="checkbox-label">
-                <input type="checkbox" value="evaluation"
-                    ${port.activationPhases.includes("evaluation") ? "checked" : ""}
-                    onchange="SketchMod._updatePortPhase(this)">
-                Evaluation
-            </label>
-        </div>
-    </div>
+    ${phasesHTML}
     ${
         port.type === "input"
             ? `
