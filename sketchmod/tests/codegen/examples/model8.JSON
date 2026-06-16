@@ -306,8 +306,8 @@
             "lossType": "cross_entropy",
             "optimizerType": "adam",
             "learningRate": 0.01,
-            "epochs": 20,
-            "batchSize": 32,
+            "epochs": 100,
+            "batchSize": 5,
             "shuffle": true
         },
         {
