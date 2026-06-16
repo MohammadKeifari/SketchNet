@@ -103,6 +103,24 @@ def default_check(proc, code, graph):
     return ok
 
 
+def clear_project_cache():
+    """Delete all __pycache__ directories under the project root."""
+    root = _project_root
+    deleted = 0
+    for dirpath, dirnames, _ in os.walk(root):
+        if "__pycache__" in dirnames:
+            pycache = Path(dirpath) / "__pycache__"
+            try:
+                for f in pycache.iterdir():
+                    f.unlink()
+                pycache.rmdir()
+                deleted += 1
+            except Exception:
+                pass
+    if deleted:
+        print(f"🧹 Cleared {deleted} __pycache__ directories.")
+
+
 # ----------------------------------------------------------------------
 # Model‑specific checks
 # ----------------------------------------------------------------------
@@ -646,7 +664,15 @@ def main():
         action="store_true",
         help="Save generated code to examples folder",
     )
+    parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        help="Delete all __pycache__ directories before running",
+    )
     args = parser.parse_args()
+
+    if args.clear_cache:
+        clear_project_cache()
 
     interactive = args.mode == "by_hand"
 
