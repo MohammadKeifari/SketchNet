@@ -2814,6 +2814,16 @@ const SketchMod = {
             this.scale = 1;
             this._render();
 
+            // Reset properties panel
+            this._hideProperties();
+            this.selectedNodes = [];
+            this.selectedLinks = [];
+            this.selectedPorts = [];
+
+            // Clear path highlight and validation buttons
+            this._clearHighlight();
+            this._clearValidation();
+
             // Remove the 'load' parameter from the URL so a refresh doesn't reload the old model
             if (window.history && window.history.replaceState) {
                 const newUrl = window.location.pathname;
@@ -3738,6 +3748,16 @@ const SketchMod = {
         this._propagateShapes();
         this._zoomFit();
         this._render();
+        // Reset properties panel
+        this._hideProperties();
+        this.selectedNodes = [];
+        this.selectedLinks = [];
+        this.selectedPorts = [];
+
+        // Clear path highlight and validation buttons
+        this._clearHighlight();
+        this._clearValidation();
+
         this._showToast("Model imported successfully.");
     },
     _updateOutputActivation(role, value) {
