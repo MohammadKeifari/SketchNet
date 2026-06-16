@@ -104,7 +104,6 @@ class GraphValidator:
                 "neuron",
                 "layer",
                 "conv2d",
-                "flatten",
                 "dropout",
                 "batchnorm",
             ):
@@ -151,7 +150,6 @@ class GraphValidator:
                 "neuron",
                 "layer",
                 "conv2d",
-                "flatten",
                 "dropout",
                 "batchnorm",
             ):
@@ -171,7 +169,6 @@ class GraphValidator:
                 "neuron",
                 "layer",
                 "conv2d",
-                "flatten",
                 "dropout",
                 "batchnorm",
             ):
