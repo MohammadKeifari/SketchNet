@@ -486,9 +486,11 @@ def _shape_conv2d(node, graph):
     k = node.properties.get("kernelSize", 3)
     stride = node.properties.get("stride", 1)
     padding = node.properties.get("padding", 0)
-    # H_out = floor((H + 2*P - K) / S) + 1
-    h_out = ShapeDim(sympy.floor((h._value + 2 * padding - k) / stride) + 1)
-    w_out = ShapeDim(sympy.floor((w._value + 2 * padding - k) / stride) + 1)
+    # Use floor division (//) which sympy handles correctly
+    h_val = (h._value + 2 * padding - k) // stride + 1
+    w_val = (w._value + 2 * padding - k) // stride + 1
+    h_out = ShapeDim(sympy.simplify(h_val))
+    w_out = ShapeDim(sympy.simplify(w_val))
     _set_output_shape(node, ShapeInfo(shape=[n, ShapeDim(filters), h_out, w_out]))
 
 
@@ -590,25 +592,28 @@ def _shape_reshape(node, graph):
     parts = _parse_target_shape(target_str)
     if not parts:
         return
-    # total input elements
-    total_inp = sympy.Integer(1)
-    for d in inp.shape:
-        total_inp = total_inp * d._value
+
+    # Keep "batch" as symbolic – do NOT replace it
     infer_idx = -1
     concrete_product = sympy.Integer(1)
     for i, p in enumerate(parts):
         if p == "-1":
             if infer_idx != -1:
-                return  # only one -1 allowed
+                return
             infer_idx = i
         else:
             try:
                 concrete_product = concrete_product * int(p)
             except ValueError:
-                pass  # symbolic dim, keep as is
+                pass  # symbolic dim – concrete_product stays as is
+
     if infer_idx >= 0:
-        inferred = sympy.floor(total_inp / concrete_product)
-        parts[infer_idx] = str(inferred) if inferred.is_Integer else str(inferred)
+        total_inp = sympy.Integer(1)
+        for d in inp.shape:
+            total_inp = total_inp * d._value
+        inferred = sympy.simplify(total_inp // concrete_product)
+        parts[infer_idx] = str(inferred)
+
     out_shape = [ShapeDim(p) for p in parts]
     _set_output_shape(node, ShapeInfo(shape=out_shape))
 
