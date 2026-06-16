@@ -15,6 +15,8 @@ Usage:
   # Dump generated code to examples/ folder
   python test_models.py --mode auto --models 1 --dump-code
 
+  # clear-cache
+
 Place model JSON files in `examples/` and datasets in `examples/data/`.
 """
 
