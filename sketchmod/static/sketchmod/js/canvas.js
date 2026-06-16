@@ -4353,12 +4353,24 @@ class ShapeExpr {
 
     subtract(other) {
         other = ShapeExpr.from(other);
-        const negated = new ShapeExpr(0);
-        for (const [symbol, coeff] of other.terms) {
-            negated.terms.set(symbol, -coeff);
+        const result = new ShapeExpr(0);
+        for (const [symbol, coeff] of this.terms) {
+            result.terms.set(symbol, coeff);
         }
-        negated.isSymbolic = negated._hasSymbols();
-        return this.add(negated);
+        for (const [symbol, coeff] of other.terms) {
+            const existing = result.terms.get(symbol) || 0;
+            const diff = existing - coeff;
+            if (diff === 0) {
+                result.terms.delete(symbol);
+            } else {
+                result.terms.set(symbol, diff);
+            }
+        }
+        if (result.terms.size === 0) {
+            result.terms.set("", 0);
+        }
+        result.isSymbolic = result._hasSymbols();
+        return result;
     }
 
     multiply(other) {
@@ -4397,29 +4409,28 @@ class ShapeExpr {
 
     divide(other) {
         other = ShapeExpr.from(other);
-
         if (other.isZero()) return new ShapeExpr(0);
-
-        // If both are constants
         if (!this.isSymbolic && !other.isSymbolic) {
             const a = this.terms.get("") || 0;
             const b = other.terms.get("") || 1;
             return new ShapeExpr(Math.floor(a / b));
         }
-
-        // If dividing symbolic by constant
+        // If dividing symbolic by constant, divide each term with floor
         if (!other.isSymbolic) {
             const constVal = other.terms.get("") || 1;
             const result = new ShapeExpr(0);
             for (const [symbol, coeff] of this.terms) {
-                result.terms.set(symbol, coeff / constVal);
+                if (symbol === "") {
+                    result.terms.set("", Math.floor(coeff / constVal));
+                } else {
+                    result.terms.set(symbol, coeff / constVal);
+                }
             }
             result.isSymbolic = result._hasSymbols();
             return result;
         }
-
-        // Symbolic division — can't simplify
-        return new ShapeExpr(`${this.toString()} / ${other.toString()}`);
+        // Fully symbolic division – can't simplify
+        return new ShapeExpr(`(${this.toString()}) / (${other.toString()})`);
     }
 
     // ========== COMPARISON ==========
@@ -6423,25 +6434,45 @@ class Conv2DNode extends RectNode {
         const s = this._getFirstInputShapeObj();
         if (!s || s.shape.length < 3) return this._emptyShapes();
 
-        const H = s.shape[s.shape.length - 3];
-        const W = s.shape[s.shape.length - 2];
+        // For a 4‑D tensor (N, C, H, W) the spatial dimensions are the last two
+        const C = s.shape[s.shape.length - 3]; // input channels (not used here)
+        const H = s.shape[s.shape.length - 2]; // height
+        const W = s.shape[s.shape.length - 1]; // width
 
-        const H_out = ShapeExpr.from(H)
-            .subtract(this.kernelSize)
-            .add(2 * this.padding)
-            .divide(this.stride)
-            .add(1);
-        const W_out = ShapeExpr.from(W)
-            .subtract(this.kernelSize)
-            .add(2 * this.padding)
-            .divide(this.stride)
-            .add(1);
+        let H_out, W_out;
+        if (H.isNumber() && W.isNumber()) {
+            const h = H.toNumber();
+            const w = W.toNumber();
+            H_out = new ShapeExpr(
+                Math.floor(
+                    (h + 2 * this.padding - this.kernelSize) / this.stride,
+                ) + 1,
+            );
+            W_out = new ShapeExpr(
+                Math.floor(
+                    (w + 2 * this.padding - this.kernelSize) / this.stride,
+                ) + 1,
+            );
+        } else {
+            // Symbolic – build expression
+            H_out = ShapeExpr.from(H)
+                .subtract(this.kernelSize)
+                .add(2 * this.padding)
+                .divide(this.stride)
+                .add(1);
+            W_out = ShapeExpr.from(W)
+                .subtract(this.kernelSize)
+                .add(2 * this.padding)
+                .divide(this.stride)
+                .add(1);
+        }
 
+        // Output shape: (batch, filters, H_out, W_out)
         const shape = [
             ...s.shape.slice(0, -3).map((x) => new ShapeExpr(x)),
+            new ShapeExpr(this.filters),
             H_out,
             W_out,
-            new ShapeExpr(this.filters),
         ];
 
         return this._makeShapes(shape, s.symbolic, true);
