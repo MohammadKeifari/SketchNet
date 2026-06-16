@@ -370,10 +370,31 @@ class NeuronTranslator(BaseTranslator):
     def _guess_in_features(self):
         for port in self.node.inputs:
             for link in self.graph.links:
-                if link.id_to == port.id and link.weight_shape:
-                    shape = link.weight_shape.get("shape", [])
-                    if len(shape) >= 2:
-                        return shape[1]
+                if link.id_to == port.id:
+                    # First try the source port's shape (most reliable)
+                    src_port = self.graph.ports[link.id_from]
+                    if (
+                        src_port.shape
+                        and src_port.shape.shape
+                        and len(src_port.shape.shape) >= 2
+                    ):
+                        dim = src_port.shape.shape[-1]
+                        try:
+                            val = int(dim)
+                            if val > 0:
+                                return val
+                        except (ValueError, TypeError):
+                            pass
+                    # Fallback: link weight_shape
+                    if link.weight_shape:
+                        shape = link.weight_shape.get("shape", [])
+                        if len(shape) >= 2:
+                            try:
+                                val = int(shape[1])
+                                if val > 0:
+                                    return val
+                            except (ValueError, TypeError):
+                                pass
         raise ValueError(f"Cannot infer in_features for {self.node.id}")
 
     def generate(self, w, phase, placement, is_first=False):
