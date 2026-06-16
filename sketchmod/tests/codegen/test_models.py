@@ -500,6 +500,51 @@ def check_model7(proc, code, graph):
     return ok
 
 
+def check_model8(proc, code, graph):
+    """
+    model8 checks:
+      1. Conv2D node present in generated code.
+      2. Reshape node present.
+      3. Flatten node present.
+      4. Accuracy > 0.7 (should be near 1.0 with this simple dataset).
+    """
+    ok = True
+
+    if "nn.Conv2d" in code or "self.conv_conv" in code:
+        print("✅ Conv2D found")
+    else:
+        print("❌ Conv2D missing")
+        ok = False
+
+    if ".reshape(" in code:
+        print("✅ Reshape found")
+    else:
+        print("❌ Reshape missing")
+        ok = False
+
+    if "nn.Flatten" in code or "self.flatten_flat" in code:
+        print("✅ Flatten found")
+    else:
+        print("❌ Flatten missing")
+        ok = False
+
+    import re
+
+    acc_match = re.search(r"Accuracy: ([0-9.]+)", proc.stdout)
+    if acc_match:
+        acc = float(acc_match.group(1))
+        if acc > 0.7:
+            print(f"✅ Accuracy {acc:.4f} > 0.7")
+        else:
+            print(f"❌ Accuracy {acc:.4f} ≤ 0.7")
+            ok = False
+    else:
+        print("❌ Could not parse Accuracy")
+        ok = False
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
@@ -508,6 +553,7 @@ MODEL_CHECKS = {
     5: check_model5,
     6: check_model6,
     7: check_model7,
+    8: check_model8,
 }
 
 
