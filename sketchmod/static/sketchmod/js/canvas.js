@@ -469,6 +469,10 @@ const SketchMod = {
                 this._render();
             });
         });
+        document
+            .getElementById("btnAutoLayout")
+            ?.addEventListener("click", () => this.autoLayout());
+
         // Port context menu actions
         document
             .querySelectorAll("#portContextMenu .context-menu-item")
@@ -3785,6 +3789,24 @@ const SketchMod = {
         SketchMod._saveToSession();
         SketchMod._propagateShapes();
         SketchMod._render();
+    },
+    autoLayout() {
+        if (this.nodes.length === 0) return;
+        this._saveUndoState();
+        const positions = SketchLayout.compute(this.nodes, this.links);
+        for (const n of this.nodes) {
+            const pos = positions.get(n.id);
+            if (pos) {
+                n.x = pos.x;
+                n.y = pos.y;
+                n.updatePorts();
+            }
+        }
+        this.ports = this._collectPorts();
+        this._saveToSession();
+        this._zoomFit();
+        this._render();
+        this._propagateShapes();
     },
 };
 // ========== PORT BASE CLASS ==========

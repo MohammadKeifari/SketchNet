@@ -290,6 +290,20 @@
                     <span>Redo</span>
                 </button>
                 <div class="sidebar-section-title">View</div>
+                <button class="sidebar-btn" id="btnAutoLayout" title="Auto Layout">
+                    <svg width="16"
+                         height="16"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" />
+                        <rect x="14" y="3" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" />
+                        <rect x="14" y="14" width="7" height="7" />
+                    </svg>
+                    <span>Auto Layout</span>
+                </button>
                 <button class="sidebar-btn" id="btnZoomIn" title="Zoom In">
                     <svg width="16"
                          height="16"
@@ -703,6 +717,7 @@
 {% endblock content %}
 {% block extra_js %}
     <script src="{% static 'sketchmod/js/canvas.js' %}"></script>
+    <script src="{% static 'sketchmod/js/layout.js' %}"></script>
     <!--testing the canvas-->
     {% comment %} <script src="{% static 'sketchmod/js/tests/test_canvas.js' %}"></script> {% endcomment %}
 {% endblock extra_js %}
