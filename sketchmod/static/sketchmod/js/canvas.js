@@ -967,11 +967,11 @@ const SketchMod = {
             this._hideProperties();
             this._render();
         }
-        if (e.key === "+" || e.key === "=") {
+        if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) {
             this._zoomStep(1.25);
             e.preventDefault();
         }
-        if (e.key === "-") {
+        if ((e.ctrlKey || e.metaKey) && e.key === "-") {
             this._zoomStep(0.8);
             e.preventDefault();
         }
