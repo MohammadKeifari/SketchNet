@@ -7710,22 +7710,28 @@ class ReshapeNode extends RectNode {
     _parseTargetShape(inputShape) {
         const str = this.targetShape.replace(/[()]/g, "").trim();
         const parts = str.split(",").map((p) => p.trim());
-        let total = 1;
         let inferIndex = -1;
+        let concreteProduct = 1;
+
         for (let i = 0; i < parts.length; i++) {
             if (parts[i] === "-1" || parts[i] === "?") {
-                if (inferIndex !== -1) return null; // only one inferred dim allowed
+                if (inferIndex !== -1) return null;
                 inferIndex = i;
                 continue;
             }
+            // "batch" or any non‑numeric string → keep as symbolic, skip concrete product
             const num = parseInt(parts[i]);
             if (isNaN(num)) {
-                total = null;
-                break;
+                concreteProduct = null; // can't compute concrete product
+                continue;
             }
-            total *= num;
+            if (concreteProduct !== null) {
+                concreteProduct *= num;
+            }
         }
-        if (inputShape.shape) {
+
+        // If input shape is fully concrete and we have a concrete product, infer the -1 dim
+        if (inputShape && inputShape.shape) {
             let inputTotal = 1;
             let allConcrete = true;
             for (let dim of inputShape.shape) {
@@ -7736,17 +7742,20 @@ class ReshapeNode extends RectNode {
                     break;
                 }
             }
-            if (allConcrete && total !== null && inferIndex >= 0) {
-                const inferred = Math.floor(inputTotal / total);
+            if (allConcrete && inferIndex >= 0 && concreteProduct !== null) {
+                const inferred = Math.floor(inputTotal / concreteProduct);
                 const result = parts.slice();
                 result[inferIndex] = inferred.toString();
                 return result.map((r) => new ShapeExpr(r));
-            } else if (total !== null && inferIndex < 0) {
-                return parts.map((p) => new ShapeExpr(p));
             }
         }
-        // fallback: return symbolic expressions
-        return parts.map((p) => new ShapeExpr(p));
+
+        // Fallback: return symbolic expressions
+        return parts.map((p) => {
+            const num = parseInt(p);
+            if (!isNaN(num)) return new ShapeExpr(num);
+            return new ShapeExpr(p); // symbolic
+        });
     }
 
     getPropertiesHTML() {
