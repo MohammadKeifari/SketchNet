@@ -419,6 +419,7 @@ def all_models(request):
 
 # ============== edit ==================
 @login_required
+@login_required
 def edit_model(request, model_id):
     """Display and update model metadata and cover image."""
     model = get_object_or_404(SketchModel, model_id=model_id)
@@ -430,8 +431,8 @@ def edit_model(request, model_id):
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
         description = request.POST.get("description", "").strip()
-        view_access = request.POST.get("view_access", "public")
-        fork_access = request.POST.get("fork_access", "private")
+        view_access = request.POST.get("view_access", "public")  # default public
+        fork_access = request.POST.get("fork_access", "public")  # default public
 
         if name:
             model.name = name
@@ -445,25 +446,18 @@ def edit_model(request, model_id):
             model.cover_image = request.FILES["cover_image"]
 
         model.save()
-        # Process view permissions
+
+        # === Process view permissions ===
         view_user_ids = request.POST.getlist("view_users")
         view_user_ids = [int(uid) for uid in view_user_ids if uid.isdigit()]
 
         if model.view_access == "private":
-            # Sync view access
-            existing_view_accesses = ModelAccess.objects.filter(
-                model=model, can_view=True
-            )
-            existing_view_ids = set(
-                existing_view_accesses.values_list("user_id", flat=True)
-            )
-            new_view_ids = set(view_user_ids)
-
-            # Remove users no longer in list
-            existing_view_accesses.exclude(user_id__in=new_view_ids).delete()
-
-            # Add or update users in list (ensure can_view=True, can_fork stays unchanged)
-            for uid in new_view_ids:
+            # Remove view access for users not in the submitted list
+            ModelAccess.objects.filter(model=model, can_view=True).exclude(
+                user_id__in=view_user_ids
+            ).update(can_view=False)
+            # Ensure submitted users have can_view=True
+            for uid in view_user_ids:
                 user = User.objects.get(id=uid)
                 access, created = ModelAccess.objects.get_or_create(
                     user=user, model=model
@@ -471,27 +465,20 @@ def edit_model(request, model_id):
                 access.can_view = True
                 access.save()
         else:
-            # Public view – set all can_view to False or remove explicit view accesses
+            # Public view – remove all explicit view access
             ModelAccess.objects.filter(model=model, can_view=True).update(
                 can_view=False
             )
 
-        # Process fork permissions similarly
+        # === Process fork permissions ===
         fork_user_ids = request.POST.getlist("fork_users")
         fork_user_ids = [int(uid) for uid in fork_user_ids if uid.isdigit()]
 
         if model.fork_access == "private":
-            existing_fork_accesses = ModelAccess.objects.filter(
-                model=model, can_fork=True
-            )
-            existing_fork_ids = set(
-                existing_fork_accesses.values_list("user_id", flat=True)
-            )
-            new_fork_ids = set(fork_user_ids)
-
-            existing_fork_accesses.exclude(user_id__in=new_fork_ids).delete()
-
-            for uid in new_fork_ids:
+            ModelAccess.objects.filter(model=model, can_fork=True).exclude(
+                user_id__in=fork_user_ids
+            ).update(can_fork=False)
+            for uid in fork_user_ids:
                 user = User.objects.get(id=uid)
                 access, created = ModelAccess.objects.get_or_create(
                     user=user, model=model
@@ -503,8 +490,9 @@ def edit_model(request, model_id):
                 can_fork=False
             )
 
-        # Clean up any ModelAccess rows that have both can_view=False and can_fork=False (optional)
+        # Clean up rows that have no permissions at all
         ModelAccess.objects.filter(model=model, can_view=False, can_fork=False).delete()
+
         messages.success(request, "Model updated.")
         return redirect("models:view", model_id=model.model_id)
 
