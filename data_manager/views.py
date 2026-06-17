@@ -112,6 +112,16 @@ def edit_dataset(request, dataset_id):
         form = DatasetEditForm(request.POST, request.FILES, instance=dataset)
         if form.is_valid():
             form.save()
+            # Process allowed_users only if the dataset is private
+            if dataset.is_private:
+                # Get list of user IDs from the hidden inputs
+                user_ids = request.POST.getlist("allowed_users")
+                # Convert to integers and get User objects
+                users = User.objects.filter(id__in=user_ids)
+                dataset.allowed_users.set(users)  # replaces current set
+            else:
+                # If public, remove all allowed users (they can't be assigned)
+                dataset.allowed_users.clear()
             from .services import infer_dataset_shape
 
             # Re-infer if file was changed or no inferred shape exists
@@ -546,12 +556,15 @@ def generate_dataset(request):
         if "tmp" in locals() and os.path.exists(tmp.name):
             os.unlink(tmp.name)
 
+
 def api_dataset_info(request, dataset_id):
     """Return filename and format metadata for a dataset."""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
     if not dataset.is_visible_to(request.user):
         return JsonResponse({"error": "Not allowed"}, status=403)
-    return JsonResponse({
-        "filename": dataset.file.name.split("/")[-1],  # actual file name
-        "format": dataset.format,
-    })
+    return JsonResponse(
+        {
+            "filename": dataset.file.name.split("/")[-1],  # actual file name
+            "format": dataset.format,
+        }
+    )
