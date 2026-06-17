@@ -189,6 +189,13 @@
                         {% endfor %}
                     </div>
                 </div>
+                {% for allowed_user in dataset.allowed_users.all %}
+                    <input type="hidden"
+                           name="allowed_users"
+                           value="{{ allowed_user.id }}"
+                           data-user-id="{{ allowed_user.id }}">
+                {% endfor %}
+                <input type="hidden" id="currentDatasetId" value="{{ dataset.dataset_id }}">
                 <div class="form-actions">
                     <a href="{% url 'data:detail' dataset.dataset_id %}"
                        class="btn btn-ghost">Cancel</a>
