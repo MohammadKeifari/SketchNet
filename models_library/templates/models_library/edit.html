@@ -7,208 +7,209 @@
 {% endblock current_page %}
 {% block extra_css %}
     <style>
-    .edit-container {
-        max-width: 560px;
-        margin: 40px auto;
-        padding: 0 20px;
-    }
+        /* ---------- Layout ---------- */
+        .edit-container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        .edit-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px;
+        }
+        .edit-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        .edit-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 28px;
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-bottom: 24px;
+        }
+        .back-link:hover { color: var(--accent); }
 
-    .edit-card {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 32px;
-    }
+        /* ---------- Form Elements ---------- */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-family: inherit;
+            transition: var(--transition);
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
 
-    .edit-title {
-        font-size: 1.3rem;
-        font-weight: 700;
-        color: var(--text-primary);
-        margin-bottom: 8px;
-    }
+        /* ---------- Buttons ---------- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            font-family: inherit;
+            border: none;
+            text-decoration: none;
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: var(--accent-light);
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        .btn-ghost:hover { background: var(--bg-hover); }
 
-    .edit-subtitle {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-        margin-bottom: 28px;
-    }
+        /* ---------- Cover Upload ---------- */
+        .current-cover {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .current-cover img {
+            width: 60px; height: 45px;
+            border-radius: 6px; object-fit: cover;
+            border: 1px solid var(--border);
+        }
+        .current-cover span {
+            font-size: 0.8rem; color: var(--text-secondary);
+        }
+        .cover-upload-wrapper { display: flex; align-items: center; gap: 12px; }
+        .cover-upload-label {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 18px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer; transition: var(--transition);
+            font-size: 0.85rem; font-weight: 500;
+            color: var(--text-secondary);
+            white-space: nowrap; line-height: 1;
+        }
+        .cover-upload-label:hover {
+            border-color: var(--accent); color: var(--accent);
+            background: var(--accent-glow);
+        }
+        .cover-file-input { display: none; }
+        .cover-file-name {
+            font-size: 0.8rem; color: var(--text-secondary);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .cover_choose_image_text { display: inline-block; transform: translateY(-5px); }
 
-    .form-group {
-        margin-bottom: 20px;
-    }
+        /* ---------- Toggle Switch ---------- */
+        .toggle-wrapper {
+            display: flex; align-items: center; gap: 14px;
+            margin-bottom: 10px; /* reduced from 18px to give space for panel */
+        }
+        .toggle-label {
+            display: flex; align-items: center; cursor: pointer;
+            user-select: none; line-height: 1;
+        }
+        .toggle-label input { display: none; }
+        .toggle-switch {
+            display: block; width: 44px; height: 24px;
+            background: var(--border); border-radius: 12px;
+            position: relative; transition: var(--transition); flex-shrink: 0;
+        }
+        .toggle-switch::after {
+            content: ""; position: absolute;
+            width: 18px; height: 18px; background: #fff;
+            border-radius: 50%; top: 3px; left: 3px;
+            transition: var(--transition);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .toggle-label input:checked + .toggle-switch { background: var(--accent); }
+        .toggle-label input:checked + .toggle-switch::after { left: 23px; }
+        .toggle-text {
+            font-size: 0.9rem; color: var(--text-primary);
+            font-weight: 500; white-space: nowrap;
+        }
 
-    .form-group label {
-        display: block;
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 6px;
-    }
-
-    .form-input {
-        width: 100%;
-        padding: 10px 14px;
-        background: var(--bg-primary);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        color: var(--text-primary);
-        font-size: 0.9rem;
-        font-family: inherit;
-        transition: var(--transition);
-    }
-
-    .form-input:focus {
-        outline: none;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px var(--accent-glow);
-    }
-
-    .current-cover {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 10px;
-    }
-
-    .current-cover img {
-        width: 60px;
-        height: 45px;
-        border-radius: 6px;
-        object-fit: cover;
-        border: 1px solid var(--border);
-    }
-
-    .current-cover span {
-        font-size: 0.8rem;
-        color: var(--text-secondary);
-    }
-
-    .radio-group {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    .radio-label {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 0.9rem;
-        color: var(--text-primary);
-        cursor: pointer;
-    }
-
-    .radio-label input[type="radio"] {
-        accent-color: var(--accent);
-    }
-
-    .form-actions {
-        display: flex;
-        gap: 10px;
-        justify-content: flex-end;
-        margin-top: 24px;
-        padding-top: 20px;
-        border-top: 1px solid var(--border);
-    }
-
-    .btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 20px;
-        border-radius: 8px;
-        font-size: 0.9rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: var(--transition);
-        font-family: inherit;
-        border: none;
-        text-decoration: none;
-    }
-
-    .btn-primary {
-        background: var(--accent);
-        color: #fff;
-    }
-
-    .btn-primary:hover {
-        background: var(--accent-light);
-        box-shadow: 0 4px 15px var(--accent-glow);
-    }
-
-    .btn-ghost {
-        background: transparent;
-        color: var(--text-primary);
-        border: 1px solid var(--border);
-    }
-
-    .btn-ghost:hover {
-        background: var(--bg-hover);
-    }
-
-    .back-link {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        color: var(--text-secondary);
-        text-decoration: none;
-        font-size: 0.9rem;
-        margin-bottom: 24px;
-    }
-
-    .back-link:hover {
-        color: var(--accent);
-    }
-    .cover-upload-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-top: 8px;
-}
-
-.cover-upload-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 18px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: var(--transition);
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    line-height: 1;
-}
-
-.cover-upload-label:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: var(--accent-glow);
-}
-
-.cover-upload-label svg {
-    flex-shrink: 0;
-}
-
-.cover-file-input {
-    display: none;
-}
-
-.cover-file-name {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.cover_choose_image_text {
-    display: inline-block;
-    transform: translateY(-5px);
-}
+        /* ---------- Private Access Panels ---------- */
+        .private-access {
+            margin-top: 16px; padding-top: 16px;
+            border-top: 1px solid var(--border);
+            margin-bottom: 24px;
+        }
+        .private-access:last-child {
+            margin-bottom: 0;
+        }
+        .search-users-wrapper { position: relative; }
+        .search-results {
+            position: absolute; top: 100%; left: 0; right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border); border-radius: 8px;
+            max-height: 180px; overflow-y: auto; z-index: 10;
+            display: none;
+        }
+        .search-result-item {
+            padding: 10px 14px; cursor: pointer;
+            display: flex; align-items: center; justify-content: space-between;
+            font-size: 0.85rem;
+        }
+        .search-result-item:hover { background: var(--bg-hover); }
+        .allowed-users-list {
+            margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;
+        }
+        .allowed-user-tag {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 10px; background: var(--bg-hover);
+            border-radius: 16px; font-size: 0.8rem; color: var(--text-primary);
+        }
+        .allowed-user-tag button {
+            background: none; border: none; cursor: pointer;
+            color: var(--text-secondary); font-size: 1rem; padding: 0 2px;
+        }
+        .allowed-user-tag button:hover { color: #e74c3c; }
     </style>
 {% endblock extra_css %}
 {% block content %}
@@ -227,8 +228,9 @@
         <div class="edit-card">
             <h1 class="edit-title">Edit Model</h1>
             <p class="edit-subtitle">Update name, cover, and access settings</p>
-            <form method="POST" enctype="multipart/form-data">
+            <form method="POST" enctype="multipart/form-data" id="modelEditForm">
                 {% csrf_token %}
+                <!-- Name -->
                 <div class="form-group">
                     <label for="name">Name *</label>
                     <input type="text"
@@ -238,10 +240,12 @@
                            value="{{ model.name }}"
                            required>
                 </div>
+                <!-- Description -->
                 <div class="form-group">
                     <label for="description">Description</label>
                     <textarea id="description" name="description" class="form-input" rows="3">{{ model.description }}</textarea>
                 </div>
+                <!-- Cover Image -->
                 <div class="form-group">
                     <label>Cover Image</label>
                     {% if model.cover_image %}
@@ -272,42 +276,96 @@
                         <span class="cover-file-name" id="coverFileName">No file chosen</span>
                     </div>
                 </div>
+                <!-- View Access Toggle + Panel -->
                 <div class="form-group">
                     <label>View Access</label>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio"
+                    <div class="toggle-wrapper">
+                        <label class="toggle-label">
+                            <input type="checkbox"
                                    name="view_access"
-                                   value="public"
-                                   {% if model.view_access == "public" %}checked{% endif %}>
-                            Public — everyone can view
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio"
-                                   name="view_access"
+                                   id="viewAccessCheckbox"
                                    value="private"
                                    {% if model.view_access == "private" %}checked{% endif %}>
-                            Private — only selected users
+                            <span class="toggle-switch"></span>
                         </label>
+                        <span class="toggle-text" id="viewAccessText">
+                            {% if model.view_access == "private" %}
+                                Private
+                            {% else %}
+                                Public
+                            {% endif %}
+                        </span>
+                    </div>
+                    <!-- View Access Panel -->
+                    <div class="private-access"
+                         id="viewAccessPanel"
+                         style="{% if model.view_access != 'private' %}display: none;
+                                {% endif %}">
+                        <label>Give view access to:</label>
+                        <div class="search-users-wrapper">
+                            <input type="text"
+                                   class="form-input"
+                                   id="viewUserSearchInput"
+                                   placeholder="Search users by name or email...">
+                            <div class="search-results" id="viewUserSearchResults"></div>
+                        </div>
+                        <div class="allowed-users-list" id="viewAllowedUsersList">
+                            {% for access in model.modelaccess_set.all %}
+                                {% if access.can_view %}
+                                    <span class="allowed-user-tag" id="view-user-tag-{{ access.user.id }}">
+                                        {{ access.user.username }}
+                                        <button onclick="removeUser('view', {{ access.user.id }})">✕</button>
+                                    </span>
+                                    <input type="hidden" name="view_users" value="{{ access.user.id }}">
+                                {% endif %}
+                            {% endfor %}
+                        </div>
                     </div>
                 </div>
+                <!-- Fork Access Toggle + Panel -->
                 <div class="form-group">
                     <label>Fork Access</label>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio"
+                    <div class="toggle-wrapper">
+                        <label class="toggle-label">
+                            <input type="checkbox"
                                    name="fork_access"
-                                   value="public"
-                                   {% if model.fork_access == "public" %}checked{% endif %}>
-                            Public — anyone can fork
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio"
-                                   name="fork_access"
+                                   id="forkAccessCheckbox"
                                    value="private"
                                    {% if model.fork_access == "private" %}checked{% endif %}>
-                            Private — only selected users
+                            <span class="toggle-switch"></span>
                         </label>
+                        <span class="toggle-text" id="forkAccessText">
+                            {% if model.fork_access == "private" %}
+                                Private
+                            {% else %}
+                                Public
+                            {% endif %}
+                        </span>
+                    </div>
+                    <!-- Fork Access Panel -->
+                    <div class="private-access"
+                         id="forkAccessPanel"
+                         style="{% if model.fork_access != 'private' %}display: none;
+                                {% endif %}">
+                        <label>Give fork access to:</label>
+                        <div class="search-users-wrapper">
+                            <input type="text"
+                                   class="form-input"
+                                   id="forkUserSearchInput"
+                                   placeholder="Search users by name or email...">
+                            <div class="search-results" id="forkUserSearchResults"></div>
+                        </div>
+                        <div class="allowed-users-list" id="forkAllowedUsersList">
+                            {% for access in model.modelaccess_set.all %}
+                                {% if access.can_fork %}
+                                    <span class="allowed-user-tag" id="fork-user-tag-{{ access.user.id }}">
+                                        {{ access.user.username }}
+                                        <button onclick="removeUser('fork', {{ access.user.id }})">✕</button>
+                                    </span>
+                                    <input type="hidden" name="fork_users" value="{{ access.user.id }}">
+                                {% endif %}
+                            {% endfor %}
+                        </div>
                     </div>
                 </div>
                 <div class="form-actions">
@@ -320,9 +378,193 @@
 {% endblock content %}
 {% block extra_js %}
     <script>
-document.getElementById("coverImageInput").addEventListener("change", function() {
-    const name = this.files[0]?.name || "No file chosen";
-    document.getElementById("coverFileName").textContent = name;
-});
+        // Cover file name display
+        document.getElementById("coverImageInput").addEventListener("change", function() {
+            const name = this.files[0]?.name || "No file chosen";
+            document.getElementById("coverFileName").textContent = name;
+        });
+
+        // Toggle UI handlers
+        const viewCheckbox = document.getElementById("viewAccessCheckbox");
+        const viewText = document.getElementById("viewAccessText");
+        const forkCheckbox = document.getElementById("forkAccessCheckbox");
+        const forkText = document.getElementById("forkAccessText");
+        const viewPanel = document.getElementById("viewAccessPanel");
+        const forkPanel = document.getElementById("forkAccessPanel");
+
+        viewCheckbox.addEventListener("change", function() {
+            viewText.textContent = this.checked ? "Private" : "Public";
+            viewPanel.style.display = this.checked ? "block" : "none";
+        });
+        forkCheckbox.addEventListener("change", function() {
+            forkText.textContent = this.checked ? "Private" : "Public";
+            forkPanel.style.display = this.checked ? "block" : "none";
+        });
+
+        // Initialize allowed user sets from template
+        let viewAllowedUserIds = [
+            {% for access in model.modelaccess_set.all %}
+                {% if access.can_view %}{{ access.user.id }}{% if not forloop.last %},{% endif %}{% endif %}
+            {% endfor %}
+        ];
+        let forkAllowedUserIds = [
+            {% for access in model.modelaccess_set.all %}
+                {% if access.can_fork %}{{ access.user.id }}{% if not forloop.last %},{% endif %}{% endif %}
+            {% endfor %}
+        ];
+
+        // Helper to get the correct search elements based on type
+        function getElements(type) {
+            if (type === 'view') {
+                return {
+                    searchInput: document.getElementById("viewUserSearchInput"),
+                    searchResults: document.getElementById("viewUserSearchResults"),
+                    allowedList: document.getElementById("viewAllowedUsersList"),
+                    allowedIds: viewAllowedUserIds,
+                    setAllowedIds: function(ids) { viewAllowedUserIds = ids; },
+                    tagPrefix: "view-user-tag-",
+                    inputName: "view_users",
+                    form: document.getElementById("modelEditForm")
+                };
+            } else {
+                return {
+                    searchInput: document.getElementById("forkUserSearchInput"),
+                    searchResults: document.getElementById("forkUserSearchResults"),
+                    allowedList: document.getElementById("forkAllowedUsersList"),
+                    allowedIds: forkAllowedUserIds,
+                    setAllowedIds: function(ids) { forkAllowedUserIds = ids; },
+                    tagPrefix: "fork-user-tag-",
+                    inputName: "fork_users",
+                    form: document.getElementById("modelEditForm")
+                };
+            }
+        }
+
+        // User search for each type
+        function setupSearch(type) {
+            const els = getElements(type);
+            let searchTimeout;
+
+            els.searchInput.addEventListener("input", function() {
+                clearTimeout(searchTimeout);
+                const query = this.value.trim();
+                if (query.length < 2) {
+                    els.searchResults.style.display = "none";
+                    return;
+                }
+                searchTimeout = setTimeout(() => {
+                    fetch(`/models/{{ model.model_id }}/search-users/?q=${encodeURIComponent(query)}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.users && data.users.length > 0) {
+                                els.searchResults.innerHTML = data.users.map(u => `
+                                    <div class="search-result-item" onclick="addUser('${type}', ${u.id}, '${u.username}')">
+                                        <span>${u.username}</span>
+                                        <span style="color: var(--text-secondary); font-size: 0.75rem;">${u.email}</span>
+                                    </div>
+                                `).join("");
+                                els.searchResults.style.display = "block";
+                            } else {
+                                els.searchResults.innerHTML = '<div class="search-result-item">No users found</div>';
+                                els.searchResults.style.display = "block";
+                            }
+                        });
+                }, 300);
+            });
+
+            // Hide results when clicking outside
+            document.addEventListener("click", function(e) {
+                if (!els.searchInput.contains(e.target) && !els.searchResults.contains(e.target)) {
+                    els.searchResults.style.display = "none";
+                }
+            });
+        }
+
+        setupSearch('view');
+        setupSearch('fork');
+
+        // Generic add user function for a given type
+        window.addUser = function(type, userId, username) {
+            const els = getElements(type);
+            if (els.allowedIds.includes(userId)) return;
+
+            const canView = (type === 'view');
+            const canFork = (type === 'fork');
+
+            fetch(`/models/{{ model.model_id }}/access/`, {
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": getCookie("csrftoken"),
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: `user_id=${userId}&can_view=${canView}&can_fork=${canFork}`
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    els.allowedIds.push(userId);
+                    // Update the set
+                    els.setAllowedIds(els.allowedIds);
+
+                    // Create tag
+                    const tag = document.createElement("span");
+                    tag.className = "allowed-user-tag";
+                    tag.id = els.tagPrefix + userId;
+                    tag.innerHTML = `${username} <button onclick="removeUser('${type}', ${userId})">✕</button>`;
+                    els.allowedList.appendChild(tag);
+
+                    // Add hidden input
+                    const hidden = document.createElement("input");
+                    hidden.type = "hidden";
+                    hidden.name = els.inputName;
+                    hidden.value = userId;
+                    els.form.appendChild(hidden);
+
+                    // Close dropdown & clear
+                    els.searchResults.style.display = "none";
+                    els.searchInput.value = "";
+                }
+            });
+        };
+
+        // Generic remove user function
+        window.removeUser = function(type, userId) {
+            const els = getElements(type);
+            if (!els.allowedIds.includes(userId)) return;
+
+            fetch(`/models/{{ model.model_id }}/access/${userId}/remove/`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        // Remove from array
+                        els.allowedIds = els.allowedIds.filter(id => id !== userId);
+                        els.setAllowedIds(els.allowedIds);
+
+                        // Remove tag
+                        const tag = document.getElementById(els.tagPrefix + userId);
+                        if (tag) tag.remove();
+
+                        // Remove hidden input
+                        const hidden = document.querySelector(`input[name="${els.inputName}"][value="${userId}"]`);
+                        if (hidden) hidden.remove();
+                    }
+                });
+        };
+
+        // CSRF helper
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== "") {
+                const cookies = document.cookie.split(";");
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === name + "=") {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
     </script>
 {% endblock extra_js %}
