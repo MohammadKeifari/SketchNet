@@ -363,6 +363,15 @@ const SketchMod = {
         document
             .getElementById("btnImportSubmit")
             ?.addEventListener("click", () => this._handleImportSubmit());
+
+        document.addEventListener("change", function (e) {
+            if (
+                e.target.id === "saveViewAccessCheckbox" ||
+                e.target.id === "saveForkAccessCheckbox"
+            ) {
+                this._updateSaveToggleTexts();
+            }
+        });
         // Toolbar
         this._buildToolbar();
 
@@ -1788,6 +1797,16 @@ const SketchMod = {
         link.weight = parseFloat(input.value) || 0;
         this._saveToSession();
     },
+    _updateSaveToggleTexts() {
+        const viewCb = document.getElementById("saveViewAccessCheckbox");
+        const forkCb = document.getElementById("saveForkAccessCheckbox");
+        const viewText = document.getElementById("saveViewAccessText");
+        const forkText = document.getElementById("saveForkAccessText");
+        if (viewCb && viewText)
+            viewText.textContent = viewCb.checked ? "Private" : "Public";
+        if (forkCb && forkText)
+            forkText.textContent = forkCb.checked ? "Private" : "Public";
+    },
     _bindPropertiesEvents(node) {
         const actSelect = document.getElementById("prop-activation");
         if (actSelect) {
@@ -2598,12 +2617,10 @@ const SketchMod = {
 
         const description =
             document.getElementById("saveDescription")?.value.trim() || "";
-        const viewAccess =
-            document.querySelector('input[name="view_access"]:checked')
-                ?.value || "public";
-        const forkAccess =
-            document.querySelector('input[name="fork_access"]:checked')
-                ?.value || "private";
+        const viewCb = document.getElementById("saveViewAccessCheckbox");
+        const forkCb = document.getElementById("saveForkAccessCheckbox");
+        const viewAccess = viewCb?.checked ? "private" : "public";
+        const forkAccess = forkCb?.checked ? "private" : "public";
         const coverFile = document.getElementById("saveCoverInput")?.files[0];
         const graphData = JSON.stringify(SketchMod._getGraphData());
         const formData = new FormData();
@@ -2663,7 +2680,13 @@ const SketchMod = {
         if (fileNameDisplay) {
             fileNameDisplay.textContent = "No file chosen";
         }
-        // Auto-focus the name field
+
+        const viewCb = document.getElementById("saveViewAccessCheckbox");
+        const forkCb = document.getElementById("saveForkAccessCheckbox");
+        if (viewCb) viewCb.checked = false;
+        if (forkCb) forkCb.checked = true;
+        updateSaveToggleTexts();
+
         setTimeout(() => {
             document.getElementById("saveName")?.focus();
         }, 100);
