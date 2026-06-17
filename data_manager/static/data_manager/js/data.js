@@ -138,8 +138,14 @@ if (userSearchInput) {
 
         searchTimeout = setTimeout(() => {
             // Get dataset ID from the modal (works for edit, not for upload)
+            let datasetId = null;
             const modal = document.getElementById("uploadModal");
-            const datasetId = modal ? modal.dataset.datasetId : null;
+            if (modal && modal.dataset.datasetId) {
+                datasetId = modal.dataset.datasetId;
+            } else {
+                const hiddenId = document.getElementById("currentDatasetId");
+                if (hiddenId) datasetId = hiddenId.value;
+            }
 
             if (!datasetId) {
                 // During upload - search users globally, but can't add yet
@@ -147,9 +153,7 @@ if (userSearchInput) {
                     `/data/search-users-global/?q=${encodeURIComponent(query)}`,
                 )
                     .then((res) => res.json())
-                    .then((data) => {
-                        renderSearchResults(data, null);
-                    });
+                    .then((data) => renderSearchResults(data, null));
                 return;
             }
 
@@ -157,9 +161,7 @@ if (userSearchInput) {
                 `/data/${datasetId}/search-users/?q=${encodeURIComponent(query)}`,
             )
                 .then((res) => res.json())
-                .then((data) => {
-                    renderSearchResults(data, datasetId);
-                });
+                .then((data) => renderSearchResults(data, datasetId));
         }, 300);
     });
 
@@ -197,8 +199,14 @@ function renderSearchResults(data, datasetId) {
 }
 
 function addUser(datasetId, userId, username) {
+    // Fallback: if no datasetId passed, try to read from hidden input
     if (!datasetId) {
-        // Can't add during upload - store temporarily
+        const hiddenId = document.getElementById("currentDatasetId");
+        if (hiddenId) datasetId = hiddenId.value;
+    }
+
+    if (!datasetId) {
+        // Still no context – visual only (upload/create)
         if (allowedUserIds.includes(userId)) return;
         allowedUserIds.push(userId);
         addUserTag(userId, username, null);
@@ -213,8 +221,21 @@ function addUser(datasetId, userId, username) {
             if (data.success) {
                 allowedUserIds.push(userId);
                 addUserTag(userId, username, datasetId);
-                userSearchResults.style.display = "none";
-                userSearchInput.value = "";
+
+                // Add hidden input to the form
+                const form = document.querySelector("form");
+                if (form) {
+                    const hidden = document.createElement("input");
+                    hidden.type = "hidden";
+                    hidden.name = "allowed_users";
+                    hidden.value = userId;
+                    hidden.dataset.userId = userId;
+                    form.appendChild(hidden);
+                }
+
+                // Close dropdown & clear search
+                if (userSearchResults) userSearchResults.style.display = "none";
+                if (userSearchInput) userSearchInput.value = "";
             }
         });
 }
@@ -231,6 +252,10 @@ function addUserTag(userId, username, datasetId) {
 
 function removeUser(datasetId, userId) {
     if (!datasetId) {
+        const hiddenId = document.getElementById("currentDatasetId");
+        if (hiddenId) datasetId = hiddenId.value;
+    }
+    if (!datasetId) {
         allowedUserIds = allowedUserIds.filter((id) => id !== userId);
         const tag = document.getElementById(`user-tag-${userId}`);
         if (tag) tag.remove();
@@ -244,6 +269,15 @@ function removeUser(datasetId, userId) {
                 allowedUserIds = allowedUserIds.filter((id) => id !== userId);
                 const tag = document.getElementById(`user-tag-${userId}`);
                 if (tag) tag.remove();
+
+                // Remove the hidden input
+                const form = document.querySelector("form");
+                if (form) {
+                    const hidden = form.querySelector(
+                        `input[name="allowed_users"][value="${userId}"]`,
+                    );
+                    if (hidden) hidden.remove();
+                }
             }
         });
 }
