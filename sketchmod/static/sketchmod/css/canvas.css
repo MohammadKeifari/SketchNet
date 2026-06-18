@@ -107,6 +107,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     z-index: 10;
+    position: relative; /* for absolute positioning of the info panel */
 }
 
 .sidebar-section {
@@ -367,6 +368,7 @@
     padding: 6px 0;
     font-weight: 500;
 }
+
 /* ===== CHECKBOX GROUP ===== */
 .checkbox-group {
     display: flex;
@@ -430,6 +432,8 @@
     color: var(--text-secondary);
     margin-top: 4px;
 }
+
+/* ===== BUTTONS / MISC ===== */
 .prop-btn {
     width: 100%;
     padding: 8px 12px;
@@ -454,6 +458,7 @@
 #portContextMenu {
     min-width: 170px;
 }
+
 .radio-group {
     display: flex;
     flex-direction: column;
@@ -491,6 +496,7 @@
     font-size: 0.78rem;
     color: #b45309;
 }
+
 /* ===== DIM SELECT ===== */
 .dim-list {
     display: flex;
@@ -545,6 +551,7 @@
 .prop-btn-add:hover {
     background: var(--accent-glow);
 }
+
 /* ===== SAVE MODAL ===== */
 .modal-overlay {
     position: fixed;
@@ -644,25 +651,6 @@
     box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
-.radio-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.radio-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.85rem;
-    color: var(--text-primary);
-    cursor: pointer;
-}
-
-.radio-label input[type="radio"] {
-    accent-color: var(--accent);
-}
-
 .btn {
     display: inline-flex;
     align-items: center;
@@ -697,6 +685,8 @@
 .btn-ghost:hover {
     background: var(--bg-hover);
 }
+
+/* ===== COVER UPLOAD ===== */
 .cover-upload-wrapper {
     display: flex;
     align-items: center;
@@ -741,10 +731,13 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
 .cover_choose_image_text {
     display: inline-block;
     transform: translateY(-5px);
 }
+
+/* ===== TOOLBAR MODEL INFO ===== */
 .toolbar-model-info {
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
@@ -772,16 +765,7 @@
     text-decoration: underline;
 }
 
-.new-model-btn {
-    color: var(--accent) !important;
-    border-radius: 0 !important;
-    margin-top: 8px;
-    padding-top: 12px !important;
-}
-
-.new-model-btn:hover {
-    background: var(--accent-glow) !important;
-}
+/* ===== SIDEBAR MODEL INFO ===== */
 .sidebar-model-info {
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
@@ -809,6 +793,51 @@
     text-decoration: underline;
 }
 
+/* ===== MODEL INFO ICON & FLOATING PANEL ===== */
+/* Floating info panel – positioned fixed, controlled by JS */
+.sidebar-info-panel {
+    display: none;
+    position: fixed; /* changed from absolute */
+    top: var(--nav-height, 60px); /* fallback, overridden by JS */
+    right: 8px; /* fallback */
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    /* box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25); */
+    z-index: 300;
+    min-width: 200px;
+    animation: fadeIn 0.15s ease;
+}
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+.sidebar-info-panel-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    white-space: nowrap;
+}
+.sidebar-info-panel-id {
+    font-size: 0.8rem;
+    font-family: monospace;
+    color: var(--accent);
+}
+
+.sidebar-model-info-icon {
+    display: none;
+    justify-content: center;
+    width: 100%;
+}
+/* ===== LEGEND / PALETTE ===== */
 .port-legend {
     display: flex;
     flex-direction: column;
@@ -826,6 +855,7 @@
 .port-legend-item svg {
     flex-shrink: 0;
 }
+
 .color-palette-list {
     display: flex;
     flex-direction: column;
@@ -877,6 +907,7 @@
     opacity: 0.3;
     cursor: not-allowed;
 }
+
 /* ===== EXPORT DROPDOWN ===== */
 .export-dropdown {
     position: relative;
@@ -934,9 +965,10 @@
     margin: 0;
 }
 
-/* ===== COLLAPSED SIDEBARS ===== */
+/* ===== COLLAPSED SIDEBARS (unified) ===== */
+/* Left toolbar collapsed (both user setting and responsive) */
 .toolbar-left.collapsed {
-    width: 48px;
+    width: 56px;
 }
 
 .toolbar-left.collapsed .tool-label,
@@ -949,8 +981,9 @@
     padding: 10px;
 }
 
+/* Right sidebar collapsed (both user setting and responsive) */
 .sidebar-right.collapsed {
-    width: 48px;
+    width: 56px;
 }
 
 .sidebar-right.collapsed .sidebar-btn span,
@@ -966,60 +999,6 @@
     padding: 10px;
 }
 
-/* ===== COLLAPSED SIDEBARS (via user setting) ===== */
-.toolbar-left.collapsed {
-    width: 56px;
-}
-
-.toolbar-left.collapsed .tool-label {
-    display: none;
-}
-
-.toolbar-left.collapsed .tool-btn {
-    justify-content: center;
-    padding: 10px;
-}
-
-.toolbar-left.collapsed .toolbar-section-title {
-    display: none;
-}
-
-.sidebar-right.collapsed {
-    width: 56px;
-}
-
-.sidebar-right.collapsed .sidebar-btn span {
-    display: none;
-}
-.sidebar-right.collapsed .export-menu {
-    position: fixed;
-    right: 56px;
-    margin: 0;
-    min-width: 180px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
-    z-index: 200;
-}
-.sidebar-right.collapsed .sidebar-btn {
-    justify-content: center;
-    padding: 10px;
-}
-
-.sidebar-right.collapsed .sidebar-section-title {
-    display: none;
-}
-
-.sidebar-right.collapsed .zoom-indicator {
-    display: none;
-}
-
-.sidebar-right.collapsed #propertiesPanel {
-    display: none !important;
-}
-
-.sidebar-right.collapsed .sidebar-model-info {
-    display: none;
-}
-
 .sidebar-right.collapsed .export-chevron {
     display: none;
 }
@@ -1031,6 +1010,18 @@
     min-width: 180px;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
     z-index: 200;
+}
+
+/* New Model button */
+.new-model-btn {
+    color: var(--accent) !important;
+    border-radius: 0 !important;
+    margin-top: 8px;
+    padding-top: 12px !important;
+}
+
+.new-model-btn:hover {
+    background: var(--accent-glow) !important;
 }
 
 /* ===== VALIDATION MODAL ===== */
@@ -1086,13 +1077,15 @@
 .validation-section-label:first-child {
     margin-top: 0;
 }
-/* Toggle Switch (same as before) */
+
+/* ===== TOGGLE SWITCH ===== */
 .toggle-wrapper {
     display: flex;
     align-items: center;
     gap: 14px;
     margin-bottom: 10px;
 }
+
 .toggle-label {
     display: flex;
     align-items: center;
@@ -1100,9 +1093,11 @@
     user-select: none;
     line-height: 1;
 }
+
 .toggle-label input {
     display: none;
 }
+
 .toggle-switch {
     display: block;
     width: 44px;
@@ -1113,6 +1108,7 @@
     transition: var(--transition);
     flex-shrink: 0;
 }
+
 .toggle-switch::after {
     content: "";
     position: absolute;
@@ -1125,12 +1121,15 @@
     transition: var(--transition);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
+
 .toggle-label input:checked + .toggle-switch {
     background: var(--accent);
 }
+
 .toggle-label input:checked + .toggle-switch::after {
     left: 23px;
 }
+
 .toggle-text {
     font-size: 0.9rem;
     color: var(--text-primary);
@@ -1143,29 +1142,30 @@
     .toolbar {
         width: 56px;
     }
-    .tool-label {
+    .tool-label,
+    .toolbar-section-title {
         display: none;
     }
     .tool-btn {
         justify-content: center;
         padding: 10px;
     }
+
     .sidebar {
         width: 56px;
     }
-    .sidebar-btn span {
+    .sidebar-btn span,
+    .sidebar-section-title,
+    .zoom-indicator,
+    #propertiesPanel,
+    .sidebar-model-info {
         display: none;
     }
     .sidebar-btn {
         justify-content: center;
         padding: 10px;
     }
-    .toolbar-section-title,
-    .sidebar-section-title {
-        display: none;
-    }
 
-    /* Export button matches other sidebar buttons */
     .export-dropdown .sidebar-btn span {
         display: none;
     }
@@ -1176,7 +1176,6 @@
     .export-chevron {
         display: none;
     }
-
     .export-menu {
         position: fixed;
         right: 70px;
@@ -1185,16 +1184,22 @@
         box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
         z-index: 200;
     }
+
+    /* Floating info panel position adjustment */
+    .sidebar-info-panel {
+        right: 64px; /* 56px sidebar + 8px gap */
+    }
 }
 
 @media (max-width: 600px) {
     .toolbar {
         display: none;
     }
+
     .sidebar {
         width: 48px;
     }
-    /* Match export button to other sidebar buttons */
+
     .export-dropdown {
         width: 100%;
     }
@@ -1211,9 +1216,6 @@
         width: 16px;
         height: 16px;
     }
-    .export-chevron {
-        display: none;
-    }
     .export-menu {
         right: 60px;
         min-width: 160px;
@@ -1223,11 +1225,19 @@
         padding: 7px 10px;
         gap: 8px;
     }
+
+    /* Floating info panel position for 48px sidebar */
+    .sidebar-info-panel {
+        right: 56px; /* 48px sidebar + 8px gap */
+    }
 }
+
+/* ===== IMPORT MODAL ===== */
 #importFileLabel {
     display: inline-block;
     transform: translateY(-5px);
 }
+
 #importJsonText {
     width: 100%;
     max-width: 100%;
