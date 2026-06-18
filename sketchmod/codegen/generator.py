@@ -55,7 +55,14 @@ class CodeGenerator:
             w.line("# No training phase with optimizer – training skipped.")
 
         if has_eval:
-            self._emit_evaluate(w)
+            # Check if evaluation enters the model at the same point as training
+            eval_ok = self._eval_entry_matches()
+            if eval_ok:
+                self._emit_evaluate(w)
+            else:
+                w.line(
+                    "# Evaluation skipped – enters model at a different point than training."
+                )
         else:
             w.line("# No evaluation phase.")
 
@@ -625,3 +632,20 @@ class CodeGenerator:
         ]
 
         return graph
+
+    def _eval_entry_matches(self):
+        model_nodes = set(self._get_model_nodes())
+        train_entry = None
+        for nid in self.flow.get("train_order", []):
+            if nid in model_nodes:
+                train_entry = nid
+                break
+        eval_entry = None
+        for nid in self.flow.get("eval_order", []):
+            if nid in model_nodes:
+                eval_entry = nid
+                break
+        # If there's no eval entry at all, we can't evaluate — skip
+        if eval_entry is None:
+            return False
+        return train_entry == eval_entry
