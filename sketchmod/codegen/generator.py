@@ -494,10 +494,12 @@ class CodeGenerator:
         w.line("")
 
     def _get_first_model_node_id(self, phase: str) -> str | None:
-        """Return the first node in the training order as the model entry point."""
+        """Return the first node in the training order that is NOT in preprocessing."""
         order = self.flow.get("train_order", [])
-        if order:
-            return order[0]
+        pre_set = self.flow.get("preprocessing_set", set())
+        for nid in order:
+            if nid not in pre_set:
+                return nid
         return None
 
     def _get_feed_key(self, phase: str):
