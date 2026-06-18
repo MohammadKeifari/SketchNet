@@ -23,6 +23,7 @@ class GraphValidator:
         self._check_optimizer_phase(errors)
         self._check_param_port_cycles(errors)
         self._check_required_inputs(errors)
+        self._check_multiple_train_entries(errors)
 
         self._check_optimizer_missing(warnings)
         self._check_model_in_preprocessing(warnings)
@@ -164,6 +165,29 @@ class GraphValidator:
                             "nodeId": node.id,
                         }
                     )
+
+    def _check_multiple_train_entries(self, errors):
+        model_nodes = self._get_model_nodes()
+        if not model_nodes:
+            return
+        # Find model nodes with no predecessors that are also model nodes
+        # (they are entry points)
+        entries = []
+        for nid in model_nodes:
+            preds = self.graph.predecessors(nid)
+            model_preds = [p for p in preds if p in model_nodes]
+            if not model_preds:
+                entries.append(nid)
+        if len(entries) > 1:
+            errors.append(
+                {
+                    "message": (
+                        f"Multiple training entry points detected: {entries}. "
+                        "The model must have a single entry point."
+                    ),
+                    "nodeId": entries[0],
+                }
+            )
 
     # ----------------------------------------------------------------
     #  WARNINGS
