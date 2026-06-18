@@ -34,7 +34,7 @@ class GraphValidator:
         self._check_visualization_shapes(warnings)
         self._check_accuracy_label_reshape(warnings)
         self._check_reshape_feasibility(warnings)
-        self._check_multiple_optimizers(errors)
+        self._check_multiple_optimizers(warnings)
 
         return {
             "errors": errors,
@@ -370,16 +370,16 @@ class GraphValidator:
                         }
                     )
 
-    def _check_multiple_optimizers(self, errors):
+    def _check_multiple_optimizers(self, warnings):
         optimizer_count = sum(
             1 for n in self.graph.nodes.values() if n.type == "optimizer"
         )
         if optimizer_count > 1:
-            errors.append(
+            warnings.append(
                 {
                     "message": (
                         f"Graph contains {optimizer_count} optimizer nodes. "
-                        "Only one optimizer is allowed per model."
+                        "Only the first one will be used."
                     ),
                     "nodeId": None,
                 }
