@@ -120,7 +120,7 @@
             "type": "reshape",
             "x": 320,
             "y": 140,
-            "targetShape": "(batch, 1, 3, 3)",
+            "targetShape": "(-1, 1, 3, 3)",
             "inputPorts": [
                 {
                     "id": "reshape_in",
