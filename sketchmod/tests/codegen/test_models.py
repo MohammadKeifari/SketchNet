@@ -710,6 +710,44 @@ def check_model12(proc, code, graph):
     return ok
 
 
+def check_model13(proc, code, graph):
+    """
+    model13 checks:
+      1. Data‑flow cycle error detected.
+      2. Unconnected layer input error detected.
+      3. Impossible reshape warning detected.
+    """
+    ok = True
+
+    from sketchmod.codegen.validator import GraphValidator
+
+    result = GraphValidator(graph).validate()
+    errors = result.get("errors", [])
+    warnings = result.get("warnings", [])
+
+    if any("Data‑flow cycle" in e.get("message", "") for e in errors):
+        print("✅ Data‑flow cycle error detected")
+    else:
+        print("❌ Data‑flow cycle error not found")
+        ok = False
+
+    if any(
+        "requires at least 1 input connection" in e.get("message", "") for e in errors
+    ):
+        print("✅ Unconnected layer input error detected")
+    else:
+        print("❌ Unconnected layer input error not found")
+        ok = False
+
+    if any("total elements mismatch" in w.get("message", "") for w in warnings):
+        print("✅ Impossible reshape warning detected")
+    else:
+        print("❌ Impossible reshape warning not found")
+        ok = False
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
@@ -723,9 +761,10 @@ MODEL_CHECKS = {
     10: check_model10,
     11: check_model11,
     12: check_model12,
+    13: check_model13,
 }
 # Models that only test validator errors – their generated code must NOT be executed.
-VALIDATION_ONLY_MODELS = {11}
+VALIDATION_ONLY_MODELS = {11, 13}
 
 # ----------------------------------------------------------------------
 # Main test logic
