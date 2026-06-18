@@ -1,0 +1,209 @@
+{
+    "nodes": [
+        {
+            "id": "input-1",
+            "type": "input-data",
+            "x": 100,
+            "y": 300,
+            "dataShape": "(200, 28, 28)",
+            "inputPorts": [],
+            "outputPorts": [
+                {
+                    "id": "input-1_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": ["preprocessing"]
+                }
+            ],
+            "numInputs": 0,
+            "numOutputs": 1
+        },
+        {
+            "id": "reshape-1",
+            "type": "reshape",
+            "x": 400,
+            "y": 300,
+            "targetShape": "(batch, -1)",
+            "inputPorts": [
+                {
+                    "id": "reshape-1_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": ["preprocessing"]
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "reshape-1_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": [
+                        "preprocessing",
+                        "training",
+                        "evaluation"
+                    ]
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1
+        },
+        {
+            "id": "output-1",
+            "type": "output",
+            "x": 700,
+            "y": 300,
+            "inputPorts": [
+                {
+                    "id": "output-1_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "subType": "train",
+                    "activationPhases": ["training"]
+                },
+                {
+                    "id": "output-1_input_1",
+                    "type": "input",
+                    "index": 1,
+                    "subType": "test",
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "output-1_output_0",
+                    "type": "output",
+                    "index": 0,
+                    "role": "loss",
+                    "activationPhases": ["training"]
+                },
+                {
+                    "id": "output-1_output_1",
+                    "type": "output",
+                    "index": 1,
+                    "role": "prediction",
+                    "activationPhases": ["evaluation"]
+                },
+                {
+                    "id": "output-1_output_2",
+                    "type": "output",
+                    "index": 2,
+                    "role": "evaluation",
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "outputActivations": {
+                "loss": "none",
+                "prediction": "softmax",
+                "evaluation": "argmax"
+            }
+        },
+        {
+            "id": "opt-1",
+            "type": "optimizer",
+            "x": 700,
+            "y": 500,
+            "lossType": "cross_entropy",
+            "optimizerType": "adam",
+            "learningRate": 0.001,
+            "epochs": 1,
+            "batchSize": 32,
+            "shuffle": true,
+            "inputPorts": [
+                {
+                    "id": "opt-1_input_0",
+                    "type": "input",
+                    "index": 0,
+                    "role": "loss",
+                    "activationPhases": ["training"]
+                },
+                {
+                    "id": "opt-1_input_1",
+                    "type": "input",
+                    "index": 1,
+                    "role": "labels",
+                    "activationPhases": ["training"]
+                }
+            ],
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0
+        }
+    ],
+    "links": [
+        { "from": "input-1_output_0", "to": "reshape-1_input_0" },
+        { "from": "reshape-1_output_0", "to": "output-1_input_0" },
+        { "from": "reshape-1_output_0", "to": "output-1_input_1" },
+        { "from": "output-1_output_0", "to": "opt-1_input_0" },
+        { "from": "reshape-1_output_0", "to": "opt-1_input_1" }
+    ],
+    "ports": [
+        {
+            "id": "input-1_output_0",
+            "type": "output",
+            "index": 0,
+            "activationPhases": ["preprocessing"]
+        },
+        {
+            "id": "reshape-1_input_0",
+            "type": "input",
+            "index": 0,
+            "activationPhases": ["preprocessing"]
+        },
+        {
+            "id": "reshape-1_output_0",
+            "type": "output",
+            "index": 0,
+            "activationPhases": ["preprocessing", "training", "evaluation"]
+        },
+        {
+            "id": "output-1_input_0",
+            "type": "input",
+            "index": 0,
+            "subType": "train",
+            "activationPhases": ["training"]
+        },
+        {
+            "id": "output-1_input_1",
+            "type": "input",
+            "index": 1,
+            "subType": "test",
+            "activationPhases": ["evaluation"]
+        },
+        {
+            "id": "output-1_output_0",
+            "type": "output",
+            "index": 0,
+            "role": "loss",
+            "activationPhases": ["training"]
+        },
+        {
+            "id": "output-1_output_1",
+            "type": "output",
+            "index": 1,
+            "role": "prediction",
+            "activationPhases": ["evaluation"]
+        },
+        {
+            "id": "output-1_output_2",
+            "type": "output",
+            "index": 2,
+            "role": "evaluation",
+            "activationPhases": ["evaluation"]
+        },
+        {
+            "id": "opt-1_input_0",
+            "type": "input",
+            "index": 0,
+            "role": "loss",
+            "activationPhases": ["training"]
+        },
+        {
+            "id": "opt-1_input_1",
+            "type": "input",
+            "index": 1,
+            "role": "labels",
+            "activationPhases": ["training"]
+        }
+    ],
+    "nodeCounter": 3
+}
