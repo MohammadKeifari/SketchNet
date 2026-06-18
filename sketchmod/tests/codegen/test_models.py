@@ -649,6 +649,67 @@ def check_model11(proc, code, graph):
     return ok
 
 
+def check_model12(proc, code, graph):
+    """
+    model12 checks:
+      1. Branched network with Add merge is generated.
+      2. Preprocessing visualization exists.
+      3. Evaluation visualization exists.
+      4. Print nodes appear in all three phases.
+      5. Model converges (final train loss < 0.5).
+    """
+    ok = True
+
+    # 1. Add merge present
+    if "x = a + b" in code or "outputs['add']" in code:
+        print("✅ Add merge found")
+    else:
+        print("❌ Add merge missing")
+        ok = False
+
+    # 2. Preprocessing viz
+    if "Visualization 'viz_pre'" in code:
+        print("✅ viz_pre present")
+    else:
+        print("❌ viz_pre missing")
+        ok = False
+
+    # 3. Evaluation viz
+    if "Visualization 'viz_eval'" in code:
+        print("✅ viz_eval present")
+    else:
+        print("❌ viz_eval missing")
+        ok = False
+
+    # 4. Print nodes in all phases
+    for label in ("pre_data_shape", "train_loss_tensor", "predictions"):
+        if f'print("{label}' in code or f"print('{label}" in code:
+            print(f"✅ Print '{label}' found")
+        else:
+            print(f"❌ Print '{label}' missing")
+            ok = False
+
+    # 5. Convergence
+    output = proc.stdout if proc else ""
+    import re
+
+    losses = re.findall(r"Train Loss: ([0-9.]+)", output)
+    if losses:
+        final_train_loss = float(losses[-1])
+        if final_train_loss < 0.5:
+            print(f"✅ Model converged (final train loss = {final_train_loss:.6f})")
+        else:
+            print(
+                f"❌ Model did not converge (final train loss = {final_train_loss:.6f})"
+            )
+            ok = False
+    else:
+        print("❌ Could not parse train loss from output")
+        ok = False
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
@@ -661,6 +722,7 @@ MODEL_CHECKS = {
     9: check_model9,
     10: check_model10,
     11: check_model11,
+    12: check_model12,
 }
 # Models that only test validator errors – their generated code must NOT be executed.
 VALIDATION_ONLY_MODELS = {11}
