@@ -43,6 +43,38 @@ class GraphValidator:
             "isValid": len(errors) == 0,
         }
 
+    def _get_model_nodes(self):
+        """
+        Identify training‑order nodes that belong to the model.
+        Same logic as generator.py.
+        """
+        train_set = self.flow["train_set"]
+        output_id = None
+        for nid in train_set:
+            if self.graph.nodes[nid].type == "output":
+                output_id = nid
+                break
+        if output_id is None:
+            return []
+
+        reachable = set()
+        queue = [output_id]
+        while queue:
+            cur = queue.pop(0)
+            if cur in reachable:
+                continue
+            reachable.add(cur)
+            for pred in self.graph.predecessors(cur):
+                if pred in train_set and pred not in reachable:
+                    queue.append(pred)
+
+        pre_set = self.flow.get("preprocessing_set", set())
+        return [
+            nid
+            for nid in self.flow["train_order"]
+            if nid in reachable and nid not in pre_set
+        ]
+
     # ----------------------------------------------------------------
     #  ERRORS
     # ----------------------------------------------------------------
