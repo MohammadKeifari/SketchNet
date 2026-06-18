@@ -7,7 +7,7 @@ from typing import Set, List, Dict, Tuple, Optional
 from .graph import Graph, Node, Port, parse_graph
 
 # Nodes whose internal circuit requires ALL connected data inputs
-CONJUNCTIVE_NODES = {"add", "optimizer", "visualization" , "accuracy"}
+CONJUNCTIVE_NODES = {"add", "optimizer", "visualization", "accuracy"}
 
 
 def _has_phase(port: Port, phase: str) -> bool:
@@ -177,7 +177,7 @@ def analyze_phases(graph: Graph) -> dict:
     eval_order = _topo_sort(graph, eval_set)
 
     optimizer = None
-    for nid in train_set:
+    for nid in train_order:
         if graph.nodes[nid].type == "optimizer":
             optimizer = graph.nodes[nid]
             break
