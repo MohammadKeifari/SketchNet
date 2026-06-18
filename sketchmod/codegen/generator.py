@@ -496,10 +496,12 @@ class CodeGenerator:
         w.line("")
 
     def _get_first_model_node_id(self, phase: str) -> str | None:
-        """Return the first node in the training order as the model entry point."""
+        """Return the first node in the training order that belongs to the model subgraph."""
+        model_nodes = set(self._get_model_nodes())
         order = self.flow.get("train_order", [])
-        if order:
-            return order[0]
+        for nid in order:
+            if nid in model_nodes:
+                return nid
         return None
 
     def _get_feed_key(self, phase: str):
