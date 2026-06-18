@@ -412,7 +412,7 @@ class NeuronTranslator(BaseTranslator):
                         if src not in src_ids:
                             src_ids.append(src)
 
-            if is_first or len(src_ids) > 1:
+            if is_first:
                 if not src_ids:
                     expr = "None"
                 else:
