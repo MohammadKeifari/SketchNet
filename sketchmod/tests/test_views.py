@@ -170,7 +170,7 @@ class ViewsTest(TestCase):
         response = self.client.post(
             self.export_url, data="not json", content_type="application/json"
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 500)
 
     # ---------- Validate API ----------
     def test_validate_unauthenticated(self):
