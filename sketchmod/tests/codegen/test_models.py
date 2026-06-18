@@ -794,6 +794,31 @@ def check_model14(proc, code, graph):
     return ok
 
 
+def check_model15(proc, code, graph):
+    """
+    model15 checks (validation only):
+      1. Error: Param‑port cycle detected.
+    """
+    ok = True
+    from sketchmod.codegen.validator import GraphValidator
+
+    result = GraphValidator(graph).validate()
+    errors = result.get("errors", [])
+    warnings = result.get("warnings", [])
+
+    # 1. Param‑port cycle error
+    if any("Param‑port cycle" in e.get("message", "") for e in errors):
+        print("✅ Param‑port cycle error detected")
+    else:
+        print("❌ Param‑port cycle error not found")
+        ok = False
+
+    return ok
+
+
+# Models that only test validator errors – their generated code must NOT be executed.
+VALIDATION_ONLY_MODELS = {11, 13, 14, 15}
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
@@ -809,9 +834,9 @@ MODEL_CHECKS = {
     12: check_model12,
     13: check_model13,
     14: check_model14,
+    15: check_model15,
 }
-# Models that only test validator errors – their generated code must NOT be executed.
-VALIDATION_ONLY_MODELS = {11, 13, 14}
+
 
 # ----------------------------------------------------------------------
 # Main test logic
