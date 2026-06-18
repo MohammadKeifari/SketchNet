@@ -130,6 +130,9 @@ const SketchMod = {
                 ?.classList.add("collapsed");
         }
 
+        this._updateSidebarInfoVisibility();
+        window.addEventListener("resize", this._updateSidebarInfoVisibility);
+
         this.resize();
         window.addEventListener("resize", () => this.resize());
         this.canvas.addEventListener("mousedown", (e) => this._onMouseDown(e));
@@ -506,7 +509,22 @@ const SketchMod = {
         document.addEventListener("click", () => {
             this._hidePortContextMenu();
         });
-
+        // Info panel toggle
+        const infoIcon = document.getElementById("sidebarModelInfoIcon");
+        const infoPanel = document.getElementById("sidebarInfoPanel");
+        if (infoIcon && infoPanel) {
+            infoIcon.addEventListener("click", (e) => {
+                e.stopPropagation();
+                infoPanel.style.display =
+                    infoPanel.style.display === "block" ? "none" : "block";
+            });
+            // Close panel when clicking outside
+            document.addEventListener("click", (e) => {
+                if (!infoPanel.contains(e.target) && e.target !== infoIcon) {
+                    infoPanel.style.display = "none";
+                }
+            });
+        }
         this._loadFromSession();
 
         // Ensure input/output exist
@@ -2865,20 +2883,59 @@ const SketchMod = {
             }
         }
     },
+    _updateSidebarInfoVisibility() {
+        const sidebar = document.querySelector(".sidebar-right");
+        const infoDiv = document.getElementById("sidebarModelInfo");
+        const icon = document.getElementById("sidebarModelInfoIcon");
+        const panel = document.getElementById("sidebarInfoPanel");
+        if (!sidebar || !icon || !infoDiv || !panel) return;
+
+        const isNarrow = sidebar.offsetWidth <= 56;
+
+        if (isNarrow) {
+            if (SketchMod._currentModelId || SketchMod._currentModelName) {
+                icon.style.display = "flex";
+            } else {
+                icon.style.display = "none";
+            }
+            infoDiv.style.display = "none";
+        } else {
+            icon.style.display = "none";
+            if (SketchMod._currentModelId || SketchMod._currentModelName) {
+                infoDiv.style.display = "block";
+            }
+        }
+
+        // Position the floating panel relative to the sidebar
+        const rect = sidebar.getBoundingClientRect();
+        panel.style.top = rect.top + 8 + "px";
+        // panel appears to the left of the sidebar, with a small gap
+        panel.style.right = window.innerWidth - rect.left + 8 + "px";
+    },
     _updateModelInfo() {
         const infoDiv = document.getElementById("sidebarModelInfo");
         const nameEl = document.getElementById("sidebarModelName");
         const idEl = document.getElementById("sidebarModelId");
 
-        if (this._currentModelName || this._currentModelId) {
-            infoDiv.style.display = "block";
-            nameEl.textContent = this._currentModelName || "Untitled";
-            idEl.textContent = this._currentModelId || "";
-        } else {
-            infoDiv.style.display = "none";
-        }
-    },
+        const panelName = document.getElementById("sidebarInfoPanelName");
+        const panelId = document.getElementById("sidebarInfoPanelId");
 
+        if (this._currentModelName || this._currentModelId) {
+            if (infoDiv) infoDiv.style.display = "block";
+            if (nameEl)
+                nameEl.textContent = this._currentModelName || "Untitled";
+            if (idEl) idEl.textContent = this._currentModelId || "";
+
+            if (panelName)
+                panelName.textContent = this._currentModelName || "Untitled";
+            if (panelId) panelId.textContent = this._currentModelId || "";
+        } else {
+            if (infoDiv) infoDiv.style.display = "none";
+            if (panelName) panelName.textContent = "";
+            if (panelId) panelId.textContent = "";
+        }
+        this._updateSidebarInfoVisibility();
+    },
     // ========== EXPORT METHODS ==========
     _toggleExportMenu() {
         const menu = document.getElementById("exportMenu");
