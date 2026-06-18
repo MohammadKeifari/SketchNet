@@ -466,7 +466,7 @@ class CodeGenerator:
         else:
             w.line("model = None")
 
-        if has_eval:
+        if has_eval and self._eval_entry_matches():
             w.line("viz_data = evaluate(model, pre_data)")
 
         w.dedent()
