@@ -28,6 +28,8 @@ class CodeGenerator:
             graph_data: dictionary with "nodes", "links", "ports", "nodeCounter".
         """
         self.graph = parse_graph(graph_data)
+        # Keep only the first optimizer for code generation
+        self.graph = self._remove_extra_optimizers(self.graph)
         self.flow = analyze_phases(self.graph)
         self.var_map = {}  # port/node id -> variable name
         self.translators = {}  # node id -> translator instance
@@ -590,3 +592,34 @@ class CodeGenerator:
                 if p.role == "loss":
                     return p.id
         return None
+
+    def _remove_extra_optimizers(self, graph):
+        optimizer_nodes = [n for n in graph.nodes.values() if n.type == "optimizer"]
+        if len(optimizer_nodes) <= 1:
+            return graph
+
+        keep_id = optimizer_nodes[0].id
+        remove_ids = {n.id for n in optimizer_nodes[1:]}
+
+        # Remove nodes
+        graph.nodes = {
+            nid: node for nid, node in graph.nodes.items() if nid not in remove_ids
+        }
+
+        # Remove their ports
+        removed_ports = set()
+        for n in optimizer_nodes[1:]:
+            for p in n.inputs + n.outputs + n.paramInputs + n.paramOutputs:
+                removed_ports.add(p.id)
+        graph.ports = {
+            pid: port for pid, port in graph.ports.items() if pid not in removed_ports
+        }
+
+        # Remove links involving removed ports
+        graph.links = [
+            l
+            for l in graph.links
+            if l.id_from not in removed_ports and l.id_to not in removed_ports
+        ]
+
+        return graph
