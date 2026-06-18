@@ -391,7 +391,16 @@ class GraphValidator:
                 continue
             target_str = node.properties.get("targetShape", "")
             parts = [x.strip() for x in target_str.strip("()").split(",") if x.strip()]
-            infer_count = sum(1 for p in parts if p == "-1")
+            infer_count = 0
+            for p in parts:
+                if p == "-1":
+                    infer_count += 1
+                else:
+                    try:
+                        int(p)
+                    except ValueError:
+                        infer_count += 1
+
             if infer_count > 1:
                 warnings.append(
                     {
