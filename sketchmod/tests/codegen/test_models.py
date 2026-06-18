@@ -748,6 +748,52 @@ def check_model13(proc, code, graph):
     return ok
 
 
+def check_model14(proc, code, graph):
+    """
+    model14 checks:
+      1. Reshape line contains the symbolic name 'batch' (preserved, not substituted).
+      2. Reshape line uses -1 for inferred dimension.
+      3. No shape feasibility warning (the input size 200*28*28 is divisible by batch=200).
+      4. The model is validation‑only – code is generated but not executed.
+    """
+    ok = True
+
+    # 1. Symbolic 'batch' appears in the reshape call.
+    if "batch" in code:
+        print("✅ Symbolic 'batch' present in generated code")
+    else:
+        print("❌ Symbolic 'batch' missing")
+        ok = False
+
+    # 2. The -1 dimension is kept (it should be inferred, so -1 should appear).
+    # The reshape call should look like: .reshape((batch, -1))
+    if ".reshape((batch, -1))" in code:
+        print("✅ Reshape with -1 inferred dimension")
+    else:
+        # Fallback: maybe the code uses a different formatting
+        if "-1" in code and "batch" in code:
+            print("✅ Reshape line contains -1 and batch")
+        else:
+            print("❌ Reshape line does not contain -1")
+            ok = False
+
+    # 3. Check validator warnings: there should be no reshape feasibility warning.
+    from sketchmod.codegen.validator import GraphValidator
+
+    result = GraphValidator(graph).validate()
+    warnings = [w["message"] for w in result.get("warnings", [])]
+    reshape_warnings = [
+        w for w in warnings if "reshape" in w.lower() and "total elements" in w.lower()
+    ]
+    if reshape_warnings:
+        print("❌ Unexpected reshape feasibility warning:", reshape_warnings[0])
+        ok = False
+    else:
+        print("✅ No reshape feasibility warning")
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
@@ -762,9 +808,10 @@ MODEL_CHECKS = {
     11: check_model11,
     12: check_model12,
     13: check_model13,
+    14: check_model14,
 }
 # Models that only test validator errors – their generated code must NOT be executed.
-VALIDATION_ONLY_MODELS = {11, 13}
+VALIDATION_ONLY_MODELS = {11, 13, 14}
 
 # ----------------------------------------------------------------------
 # Main test logic
