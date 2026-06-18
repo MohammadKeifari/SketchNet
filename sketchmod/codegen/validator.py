@@ -24,6 +24,7 @@ class GraphValidator:
         self._check_param_port_cycles(errors)
         self._check_required_inputs(errors)
         self._check_multiple_train_entries(errors)
+        self._check_data_flow_cycles(errors)
 
         self._check_optimizer_missing(warnings)
         self._check_model_in_preprocessing(warnings)
@@ -467,3 +468,35 @@ class GraphValidator:
                     "nodeId": eval_entry,
                 }
             )
+
+    def _check_data_flow_cycles(self, errors):
+        """Detect cycles formed by non‑param (data) links."""
+        adj = {nid: [] for nid in self.graph.nodes}
+        for link in self.graph.links:
+            src = self.graph.ports[link.id_from]
+            tgt = self.graph.ports[link.id_to]
+            if src.port_kind != "param" and tgt.port_kind != "param":
+                adj[src.node_id].append(tgt.node_id)
+
+        WHITE, GRAY, BLACK = 0, 1, 2
+        color = {nid: WHITE for nid in self.graph.nodes}
+
+        def dfs(u):
+            color[u] = GRAY
+            for v in adj[u]:
+                if color[v] == GRAY:
+                    return True
+                if color[v] == WHITE and dfs(v):
+                    return True
+            color[u] = BLACK
+            return False
+
+        for nid in self.graph.nodes:
+            if color[nid] == WHITE and dfs(nid):
+                errors.append(
+                    {
+                        "message": "Data‑flow cycle detected – the graph is not a DAG.",
+                        "nodeId": None,
+                    }
+                )
+                return
