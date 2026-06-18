@@ -151,9 +151,6 @@ def fork_model(request, model_id):
         messages.error(request, "You don't have permission to fork this model.")
         return redirect("models:view", model_id=model_id)
 
-    print(f"Forking by user: {request.user.username}")
-    print(f"Request user id: {request.user.id}")
-
     forked = SketchModel.objects.create(
         name=f"{original.name} (fork)",
         description=original.description,
@@ -165,7 +162,6 @@ def fork_model(request, model_id):
     original.forks_count = F("forks_count") + 1
     original.save(update_fields=["forks_count"])
     original.refresh_from_db()
-    print(f"VIEW DEBUG after save: forks_count = {original.forks_count}")
 
     messages.success(request, f"Model forked successfully as '{forked.name}'.")
     return redirect("models:view", model_id=forked.model_id)
