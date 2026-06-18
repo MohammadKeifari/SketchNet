@@ -627,6 +627,28 @@ def check_model10(proc, code, graph):
     return ok
 
 
+def check_model11(proc, code, graph):
+    """
+    model11 checks:
+      1. Validator reports error about multiple training entry points.
+         (The UI would block export when this error exists, so the test
+          only needs to confirm the error is present.)
+    """
+    ok = True
+
+    from sketchmod.codegen.validator import GraphValidator
+
+    result = GraphValidator(graph).validate()
+    errors = result.get("errors", [])
+    if any("Multiple training entry points" in e.get("message", "") for e in errors):
+        print("✅ Multiple training entry points error detected")
+    else:
+        print("❌ Expected error for multiple training entry points not found")
+        ok = False
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
@@ -638,8 +660,10 @@ MODEL_CHECKS = {
     8: check_model8,
     9: check_model9,
     10: check_model10,
+    11: check_model11,
 }
-
+# Models that only test validator errors – their generated code must NOT be executed.
+VALIDATION_ONLY_MODELS = {11}
 
 # ----------------------------------------------------------------------
 # Main test logic
@@ -663,11 +687,25 @@ def test_model(model_file: Path, interactive: bool, dump_code: bool = False) -> 
 
     print("Code generated successfully.")
 
+    m = re.match(r"model(\d+)\.json", model_file.name, re.IGNORECASE)
+    model_idx = int(m.group(1)) if m else None
+
     if dump_code:
         dump_path = EXAMPLES_DIR / f"{model_file.stem}_generated.py"
         with open(dump_path, "w", encoding="utf-8") as f:
             f.write(code)
         print(f"💾 Dumped generated code to {dump_path}")
+
+    # Validation‑only models: skip execution, only check validator
+    if model_idx in VALIDATION_ONLY_MODELS:
+        print("⏭️  Validation‑only model – skipping execution.")
+        if model_idx is not None and model_idx in MODEL_CHECKS:
+            print("\nRunning specific checks...")
+            ok = MODEL_CHECKS[model_idx](None, code, graph)
+            if ok:
+                print("✅ All checks passed.")
+            return ok
+        return True
 
     proc = run_generated_code(code, timeout=120, interactive=interactive)
 
