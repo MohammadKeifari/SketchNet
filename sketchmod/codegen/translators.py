@@ -1002,8 +1002,7 @@ class ReshapeTranslator(BaseTranslator):
                     int(p)
                     tuple_parts.append(p)
                 except ValueError:
-                    # assume symbolic name, can't be used directly – treat as -1
-                    tuple_parts.append("-1")
+                    tuple_parts.append(p)
         target_tuple = "(" + ", ".join(tuple_parts) + ")"
 
         if placement == "data":
