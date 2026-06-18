@@ -634,6 +634,7 @@ class CodeGenerator:
         return graph
 
     def _eval_entry_matches(self):
+        """Return True if evaluation can reuse the trained model."""
         model_nodes = set(self._get_model_nodes())
         train_entry = None
         for nid in self.flow.get("train_order", []):
@@ -645,7 +646,6 @@ class CodeGenerator:
             if nid in model_nodes:
                 eval_entry = nid
                 break
-        # If there's no eval entry at all, we can't evaluate — skip
         if eval_entry is None:
-            return False
+            return True
         return train_entry == eval_entry
