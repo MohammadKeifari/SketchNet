@@ -35,6 +35,7 @@ class GraphValidator:
         self._check_accuracy_label_reshape(warnings)
         self._check_reshape_feasibility(warnings)
         self._check_multiple_optimizers(warnings)
+        self._check_eval_entry_point(warnings)
 
         return {
             "errors": errors,
@@ -382,5 +383,31 @@ class GraphValidator:
                         "Only the first one will be used."
                     ),
                     "nodeId": None,
+                }
+            )
+
+    def _check_eval_entry_point(self, warnings):
+        model_nodes = self._get_model_nodes()
+        if not model_nodes:
+            return
+        train_entry = None
+        for nid in self.flow.get("train_order", []):
+            if nid in model_nodes:
+                train_entry = nid
+                break
+        eval_entry = None
+        for nid in self.flow.get("eval_order", []):
+            if nid in model_nodes:
+                eval_entry = nid
+                break
+        if train_entry and eval_entry and train_entry != eval_entry:
+            warnings.append(
+                {
+                    "message": (
+                        f"Evaluation enters the model at '{eval_entry}', "
+                        f"but the model starts at '{train_entry}'. "
+                        "Evaluation will be skipped because it cannot reuse the trained model."
+                    ),
+                    "nodeId": eval_entry,
                 }
             )
