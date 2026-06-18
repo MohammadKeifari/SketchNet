@@ -565,6 +565,33 @@ def check_model8(proc, code, graph):
     return ok
 
 
+def check_model9(proc, code, graph):
+    """
+    model9 checks:
+      1. Validator warns about multiple optimizers.
+      2. Training still runs with the first optimizer.
+    """
+    ok = True
+
+    from sketchmod.codegen.validator import GraphValidator
+
+    result = GraphValidator(graph).validate()
+    warnings = result.get("warnings", [])
+    if any("Only the first one will be used" in w.get("message", "") for w in warnings):
+        print("✅ Multiple optimizers warning present")
+    else:
+        print("❌ Expected warning for multiple optimizers not found")
+        ok = False
+
+    if "Training complete." in proc.stdout:
+        print("✅ Training completed with first optimizer")
+    else:
+        print("❌ Training did not complete")
+        ok = False
+
+    return ok
+
+
 MODEL_CHECKS = {
     1: check_model1,
     2: check_model2,
@@ -574,6 +601,7 @@ MODEL_CHECKS = {
     6: check_model6,
     7: check_model7,
     8: check_model8,
+    9: check_model9,
 }
 
 
