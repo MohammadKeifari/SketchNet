@@ -413,6 +413,7 @@ class NeuronTranslator(BaseTranslator):
                             src_ids.append(src)
 
             if is_first:
+                # First node – read from inputs_dict (may have multiple sources)
                 if not src_ids:
                     expr = "None"
                 else:
@@ -422,8 +423,29 @@ class NeuronTranslator(BaseTranslator):
                     expr += ")"
                 w.line(f"x = {expr}")
             else:
-                src = src_ids[0]
-                w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
+                # Not first node
+                if not src_ids:
+                    w.line("x = None")
+                elif len(src_ids) == 1:
+                    # Single source – simple read from outputs
+                    src = src_ids[0]
+                    w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
+                else:
+                    # Multiple sources – try each in outputs first, then fallback
+                    w.line("x = None")
+                    for src in src_ids:
+                        w.line(f"if x is None and '{src}' in outputs:")
+                        w.indent()
+                        w.line(f"x = outputs['{src}']")
+                        w.dedent()
+                    w.line("if x is None:")
+                    w.indent()
+                    fallback = f"inputs_dict.get('{src_ids[0]}'"
+                    for src in src_ids[1:]:
+                        fallback += f", inputs_dict.get('{src}')"
+                    fallback += ")"
+                    w.line(f"x = {fallback}")
+                    w.dedent()
 
             w.line(f"x = self.fc_{sid}(x)")
             act = n.properties.get("activation", "relu")
