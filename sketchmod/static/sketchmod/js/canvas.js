@@ -3871,59 +3871,130 @@ const SketchMod = {
         SketchMod._render();
     },
 
+    // ========== AUTO LAYOUT (with timeout via Web Worker) ==========
     async autoLayout() {
         if (this.nodes.length === 0) return;
 
-        // ----- Pre‑check: don’t attempt layout if the graph has a cycle -----
-        const cycleFree = await this._preCheckLayoutCycles();
-        if (!cycleFree) {
-            this._showToast("Cannot auto‑layout – graph contains a cycle.");
-            return;
+        // Normalise link endpoints (same as layout.js does)
+        const linksData = [];
+        for (const l of this.links) {
+            const fromId = typeof l.from === "string" ? l.from : l.from?.id;
+            const toId = typeof l.to === "string" ? l.to : l.to?.id;
+            if (fromId && toId) {
+                linksData.push({ from: fromId, to: toId });
+            }
         }
 
-        // (rest of the original autoLayout code remains unchanged)
-        this._saveUndoState();
-        const positions = SketchLayout.compute(this.nodes, this.links);
-        for (const n of this.nodes) {
-            const pos = positions.get(n.id);
-            if (pos) {
-                n.x = pos.x;
-                n.y = pos.y;
-                n.updatePorts();
-            }
-        }
-        this.ports = this._collectPorts();
-        this._saveToSession();
-        this._zoomFit();
-        this._render();
-        this._propagateShapes();
-    },
-    async _preCheckLayoutCycles() {
-        const graphData = JSON.stringify(this._getGraphData());
-        try {
-            const res = await fetch("/sketchmod/api/validate/", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": this._getCsrfToken(),
-                },
-                body: JSON.stringify({ graph: graphData }),
+        const nodesData = this.nodes.map((n) => {
+            // Helper to decorate port data with a minimal node reference
+            const decorate = (p) => ({
+                id: p.id,
+                portKind: p.portKind,
+                node: { id: n.id },
             });
-            const data = await res.json();
-            if (data.success && data.errors) {
-                // Look for the exact error message from validator.py
-                const hasCycle = data.errors.some(
-                    (e) => e.message && e.message.includes("Data‑flow cycle"),
-                );
-                return !hasCycle; // true = OK, false = cycle found
+            return {
+                id: n.id,
+                type: n.type,
+                width: n.width,
+                height: n.height,
+                radius: n.radius,
+                inputs: n.inputs.map(decorate),
+                outputs: n.outputs.map(decorate),
+                paramInputs: n.paramInputs.map(decorate),
+                paramOutputs: n.paramOutputs.map(decorate),
+            };
+        });
+        this._showToast("Auto‑layout running…");
+
+        const layoutCode = await this._getLayoutWorkerCode();
+        const blob = new Blob([layoutCode], { type: "application/javascript" });
+        const workerUrl = URL.createObjectURL(blob);
+        const worker = new Worker(workerUrl);
+
+        let resolved = false;
+        const TIMEOUT_MS = 3000;
+
+        try {
+            const result = await Promise.race([
+                new Promise((resolve, reject) => {
+                    worker.onmessage = (e) => {
+                        if (e.data.error) {
+                            reject(new Error(e.data.error));
+                        } else {
+                            // The worker sends an array of [key, value] pairs – rebuild Map
+                            resolve(new Map(e.data.positions));
+                        }
+                        worker.terminate();
+                        URL.revokeObjectURL(workerUrl);
+                        resolved = true;
+                    };
+                    worker.onerror = (e) => {
+                        reject(new Error("Layout worker crashed"));
+                        worker.terminate();
+                        URL.revokeObjectURL(workerUrl);
+                        resolved = true;
+                    };
+                    // Send the normalised data
+                    worker.postMessage({ nodes: nodesData, links: linksData });
+                }),
+                new Promise((_, reject) =>
+                    setTimeout(() => {
+                        if (!resolved) {
+                            worker.terminate();
+                            URL.revokeObjectURL(workerUrl);
+                            reject(new Error("TIMEOUT"));
+                        }
+                    }, TIMEOUT_MS),
+                ),
+            ]);
+
+            // ---- Layout succeeded ----
+            this._saveUndoState();
+            const positions = result; // Map<nodeId, {x, y}>
+            for (const n of this.nodes) {
+                const pos = positions.get(n.id);
+                if (pos) {
+                    n.x = pos.x;
+                    n.y = pos.y;
+                    n.updatePorts();
+                }
             }
-            // If the validator response is unexpected, assume cycle to be safe
-            return false;
+            this.ports = this._collectPorts();
+            this._saveToSession();
+            this._zoomFit();
+            this._render();
+            this._propagateShapes();
+            this._showToast("Layout done");
         } catch (err) {
-            console.error("Pre‑layout cycle check failed:", err);
-            // If the request itself fails, abort layout
-            return false;
+            if (err.message === "TIMEOUT") {
+                this._showToast(
+                    "Auto‑layout timed out – possible graph cycle.",
+                );
+            } else {
+                console.error("Layout failed:", err);
+                this._showToast("Auto‑layout failed.");
+            }
         }
+    },
+
+    async _getLayoutWorkerCode() {
+        const response = await fetch("/static/sketchmod/js/layout.js");
+        let code = await response.text();
+        code += `
+
+    // ---- Auto‑layout worker message handler ----
+    self.onmessage = function(e) {
+        const { nodes, links } = e.data;
+        try {
+            const positions = SketchLayout.compute(nodes, links);
+            // The Map can't be cloned, so send an array of entries
+            self.postMessage({ positions: Array.from(positions) });
+        } catch (err) {
+            self.postMessage({ error: err.message });
+        }
+    };
+    `;
+        return code;
     },
 };
 // ========== PORT BASE CLASS ==========
