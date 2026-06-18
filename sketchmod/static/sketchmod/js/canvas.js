@@ -3870,8 +3870,18 @@ const SketchMod = {
         SketchMod._propagateShapes();
         SketchMod._render();
     },
-    autoLayout() {
+
+    async autoLayout() {
         if (this.nodes.length === 0) return;
+
+        // ----- Pre‑check: don’t attempt layout if the graph has a cycle -----
+        const cycleFree = await this._preCheckLayoutCycles();
+        if (!cycleFree) {
+            this._showToast("Cannot auto‑layout – graph contains a cycle.");
+            return;
+        }
+
+        // (rest of the original autoLayout code remains unchanged)
         this._saveUndoState();
         const positions = SketchLayout.compute(this.nodes, this.links);
         for (const n of this.nodes) {
@@ -3887,6 +3897,33 @@ const SketchMod = {
         this._zoomFit();
         this._render();
         this._propagateShapes();
+    },
+    async _preCheckLayoutCycles() {
+        const graphData = JSON.stringify(this._getGraphData());
+        try {
+            const res = await fetch("/sketchmod/api/validate/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": this._getCsrfToken(),
+                },
+                body: JSON.stringify({ graph: graphData }),
+            });
+            const data = await res.json();
+            if (data.success && data.errors) {
+                // Look for the exact error message from validator.py
+                const hasCycle = data.errors.some(
+                    (e) => e.message && e.message.includes("Data‑flow cycle"),
+                );
+                return !hasCycle; // true = OK, false = cycle found
+            }
+            // If the validator response is unexpected, assume cycle to be safe
+            return false;
+        } catch (err) {
+            console.error("Pre‑layout cycle check failed:", err);
+            // If the request itself fails, abort layout
+            return false;
+        }
     },
 };
 // ========== PORT BASE CLASS ==========
