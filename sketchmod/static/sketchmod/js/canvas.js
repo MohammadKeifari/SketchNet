@@ -60,6 +60,8 @@ const SketchMod = {
     _highlightPhaseNodes: null, // Set of node instances that are highlighted
     _highlightPhaseLinks: null, // Set of link instances that are highlighted
 
+    _floatingPropertiesMode: false,
+
     clipboard: null,
     _getNodeColor() {
         const theme =
@@ -1576,6 +1578,7 @@ const SketchMod = {
     // ========== PROPERTIES ==========
     _showProperties(node) {
         const panel = document.getElementById("propertiesPanel");
+        this._floatingPropertiesMode = this._isSidebarNarrow();
         const html = node.getPropertiesHTML();
         this._updateAllPropertiesContent(html);
 
@@ -5689,42 +5692,60 @@ class InputDataNode extends RectNode {
         return this._makeShapes(shape, symbolic, !!shape);
     }
     getPropertiesHTML() {
-        return (
-            this._getShapeSummaryHTML() +
-            `
-        <div class="prop-group">
-            <label>Dataset</label>
-            <div class="dataset-selector" id="datasetSelector">
-                <div class="dataset-select-display" id="datasetSelectDisplay" onclick="SketchMod._toggleDatasetPicker()">
-                    <span id="selectedDatasetName">${this.datasetName || "Select a dataset..."}</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                </div>
-                <div class="dataset-picker" id="datasetPicker" style="display: none;">
-                    <div class="dataset-picker-tabs">
-                        <button class="dataset-tab active" data-section="all">All</button>
-                        <button class="dataset-tab" data-section="mine">My</button>
-                        <button class="dataset-tab" data-section="liked">Liked</button>
+        const floating = SketchMod._floatingPropertiesMode;
+
+        // Build the dataset section
+        let datasetHTML;
+        if (floating) {
+            // Simplified display for the floating panel
+            datasetHTML = `
+            <div class="prop-group">
+                <label>Dataset</label>
+                <p class="prop-hint">
+                    ${this.datasetName || "No dataset selected"}
+                    ${this.datasetId ? `<br><small style="font-family: monospace; color: var(--accent);">${this.datasetId}</small>` : ""}
+                </p>
+            </div>`;
+        } else {
+            // Full interactive picker (only in expanded sidebar)
+            datasetHTML = `
+            <div class="prop-group">
+                <label>Dataset</label>
+                <div class="dataset-selector" id="datasetSelector">
+                    <div class="dataset-select-display" id="datasetSelectDisplay" onclick="SketchMod._toggleDatasetPicker()">
+                        <span id="selectedDatasetName">${this.datasetName || "Select a dataset..."}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
                     </div>
-                    <input type="text" class="prop-input dataset-search" id="datasetSearch" placeholder="Search datasets...">
-                    <div class="dataset-list" id="datasetList">
-                        <div class="dataset-loading">Loading...</div>
+                    <div class="dataset-picker" id="datasetPicker" style="display: none;">
+                        <div class="dataset-picker-tabs">
+                            <button class="dataset-tab active" data-section="all">All</button>
+                            <button class="dataset-tab" data-section="mine">My</button>
+                            <button class="dataset-tab" data-section="liked">Liked</button>
+                        </div>
+                        <input type="text" class="prop-input dataset-search" id="datasetSearch" placeholder="Search datasets...">
+                        <div class="dataset-list" id="datasetList">
+                            <div class="dataset-loading">Loading...</div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            ${this.datasetId ? `<div class="prop-group"><label>Dataset ID</label><p class="prop-hint" style="font-family: monospace;">${this.datasetId}</p></div>` : ""}
-        </div>
+                ${this.datasetId ? `<div class="prop-group"><label>Dataset ID</label><p class="prop-hint" style="font-family: monospace;">${this.datasetId}</p></div>` : ""}
+            </div>`;
+        }
+
+        // Build the shape override input (always present)
+        const shapeHTML = `
         <div class="prop-group">
             <label>Shape</label>
             <input type="text" id="prop-manual-shape" class="prop-input" 
-                   placeholder="e.g. (None, 28, 28)" 
-                   value="${this.dataShape || ""}"
-                   onchange="SketchMod._updateManualShape(this)">
+                placeholder="e.g. (None, 28, 28)" 
+                value="${this.dataShape || ""}"
+                onchange="SketchMod._updateManualShape(this)">
             <p class="prop-hint">You can override the dataset shape manually.</p>
-        </div>
-    `
-        );
+        </div>`;
+
+        return this._getShapeSummaryHTML() + datasetHTML + shapeHTML;
     }
 
     toJSON() {
