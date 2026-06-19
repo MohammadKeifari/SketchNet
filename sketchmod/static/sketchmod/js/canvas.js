@@ -6483,8 +6483,8 @@ class TrainTestSplitNode extends RectNode {
         this.addInput();
         this.addOutput("train");
         this.addOutput("test");
-        this.outputs[0].activationPhases = ["training"];
-        this.outputs[1].activationPhases = ["evaluation"];
+        this.outputs[0].activationPhases = ["preprocessing"];
+        this.outputs[1].activationPhases = ["preprocessing"];
     }
 
     drawLabel(ctx) {
@@ -6825,8 +6825,8 @@ class FlattenNode extends RectNode {
         this.minOutputs = 1;
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationPhases = ["training", "evaluation"];
-        this.outputs[0].activationPhases = ["training", "evaluation"];
+        this.inputs[0].activationPhases = ["preprocessing"];
+        this.outputs[0].activationPhases = ["preprocessing"];
     }
 
     drawLabel(ctx) {
@@ -7100,8 +7100,8 @@ class DeOneHotNode extends RectNode {
 
         this.addInput();
         this.addOutput();
-        this.inputs[0].activationPhases = ["preprocessing"];
-        this.outputs[0].activationPhases = ["preprocessing"];
+        this.inputs[0].activationPhases = ["evaluation"];
+        this.outputs[0].activationPhases = ["evaluation"];
     }
 
     drawLabel(ctx) {
@@ -7278,8 +7278,8 @@ class ConcatenateNode extends RectNode {
         // Single MultiPort for all incoming connections
         this.inputs.push(new MultiPort(this, "input", 0, null));
         this.addOutput();
-        this.inputs[0].activationPhases = ["training", "evaluation"];
-        this.outputs[0].activationPhases = ["training", "evaluation"];
+        this.inputs[0].activationPhases = ["preprocessing"];
+        this.outputs[0].activationPhases = ["preprocessing"];
         this.updatePorts();
     }
     canAddInput() {
