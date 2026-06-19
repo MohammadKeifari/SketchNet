@@ -793,6 +793,8 @@ class VisualizationTranslator(BaseTranslator):
                 w.line(f"{vname} = None")
             var_names.append(vname)
 
+        # ---- colour port (if any) ----
+        cmap = "None"
         if color_port:
             src_var = None
             for link in self.graph.links:
@@ -807,29 +809,29 @@ class VisualizationTranslator(BaseTranslator):
                 w.line(f"colors = {src_var}")
             else:
                 w.line("colors = None")
+
+            cmode = n.properties.get("colorMode", "none")
+            if cmode == "discrete":
+                palette = n.properties.get("colorPalette", [])
+                if palette:
+                    w.line("from matplotlib.colors import ListedColormap")
+                    hexes = ", ".join(f"'{c}'" for c in palette)
+                    w.line(f"custom_cmap = ListedColormap([{hexes}])")
+                    cmap = "custom_cmap"
+                else:
+                    cmap = "'tab10'"
+            elif cmode == "continuous":
+                w.line("from matplotlib.colors import LinearSegmentedColormap")
+                minc = n.properties.get("continuousMinColor", "#3b82f6")
+                maxc = n.properties.get("continuousMaxColor", "#ef4444")
+                w.line(
+                    f"custom_cmap = LinearSegmentedColormap.from_list('cust', ['{minc}', '{maxc}'])"
+                )
+                cmap = "custom_cmap"
         else:
             w.line("colors = None")
 
-        cmode = n.properties.get("colorMode", "none")
-        cmap = "None"
-        if cmode == "discrete" and color_port:
-            palette = n.properties.get("colorPalette", [])
-            if palette:
-                w.line("from matplotlib.colors import ListedColormap")
-                hexes = ", ".join(f"'{c}'" for c in palette)
-                w.line(f"custom_cmap = ListedColormap([{hexes}])")
-                cmap = "custom_cmap"
-            else:
-                cmap = "'tab10'"
-        elif cmode == "continuous" and color_port:
-            w.line("from matplotlib.colors import LinearSegmentedColormap")
-            minc = n.properties.get("continuousMinColor", "#3b82f6")
-            maxc = n.properties.get("continuousMaxColor", "#ef4444")
-            w.line(
-                f"custom_cmap = LinearSegmentedColormap.from_list('cust', ['{minc}', '{maxc}'])"
-            )
-            cmap = "custom_cmap"
-
+        # ---- plot depending on number of coordinates ----
         if len(coord_ports) == 1:
             w.line(f"plt.hist({var_names[0]}.flatten(), bins=20)")
         elif len(coord_ports) == 2:
