@@ -78,6 +78,12 @@ class GraphValidator:
             if nid in reachable and nid not in pre_set
         ]
 
+    @staticmethod
+    def _shape_str(shape_info):
+        if not shape_info or not shape_info.shape:
+            return "unknown"
+        return "(" + ", ".join(str(d) for d in shape_info.shape) + ")"
+
     # ----------------------------------------------------------------
     #  ERRORS
     # ----------------------------------------------------------------
@@ -559,9 +565,3 @@ class GraphValidator:
                         "nodeId": node.id,
                     }
                 )
-
-    @staticmethod
-    def _shape_str(shape_info):
-        if not shape_info or not shape_info.shape:
-            return "unknown"
-        return "(" + ", ".join(str(d) for d in shape_info.shape) + ")"
