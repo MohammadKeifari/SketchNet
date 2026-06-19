@@ -5456,13 +5456,6 @@ class NeuronNode extends CircleNode {
     drawLabel(ctx) {
         ctx.fillText("N", this.x, this.y);
     }
-    // validateConnections(incomingCount) {
-    //     const errors = [];
-    //     if (incomingCount < 1) {
-    //         errors.push(`${this.type}: requires at least 1 input connection`);
-    //     }
-    //     return errors;
-    // }
 
     computeOutputShapes() {
         const allShapes = this._getAllInputShapeObjs();
