@@ -1137,6 +1137,33 @@
     white-space: nowrap;
 }
 
+/* ---- Properties floating panel (same base as info panel) ---- */
+.sidebar-properties-panel {
+    display: none;
+    position: fixed; 
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    z-index: 300;
+    min-width: 220px;
+    max-height: 60vh;
+    overflow-y: auto;
+    animation: fadeIn 0.15s ease;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+.sidebar-properties-panel .sidebar-section-title {
+    padding: 0 0 8px 0;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.sidebar-properties-icon {
+    display: none;
+    justify-content: center;
+    width: 100%;
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1024px) {
     .toolbar {
