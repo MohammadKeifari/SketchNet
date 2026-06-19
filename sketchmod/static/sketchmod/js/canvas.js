@@ -6615,16 +6615,6 @@ class Conv2DNode extends RectNode {
             this.y + 14,
         );
     }
-    // validateConnections(incomingCount) {
-    //     const errors = [];
-    //     if (incomingCount > 1) {
-    //         errors.push(
-    //             `${this.type}: only accepts 1 input connection, but has ${incomingCount}`,
-    //         );
-    //     }
-    //     return errors;
-    // }
-
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
         if (!s || s.shape.length < 3) return this._emptyShapes();
@@ -6699,29 +6689,24 @@ class Conv2DNode extends RectNode {
         return (
             this._getShapeSummaryHTML() +
             `<div class="prop-group"><label>Filters</label><input type="number" id="prop-filters" class="prop-input" value="${this.filters}" min="1" max="2048"></div>
-            <div class="prop-group"><label>Kernel Size</label><input type="number" id="prop-kernel" class="prop-input" value="${this.kernelSize}" min="1" max="11"></div>
-            <div class="prop-group"><label>Stride</label><input type="number" id="prop-stride" class="prop-input" value="${this.stride}" min="1" max="5"></div>
-            <div class="prop-group"><label>Padding</label><input type="number" id="prop-padding" class="prop-input" value="${this.padding}" min="0" max="5"></div>
-            <div class="prop-group"><label>Activation</label>
-            <select id="prop-activation" class="prop-select">
-                <option value="linear"   ${this.activation === "linear" ? "selected" : ""}>Linear (none)</option>
-                <option value="relu"     ${this.activation === "relu" ? "selected" : ""}>ReLU</option>
-                <option value="sigmoid"  ${this.activation === "sigmoid" ? "selected" : ""}>Sigmoid</option>
-                <option value="tanh"     ${this.activation === "tanh" ? "selected" : ""}>Tanh</option>
-                <option value="softmax"  ${this.activation === "softmax" ? "selected" : ""}>Softmax</option>
-                <option value="softplus" ${this.activation === "softplus" ? "selected" : ""}>Softplus</option>
-                <option value="elu"      ${this.activation === "elu" ? "selected" : ""}>ELU</option>
-                <option value="selu"     ${this.activation === "selu" ? "selected" : ""}>SELU</option>
-                <option value="gelu"     ${this.activation === "gelu" ? "selected" : ""}>GELU</option>
-                <option value="leaky_relu" ${this.activation === "leaky_relu" ? "selected" : ""}>Leaky ReLU</option>
-                <option value="mish"     ${this.activation === "mish" ? "selected" : ""}>Mish</option>
-                </select>
-            </div>
-            <div class="prop-group">
-                <label>Bias</label>
-                <input type="number" id="prop-bias" class="prop-input" value="${this.bias}" step="0.01">
-                <p class="prop-hint">Bias per filter (${this.filters},)</p>
-            </div>`
+        <div class="prop-group"><label>Kernel Size</label><input type="number" id="prop-kernel" class="prop-input" value="${this.kernelSize}" min="1" max="11"></div>
+        <div class="prop-group"><label>Stride</label><input type="number" id="prop-stride" class="prop-input" value="${this.stride}" min="1" max="5"></div>
+        <div class="prop-group"><label>Padding</label><input type="number" id="prop-padding" class="prop-input" value="${this.padding}" min="0" max="5"></div>
+        <div class="prop-group"><label>Activation</label>
+        <select id="prop-activation" class="prop-select">
+            <option value="linear"   ${this.activation === "linear" ? "selected" : ""}>Linear (none)</option>
+            <option value="relu"     ${this.activation === "relu" ? "selected" : ""}>ReLU</option>
+            <option value="sigmoid"  ${this.activation === "sigmoid" ? "selected" : ""}>Sigmoid</option>
+            <option value="tanh"     ${this.activation === "tanh" ? "selected" : ""}>Tanh</option>
+            <option value="softmax"  ${this.activation === "softmax" ? "selected" : ""}>Softmax</option>
+            <option value="softplus" ${this.activation === "softplus" ? "selected" : ""}>Softplus</option>
+            <option value="elu"      ${this.activation === "elu" ? "selected" : ""}>ELU</option>
+            <option value="selu"     ${this.activation === "selu" ? "selected" : ""}>SELU</option>
+            <option value="gelu"     ${this.activation === "gelu" ? "selected" : ""}>GELU</option>
+            <option value="leaky_relu" ${this.activation === "leaky_relu" ? "selected" : ""}>Leaky ReLU</option>
+            <option value="mish"     ${this.activation === "mish" ? "selected" : ""}>Mish</option>
+            </select>
+        </div>`
         );
     }
 }
