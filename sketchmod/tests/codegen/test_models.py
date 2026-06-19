@@ -92,16 +92,23 @@ def default_check(proc, code, graph):
     if proc.returncode != 0:
         print("❌ Model crashed (non‑zero exit code)")
         ok = False
-    if "Training complete." not in proc.stdout:
+
+    # Only check for 'Training complete.' if the graph actually has an optimizer
+    parsed = parse_graph(graph)
+    flow = analyze_phases(parsed)
+    has_optimizer = flow.get("optimizer") is not None
+
+    if has_optimizer and "Training complete." not in proc.stdout:
         print("❌ Missing 'Training complete.'")
         ok = False
+
     if proc.stderr.strip():
         if "Traceback" in proc.stderr:
             print("❌ Traceback in stderr")
             ok = False
         else:
             print("⚠️  stderr output (likely harmless warnings):")
-            print(proc.stderr.strip()[:500])  # first 500 chars
+            print(proc.stderr.strip()[:500])
     return ok
 
 
@@ -1070,6 +1077,46 @@ def check_model22(proc, code, graph):
         print("✅ Loss decreased")
     else:
         print("❌ Loss did not decrease")
+        ok = False
+
+    return ok
+
+
+def check_model23(proc, code, graph):
+    """
+    model23 checks (visualizations with discrete colour):
+      1. Code contains 'ListedColormap' (discrete colour palette)
+      2. Code contains 'c=colors' (colour argument in scatter)
+      3. Exactly two plt.show() calls
+      4. Script ran without error (returncode 0)
+    """
+    ok = True
+
+    # 1. ListedColormap for discrete palette
+    if "ListedColormap" in code:
+        print("✅ ListedColormap present")
+    else:
+        print("❌ ListedColormap missing")
+        ok = False
+
+    # 2. Scatter with colour mapping (look for 'c=colors')
+    if "c=colors" in code:
+        print("✅ Colour scatter present")
+    else:
+        print("❌ Colour scatter not found")
+        ok = False
+
+    # 3. Two plt.show() calls
+    show_count = code.count("plt.show()")
+    if show_count == 2:
+        print(f"✅ Found {show_count} plt.show() calls")
+    else:
+        print(f"❌ Expected 2 plt.show(), found {show_count}")
+        ok = False
+
+    # 4. No crash
+    if proc.returncode != 0:
+        print("❌ Script crashed")
         ok = False
 
     return ok
