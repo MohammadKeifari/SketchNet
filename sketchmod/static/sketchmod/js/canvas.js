@@ -5127,15 +5127,6 @@ class BaseNode {
 
         return html;
     }
-
-    _updateNodeBias(input) {
-        if (this.selectedNodes.length !== 1) return;
-        const node = this.selectedNodes[0];
-        if (!node.hasBias) return;
-        this._saveUndoState();
-        node.bias = parseFloat(input.value) || 0;
-        this._saveToSession();
-    }
 }
 
 // ========== NODE FACTORY ==========
@@ -5478,16 +5469,7 @@ class NeuronNode extends CircleNode {
     }
 
     getPropertiesHTML() {
-        return (
-            this._getShapeSummaryHTML() +
-            this._activationSelect() +
-            `<div class="prop-group">
-            <label>Bias</label>
-            <input type="number" id="prop-bias" class="prop-input" value="${this.bias}" step="0.01"
-                   onchange="SketchMod._updateNodeBias(this)">
-            <p class="prop-hint">Bias value (scalar)</p>
-        </div>`
-        );
+        return this._getShapeSummaryHTML() + this._activationSelect();
     }
     _activationSelect() {
         return `
@@ -5540,13 +5522,7 @@ class LayerNode extends RectNode {
         ctx.font = "11px Inter, sans-serif";
         ctx.fillText("Layer", this.x, this.y + 12);
     }
-    // validateConnections(incomingCount) {
-    //     const errors = [];
-    //     if (incomingCount < 1) {
-    //         errors.push(`${this.type}: requires at least 1 input connection`);
-    //     }
-    //     return errors;
-    // }
+
     computeOutputShapes() {
         const allShapes = this._getAllInputShapeObjs();
         if (allShapes.length === 0) return this._emptyShapes();
@@ -5567,18 +5543,7 @@ class LayerNode extends RectNode {
         );
     }
     getPropertiesHTML() {
-        return (
-            this._getShapeSummaryHTML() +
-            `${this._activationSelect()}
-            <div class="prop-group"><label>Neurons</label><input type="number" id="prop-size" class="prop-input" value="${this.numNeurons}" min="1" max="4096"></div>
-            <div class="prop-group">
-                <label>Bias Initializer</label>
-                <input type="number" id="prop-bias" class="prop-input" value="${this.bias}" step="0.01"
-                    onchange="SketchMod._updateNodeBias(this)">
-                <p class="prop-hint">Initial value for bias vector (${this.numNeurons},)</p>
-            </div>
-        `
-        );
+        return this._getShapeSummaryHTML() + `${this._activationSelect()}`;
     }
     _activationSelect() {
         return NeuronNode.prototype._activationSelect.call(this);
