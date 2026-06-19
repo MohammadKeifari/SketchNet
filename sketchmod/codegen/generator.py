@@ -337,7 +337,7 @@ class CodeGenerator:
             if loss_type in ("cross_entropy", "nll"):
                 w.line("val_labels = val_labels.long()")
             w.line("model.eval()")
-            w.line("with torch.no_grad():")
+            w.line("with torch.inference_mode():")
             w.indent()
             eval_feed_key, _ = self._get_feed_key("eval")
             w.line(f"outputs = model({{'{eval_feed_key}': val_features.to(device)}})")
@@ -393,7 +393,7 @@ class CodeGenerator:
 
         if has_train:
             w.line("model.eval()")
-            w.line("with torch.no_grad():")
+            w.line("with torch.inference_mode():")
             w.indent()
             eval_feed_key, eval_feed_var = self._get_feed_key("eval")
             w.line(
