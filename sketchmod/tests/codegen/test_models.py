@@ -1148,6 +1148,7 @@ MODEL_CHECKS = {
     20: check_model20,
     21: check_model21,
     22: check_model22,
+    23: check_model23,
 }
 
 
