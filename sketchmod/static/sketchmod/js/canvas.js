@@ -5789,7 +5789,37 @@ class OutputNode extends RectNode {
 
     fromJSON(d) {
         super.fromJSON(d);
-        if (d.outputActivations) this.outputActivations = d.outputActivations;
+
+        const defaultRoles = ["loss", "prediction", "evaluation"];
+        const fixedOutputs = [];
+        let changed = false;
+
+        for (let i = 0; i < this.outputs.length; i++) {
+            const p = this.outputs[i];
+            // If the port is not already a RolePort with the correct role, replace it
+            if (!(p instanceof RolePort) || p.role !== defaultRoles[i]) {
+                const newPort = new RolePort(
+                    this,
+                    "output",
+                    i,
+                    defaultRoles[i],
+                );
+                newPort.id = p.id; // keep the same ID
+                newPort.activationPhases =
+                    p.activationPhases || newPort._defaultPhases();
+                newPort.shape = p.shape;
+                newPort.bias = p.bias;
+                fixedOutputs.push(newPort);
+                changed = true;
+            } else {
+                fixedOutputs.push(p);
+            }
+        }
+
+        if (changed) {
+            this.outputs = fixedOutputs;
+            this.updatePorts();
+        }
     }
 
     updatePorts() {
@@ -7262,7 +7292,19 @@ class AccuracyNode extends RectNode {
 
     fromJSON(d) {
         super.fromJSON(d);
-        if (d.showConfusion !== undefined) this.showConfusion = d.showConfusion;
+        const expectedSubTypes = ["predictions", "labels"];
+        let changed = false;
+        const fixed = [];
+        for (let i = 0; i < this.inputs.length; i++) {
+            const p = this.inputs[i];
+            if (p.subType !== expectedSubTypes[i]) {
+                p.subType = expectedSubTypes[i];
+                changed = true;
+            }
+            fixed.push(p);
+        }
+        this.inputs = fixed;
+        if (changed) this.updatePorts();
     }
 }
 // ========== CONCATENATE NODE ==========
@@ -7547,22 +7589,28 @@ class OptimizerNode extends RectNode {
 
     fromJSON(d) {
         super.fromJSON(d);
-        if (d.lossType) this.lossType = d.lossType;
-        if (d.optimizerType) this.optimizerType = d.optimizerType;
-        if (d.learningRate !== undefined) this.learningRate = d.learningRate;
-        if (d.adamBeta1 !== undefined) this.adamBeta1 = d.adamBeta1;
-        if (d.adamBeta2 !== undefined) this.adamBeta2 = d.adamBeta2;
-        if (d.adamEpsilon !== undefined) this.adamEpsilon = d.adamEpsilon;
-        if (d.sgdMomentum !== undefined) this.sgdMomentum = d.sgdMomentum;
-        if (d.weightDecay !== undefined) this.weightDecay = d.weightDecay;
-        if (d.nesterov !== undefined) this.nesterov = d.nesterov;
-        if (d.epochs) this.epochs = d.epochs;
-        if (d.batchSize) this.batchSize = d.batchSize;
-        if (d.shuffle !== undefined) this.shuffle = d.shuffle;
-        if (d.gradientClip !== undefined) this.gradientClip = d.gradientClip;
-        if (d.earlyStopping !== undefined) this.earlyStopping = d.earlyStopping;
-        if (d.earlyStoppingPatience !== undefined)
-            this.earlyStoppingPatience = d.earlyStoppingPatience;
+        const expected = ["loss", "labels"];
+        let changed = false;
+        const fixed = [];
+        for (let i = 0; i < this.inputs.length; i++) {
+            const p = this.inputs[i];
+            if (!(p instanceof RolePort) || p.role !== expected[i]) {
+                const newPort = new RolePort(this, "input", i, expected[i]);
+                newPort.id = p.id;
+                newPort.activationPhases =
+                    p.activationPhases || newPort._defaultPhases();
+                newPort.shape = p.shape;
+                newPort.bias = p.bias;
+                fixed.push(newPort);
+                changed = true;
+            } else {
+                fixed.push(p);
+            }
+        }
+        if (changed) {
+            this.inputs = fixed;
+            this.updatePorts();
+        }
     }
 
     getPropertiesHTML() {
@@ -7865,12 +7913,44 @@ class VisualizationNode extends RectNode {
     }
     fromJSON(d) {
         super.fromJSON(d);
-        if (d.colorMode) this.colorMode = d.colorMode;
-        if (d.colorPalette) this.colorPalette = d.colorPalette;
-        if (d.continuousMinColor)
-            this.continuousMinColor = d.continuousMinColor;
-        if (d.continuousMaxColor)
-            this.continuousMaxColor = d.continuousMaxColor;
+        let changed = false;
+        const fixed = [];
+
+        // Determine how many coord ports existed in the original saved data
+        const coordCount = (d.inputPorts || []).filter(
+            (p) => !p.role || p.subType === "coord",
+        ).length;
+
+        for (let i = 0; i < this.inputs.length; i++) {
+            const p = this.inputs[i];
+            if (i < coordCount) {
+                // Coord port
+                if (p.subType !== "coord") {
+                    p.subType = "coord";
+                    changed = true;
+                }
+                fixed.push(p);
+            } else {
+                // Colour port – must be RolePort
+                if (!(p instanceof RolePort) || p.role !== "color") {
+                    const newPort = new RolePort(this, "input", i, "color");
+                    newPort.id = p.id;
+                    newPort.activationPhases =
+                        p.activationPhases || newPort._defaultPhases();
+                    newPort.shape = p.shape;
+                    newPort.bias = p.bias;
+                    fixed.push(newPort);
+                    changed = true;
+                } else {
+                    fixed.push(p);
+                }
+            }
+        }
+
+        if (changed) {
+            this.inputs = fixed;
+            this.updatePorts();
+        }
     }
 
     getPropertiesHTML() {
