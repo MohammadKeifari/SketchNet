@@ -856,6 +856,51 @@ def check_model17(proc, code, graph):
     return ok
 
 
+def check_model18(proc, code, graph):
+    """
+    model18 checks (practical regression):
+      1. Code uses MSELoss and Linear(1,1)
+      2. Training completes
+      3. Final training loss is near zero (< 1e-4) – proves it learned y=2x
+    """
+    ok = True
+
+    # 1. Code patterns
+    if "MSELoss" not in code:
+        print("❌ MSELoss not found")
+        ok = False
+    else:
+        print("✅ MSELoss present")
+
+    if "nn.Linear(1, 1)" not in code:
+        print("❌ Expected nn.Linear(1, 1) missing")
+        ok = False
+    else:
+        print("✅ Correct layer size")
+
+    # 2. Training completion
+    if "Training complete." not in proc.stdout:
+        print("❌ Training did not complete")
+        return False
+
+    # 3. Convergence
+    import re
+
+    losses = re.findall(r"Train Loss: ([0-9.eE+-]+)", proc.stdout)
+    if not losses:
+        print("❌ Could not parse training losses")
+        return False
+
+    final_loss = float(losses[-1])
+    if final_loss < 1e-4:
+        print(f"✅ Converged (final loss {final_loss:.2e})")
+    else:
+        print(f"❌ Final loss {final_loss:.6f} – did not learn correctly")
+        ok = False
+
+    return ok
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
 VALIDATION_ONLY_MODELS = {11, 13, 14, 15, 16, 17}
 
@@ -877,6 +922,7 @@ MODEL_CHECKS = {
     15: check_model15,
     16: check_model16,
     17: check_model17,
+    18: check_model18,
 }
 
 
