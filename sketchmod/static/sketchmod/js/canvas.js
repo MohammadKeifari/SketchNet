@@ -131,7 +131,9 @@ const SketchMod = {
         }
 
         this._updateSidebarInfoVisibility();
-        window.addEventListener("resize", this._updateSidebarInfoVisibility);
+        window.addEventListener("resize", () =>
+            this._updateSidebarInfoVisibility(),
+        );
 
         this.resize();
         window.addEventListener("resize", () => this.resize());
@@ -213,6 +215,24 @@ const SketchMod = {
                 document
                     .getElementById("exportDropdown")
                     ?.classList.remove("open");
+            }
+        });
+        // Close any open floating panel when clicking outside its icon or panel
+        document.addEventListener("click", (e) => {
+            const infoPanel = document.getElementById("sidebarInfoPanel");
+            const infoIcon = document.getElementById("sidebarModelInfoIcon");
+            const propPanel = document.getElementById("sidebarPropertiesPanel");
+            const propIcon = document.getElementById("sidebarPropertiesIcon");
+
+            if (infoPanel && infoPanel.style.display === "block") {
+                if (!infoPanel.contains(e.target) && e.target !== infoIcon) {
+                    infoPanel.style.display = "none";
+                }
+            }
+            if (propPanel && propPanel.style.display === "block") {
+                if (!propPanel.contains(e.target) && e.target !== propIcon) {
+                    propPanel.style.display = "none";
+                }
             }
         });
         // Dataset search input
@@ -509,20 +529,32 @@ const SketchMod = {
         document.addEventListener("click", () => {
             this._hidePortContextMenu();
         });
-        // Info panel toggle
+        // Info icon toggle – closes properties panel if open
         const infoIcon = document.getElementById("sidebarModelInfoIcon");
         const infoPanel = document.getElementById("sidebarInfoPanel");
         if (infoIcon && infoPanel) {
             infoIcon.addEventListener("click", (e) => {
                 e.stopPropagation();
-                infoPanel.style.display =
-                    infoPanel.style.display === "block" ? "none" : "block";
+                const isOpen = infoPanel.style.display === "block";
+                // Close properties panel if it's open
+                const propPanel = document.getElementById(
+                    "sidebarPropertiesPanel",
+                );
+                if (propPanel) propPanel.style.display = "none";
+                infoPanel.style.display = isOpen ? "none" : "block";
             });
-            // Close panel when clicking outside
-            document.addEventListener("click", (e) => {
-                if (!infoPanel.contains(e.target) && e.target !== infoIcon) {
-                    infoPanel.style.display = "none";
-                }
+        }
+
+        // Properties icon toggle – closes info panel if open
+        const propIcon = document.getElementById("sidebarPropertiesIcon");
+        const propPanel = document.getElementById("sidebarPropertiesPanel");
+        if (propIcon && propPanel) {
+            propIcon.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const isOpen = propPanel.style.display === "block";
+                // Close info panel if it's open
+                if (infoPanel) infoPanel.style.display = "none";
+                propPanel.style.display = isOpen ? "none" : "block";
             });
         }
         this._loadFromSession();
@@ -542,6 +574,7 @@ const SketchMod = {
         this.canvas.width = wrapper.clientWidth;
         this.canvas.height = wrapper.clientHeight;
         this._render();
+        this._updateSidebarInfoVisibility();
     },
 
     _createDefaultNodes() {
@@ -965,6 +998,8 @@ const SketchMod = {
         this.isPanning = false;
         this.isDraggingNode = false;
         this.dragOffsets = null;
+
+        this._updateSidebarInfoVisibility();
     },
 
     _onKeyDown(e) {
@@ -1107,6 +1142,7 @@ const SketchMod = {
         this._saveToSession();
         this._propagateShapes();
         this._render();
+        this._updateSidebarInfoVisibility();
     },
 
     _deleteLink(link) {
@@ -1116,6 +1152,7 @@ const SketchMod = {
         this._saveToSession();
         this._propagateShapes();
         this._render();
+        this._updateSidebarInfoVisibility();
     },
 
     _deleteSelected() {
@@ -1135,6 +1172,7 @@ const SketchMod = {
         this._hideProperties();
         this._propagateShapes();
         this._render();
+        this._updateSidebarInfoVisibility();
     },
     _addLink(fromPort, toPort) {
         if (fromPort === toPort) return;
@@ -1538,14 +1576,20 @@ const SketchMod = {
     // ========== PROPERTIES ==========
     _showProperties(node) {
         const panel = document.getElementById("propertiesPanel");
-        const content = document.getElementById("propertiesContent");
-        panel.style.display = "block";
-        content.innerHTML = node.getPropertiesHTML();
+        const html = node.getPropertiesHTML();
+        this._updateAllPropertiesContent(html);
+
+        if (this._isSidebarNarrow()) {
+            panel.style.display = "none";
+        } else {
+            panel.style.display = "block";
+        }
         this._bindPropertiesEvents(node);
     },
-
     _hideProperties() {
         document.getElementById("propertiesPanel").style.display = "none";
+        const floating = document.getElementById("sidebarPropertiesPanel");
+        if (floating) floating.style.display = "none";
     },
     _showPortProperties() {
         const panel = document.getElementById("propertiesPanel");
@@ -1558,7 +1602,13 @@ const SketchMod = {
         }
 
         if (this.selectedPorts.length > 1) {
-            content.innerHTML = `<p class='prop-hint'>${this.selectedPorts.length} ports selected</p>`;
+            this._updateAllPropertiesContent(
+                `<p class='prop-hint'>${this.selectedPorts.length} ports selected</p>`,
+            );
+            // Apply narrow‑sidebar logic
+            if (this._isSidebarNarrow()) {
+                panel.style.display = "none";
+            }
             return;
         }
 
@@ -1628,61 +1678,70 @@ const SketchMod = {
             </div>
         </div>`;
 
-        content.innerHTML = `
-    <div class="prop-group">
-        <label>Port</label>
-        <p class="prop-hint">
-            ${port.type === "input" ? "Input" : "Output"} #${port.index + 1} — ${port.node.type}
-            <br><small>${kindLabel}</small>
-        </p>
-    </div>
-    <div class="prop-group">
-        <label>Shape</label>
-        <p class="prop-hint" style="font-family: monospace; color: ${shapeColor}; font-size: 0.85rem;">
-            ${shapeText}
-        </p>
-    </div>
-    ${phasesHTML}
-    ${
-        port.type === "input"
-            ? `
-    <div class="prop-group">
-        <label>Bias</label>
-        <input type="number" id="prop-port-bias" class="prop-input" 
-               value="${port.bias || 0}" step="0.01"
-               onchange="SketchMod._updatePortBias(this)">
-    </div>
-    `
-            : ""
-    }
-    ${
-        port.type === "output" && !port.role
-            ? `
-    <div class="prop-group">
-        <label>Output Type</label>
-        <select id="prop-port-subtype" class="prop-select" >
-            ${subTypeOptions
-                .map(
-                    (o) => `
-                <option value="${o.value}" ${port.subType === o.value ? "selected" : ""}>${o.label}</option>
-            `,
-                )
-                .join("")}
-        </select>
-    </div>
-    `
-            : ""
-    }
-    <div class="prop-group">
-        <label>Connections</label>
-        <p class="prop-hint">${connectedLinks.length} link${connectedLinks.length !== 1 ? "s" : ""}</p>
-    </div>
-    <div class="prop-group">
-        <button class="prop-btn prop-btn-danger" onclick="SketchMod._disconnectPort(SketchMod.selectedPorts[0])">
-            Disconnect All
-        </button>
-    </div>
-`;
+        const html = `
+        <div class="prop-group">
+            <label>Port</label>
+            <p class="prop-hint">
+                ${port.type === "input" ? "Input" : "Output"} #${port.index + 1} — ${port.node.type}
+                <br><small>${kindLabel}</small>
+            </p>
+        </div>
+        <div class="prop-group">
+            <label>Shape</label>
+            <p class="prop-hint" style="font-family: monospace; color: ${shapeColor}; font-size: 0.85rem;">
+                ${shapeText}
+            </p>
+        </div>
+        ${phasesHTML}
+        ${
+            port.type === "input"
+                ? `
+        <div class="prop-group">
+            <label>Bias</label>
+            <input type="number" id="prop-port-bias" class="prop-input" 
+                value="${port.bias || 0}" step="0.01"
+                onchange="SketchMod._updatePortBias(this)">
+        </div>
+        `
+                : ""
+        }
+        ${
+            port.type === "output" && !port.role
+                ? `
+        <div class="prop-group">
+            <label>Output Type</label>
+            <select id="prop-port-subtype" class="prop-select" >
+                ${subTypeOptions
+                    .map(
+                        (o) => `
+                    <option value="${o.value}" ${port.subType === o.value ? "selected" : ""}>${o.label}</option>
+                `,
+                    )
+                    .join("")}
+            </select>
+        </div>
+        `
+                : ""
+        }
+        <div class="prop-group">
+            <label>Connections</label>
+            <p class="prop-hint">${connectedLinks.length} link${connectedLinks.length !== 1 ? "s" : ""}</p>
+        </div>
+        <div class="prop-group">
+            <button class="prop-btn prop-btn-danger" onclick="SketchMod._disconnectPort(SketchMod.selectedPorts[0])">
+                Disconnect All
+            </button>
+        </div>
+    `;
+
+        this._updateAllPropertiesContent(html);
+
+        // ---- NEW: Conditional inline panel visibility ----
+        if (this._isSidebarNarrow()) {
+            document.getElementById("propertiesPanel").style.display = "none";
+        } else {
+            document.getElementById("propertiesPanel").style.display = "block";
+        }
 
         this._currentPortForProps = port;
         // Bind the select change event
@@ -1725,7 +1784,6 @@ const SketchMod = {
     },
     _showLinkProperties() {
         const panel = document.getElementById("propertiesPanel");
-        const content = document.getElementById("propertiesContent");
         panel.style.display = "block";
 
         if (this.selectedLinks.length === 0) {
@@ -1734,7 +1792,12 @@ const SketchMod = {
         }
 
         if (this.selectedLinks.length > 1) {
-            content.innerHTML = `<p class='prop-hint'>${this.selectedLinks.length} links selected</p>`;
+            this._updateAllPropertiesContent(
+                `<p class='prop-hint'>${this.selectedLinks.length} links selected</p>`,
+            );
+            if (this._isSidebarNarrow()) {
+                panel.style.display = "none";
+            }
             return;
         }
 
@@ -1763,7 +1826,6 @@ const SketchMod = {
         // Build weight section
         let weightHTML = "";
         if (link.hasWeight && ws && ws.shape) {
-            const isScalarLike = ws.shape[0] === 1 && ws.shape[1] === 1;
             weightHTML = `
             <div class="prop-group">
                 <label>Weight Shape</label>
@@ -1771,41 +1833,38 @@ const SketchMod = {
                     ${link.weightShapeDisplay()}
                 </p>
             </div>
-            <!--${
-                isScalarLike
-                    ? `
-            <div class="prop-group">
-                <label>Weight Value</label>
-                <input type="number" id="prop-link-weight" class="prop-input" 
-                       value="${link.weight}" step="0.01"
-                       onchange="SketchMod._updateLinkWeight(this)">
-            </div>
-            `
-                    : `
             <div class="prop-group">
                 <label>Initialization</label>
                 <input type="number" id="prop-link-weight" class="prop-input" 
-                       value="${link.weight}" step="0.01"
-                       onchange="SketchMod._updateLinkWeight(this)">
+                    value="${link.weight}" step="0.01"
+                    onchange="SketchMod._updateLinkWeight(this)">
                 <p class="prop-hint">Scale for random initialization</p>
-            </div>-->
-            `
-            }
-        `;
+            </div>
+            `;
         }
 
-        content.innerHTML = `
+        const html = `
         <div class="prop-group">
             <label>Link</label>
             <p class="prop-hint">${link.from.node.type} → ${link.to.node.type}</p>
         </div>
+        ${shapeHTML}
         ${weightHTML}
         <div class="prop-group">
             <button class="prop-btn prop-btn-danger" onclick="SketchMod._deleteLink(SketchMod.selectedLinks[0])">
                 Delete Link
             </button>
         </div>
-    `;
+        `;
+
+        this._updateAllPropertiesContent(html);
+
+        // ---- NEW: Conditional inline panel visibility ----
+        if (this._isSidebarNarrow()) {
+            panel.style.display = "none";
+        } else {
+            panel.style.display = "block";
+        }
     },
 
     _updateLinkWeight(input) {
@@ -2872,6 +2931,8 @@ const SketchMod = {
             this.selectedLinks = [];
             this.selectedPorts = [];
 
+            this._updateSidebarInfoVisibility();
+
             // Clear path highlight and validation buttons
             this._clearHighlight();
             this._clearValidation();
@@ -2886,54 +2947,85 @@ const SketchMod = {
     _updateSidebarInfoVisibility() {
         const sidebar = document.querySelector(".sidebar-right");
         const infoDiv = document.getElementById("sidebarModelInfo");
-        const icon = document.getElementById("sidebarModelInfoIcon");
-        const panel = document.getElementById("sidebarInfoPanel");
-        if (!sidebar || !icon || !infoDiv || !panel) return;
+        const infoIcon = document.getElementById("sidebarModelInfoIcon");
+        const infoPanel = document.getElementById("sidebarInfoPanel");
+
+        const propIcon = document.getElementById("sidebarPropertiesIcon");
+        const propPanel = document.getElementById("sidebarPropertiesPanel");
+        const normalPropPanel = document.getElementById("propertiesPanel");
+
+        if (
+            !sidebar ||
+            !infoIcon ||
+            !infoDiv ||
+            !infoPanel ||
+            !propIcon ||
+            !propPanel
+        )
+            return;
 
         const isNarrow = sidebar.offsetWidth <= 56;
+        const hasModel = this._currentModelId || this._currentModelName;
+        const hasSelection =
+            this.selectedNodes.length > 0 ||
+            this.selectedLinks.length > 0 ||
+            this.selectedPorts.length > 0;
 
+        // ----- Model info visibility -----
         if (isNarrow) {
-            if (SketchMod._currentModelId || SketchMod._currentModelName) {
-                icon.style.display = "flex";
-            } else {
-                icon.style.display = "none";
-            }
+            // Always hide the full info block when narrow
             infoDiv.style.display = "none";
+            // Show the icon only if a model is loaded
+            infoIcon.style.display = hasModel ? "flex" : "none";
         } else {
-            icon.style.display = "none";
-            if (SketchMod._currentModelId || SketchMod._currentModelName) {
-                infoDiv.style.display = "block";
+            // Sidebar is wide: hide the icon, show the full info if a model exists
+            infoIcon.style.display = "none";
+            infoDiv.style.display = hasModel ? "block" : "none";
+            // Also close the info floating panel (it might have been left open)
+            infoPanel.style.display = "none";
+        }
+
+        // ----- Properties visibility -----
+        if (isNarrow) {
+            // The inline properties panel must stay hidden
+            if (normalPropPanel) normalPropPanel.style.display = "none";
+            // Show the icon only when something is selected
+            propIcon.style.display = hasSelection ? "flex" : "none";
+            // If nothing is selected, also close the floating properties panel
+            if (!hasSelection && propPanel) propPanel.style.display = "none";
+        } else {
+            // Sidebar is wide: hide the icon, close floating panel
+            propIcon.style.display = "none";
+            if (propPanel) propPanel.style.display = "none";
+            // Show the inline panel only if something is selected
+            if (normalPropPanel) {
+                normalPropPanel.style.display = hasSelection ? "block" : "none";
             }
         }
 
-        // Position the floating panel relative to the sidebar
+        // ----- Reposition floating panels (even when hidden, keep coordinates fresh) -----
         const rect = sidebar.getBoundingClientRect();
-        panel.style.top = rect.top + 8 + "px";
-        // panel appears to the left of the sidebar, with a small gap
-        panel.style.right = window.innerWidth - rect.left + 8 + "px";
+        const top = rect.top + 8;
+        const right = window.innerWidth - rect.left + 8;
+
+        infoPanel.style.top = top + "px";
+        infoPanel.style.right = right + "px";
+
+        propPanel.style.top = top + "px";
+        propPanel.style.right = right + "px";
     },
     _updateModelInfo() {
-        const infoDiv = document.getElementById("sidebarModelInfo");
         const nameEl = document.getElementById("sidebarModelName");
         const idEl = document.getElementById("sidebarModelId");
-
         const panelName = document.getElementById("sidebarInfoPanelName");
         const panelId = document.getElementById("sidebarInfoPanelId");
 
-        if (this._currentModelName || this._currentModelId) {
-            if (infoDiv) infoDiv.style.display = "block";
-            if (nameEl)
-                nameEl.textContent = this._currentModelName || "Untitled";
-            if (idEl) idEl.textContent = this._currentModelId || "";
+        if (nameEl) nameEl.textContent = this._currentModelName || "Untitled";
+        if (idEl) idEl.textContent = this._currentModelId || "";
+        if (panelName)
+            panelName.textContent = this._currentModelName || "Untitled";
+        if (panelId) panelId.textContent = this._currentModelId || "";
 
-            if (panelName)
-                panelName.textContent = this._currentModelName || "Untitled";
-            if (panelId) panelId.textContent = this._currentModelId || "";
-        } else {
-            if (infoDiv) infoDiv.style.display = "none";
-            if (panelName) panelName.textContent = "";
-            if (panelId) panelId.textContent = "";
-        }
         this._updateSidebarInfoVisibility();
     },
     // ========== EXPORT METHODS ==========
@@ -3995,6 +4087,19 @@ const SketchMod = {
     };
     `;
         return code;
+    },
+    _updateAllPropertiesContent(html) {
+        // Update the main properties panel
+        const content = document.getElementById("propertiesContent");
+        if (content) content.innerHTML = html;
+
+        // Update the floating properties panel
+        const floating = document.getElementById("sidebarPropertiesContent");
+        if (floating) floating.innerHTML = html;
+    },
+    _isSidebarNarrow() {
+        const sidebar = document.querySelector(".sidebar-right");
+        return sidebar ? sidebar.offsetWidth <= 56 : false;
     },
 };
 // ========== PORT BASE CLASS ==========
