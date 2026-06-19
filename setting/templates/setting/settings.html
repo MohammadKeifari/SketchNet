@@ -15,10 +15,18 @@
             <h1>Settings</h1>
             <p>Customize your SketchMod experience</p>
         </div>
-        {% if messages %}
-            <ul class="messages">
-                {% for message in messages %}<li>{{ message }}</li>{% endfor %}
-            </ul>
+        {% if saved %}
+            <div class="settings-saved-banner">
+                <svg width="16"
+                     height="16"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2">
+                    <polyline points="20 6 9 17 4 12" />
+                </svg>
+                Settings saved.
+            </div>
         {% endif %}
         <form method="post" action="{% url 'setting:settings' %}">
             {% csrf_token %}
