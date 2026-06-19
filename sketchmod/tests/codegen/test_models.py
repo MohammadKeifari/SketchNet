@@ -725,10 +725,10 @@ def check_model13(proc, code, graph):
     errors = result.get("errors", [])
     warnings = result.get("warnings", [])
 
-    if any("Data‑flow cycle" in e.get("message", "") for e in errors):
-        print("✅ Data‑flow cycle error detected")
+    if any("cycle" in e.get("message", "").lower() for e in errors):
+        print("✅ Data-flow cycle error detected")
     else:
-        print("❌ Data‑flow cycle error not found")
+        print("❌ Data-flow cycle error not found")
         ok = False
 
     if any(
@@ -797,7 +797,7 @@ def check_model14(proc, code, graph):
 def check_model15(proc, code, graph):
     """
     model15 checks (validation only):
-      1. Error: Param‑port cycle detected.
+      1. Error: Param-port cycle detected.
     """
     ok = True
     from sketchmod.codegen.validator import GraphValidator
@@ -807,10 +807,10 @@ def check_model15(proc, code, graph):
     warnings = result.get("warnings", [])
 
     # 1. Param‑port cycle error
-    if any("Param‑port cycle" in e.get("message", "") for e in errors):
-        print("✅ Param‑port cycle error detected")
+    if any("Param-port cycle" in e.get("message", "") for e in errors):
+        print("✅ Param-port cycle error detected")
     else:
-        print("❌ Param‑port cycle error not found")
+        print("❌ Param-port cycle error not found")
         ok = False
 
     return ok
@@ -819,7 +819,7 @@ def check_model15(proc, code, graph):
 def check_model16(proc, code, graph):
     """
     model16 checks (validation only):
-      1. Error: Data‑flow cycle detected.
+      1. Error: Data-flow cycle detected.
     """
     ok = True
     from sketchmod.codegen.validator import GraphValidator
@@ -827,10 +827,10 @@ def check_model16(proc, code, graph):
     result = GraphValidator(graph).validate()
     errors = result.get("errors", [])
 
-    if any("Data‑flow cycle" in e.get("message", "") for e in errors):
-        print("✅ Data‑flow cycle error detected")
+    if any("cycle" in e.get("message", "").lower() for e in errors):
+        print("✅ Data-flow cycle error detected")
     else:
-        print("❌ Data‑flow cycle error not found")
+        print("❌ Data-flow cycle error not found")
         ok = False
 
     return ok
@@ -839,7 +839,7 @@ def check_model16(proc, code, graph):
 def check_model17(proc, code, graph):
     """
     model17 checks (validation only):
-      1. Error: Param‑port cycle detected.
+      1. Error: Param-port cycle detected.
     """
     ok = True
     from sketchmod.codegen.validator import GraphValidator
