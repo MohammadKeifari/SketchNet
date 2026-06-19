@@ -154,28 +154,37 @@ const SketchMod = {
             // Close context menu on any click
             this._hideContextMenu();
 
-            // Close dataset picker when clicking outside
-            const picker = document.getElementById("datasetPicker");
-            const display = document.getElementById("datasetSelectDisplay");
-            if (
-                picker &&
-                display &&
-                !picker.contains(e.target) &&
-                !display.contains(e.target)
-            ) {
-                picker.style.display = "none";
-            }
+            // Close any open dataset picker when clicking outside
+            document.querySelectorAll(".dataset-picker").forEach((picker) => {
+                if (picker.style.display !== "none") {
+                    const display = picker
+                        .closest(".dataset-selector")
+                        ?.querySelector(".dataset-select-display");
+                    if (
+                        !picker.contains(e.target) &&
+                        (!display || !display.contains(e.target))
+                    ) {
+                        picker.style.display = "none";
+                    }
+                }
+            });
 
-            // Dataset tab clicks
+            // Dataset tab clicks (scoped to the active container)
             if (e.target.classList.contains("dataset-tab")) {
-                document
-                    .querySelectorAll(".dataset-tab")
-                    .forEach((t) => t.classList.remove("active"));
-                e.target.classList.add("active");
-                this._loadDatasets(
-                    e.target.dataset.section,
-                    document.getElementById("datasetSearch")?.value || "",
-                );
+                const container = this._getPropertiesContainer();
+                if (container) {
+                    container
+                        .querySelectorAll(".dataset-tab")
+                        .forEach((t) => t.classList.remove("active"));
+                    e.target.classList.add("active");
+                    const searchInput =
+                        container.querySelector(".dataset-search");
+                    this._loadDatasets(
+                        e.target.dataset.section,
+                        searchInput?.value || "",
+                        container,
+                    );
+                }
             }
 
             // Close save modal on overlay click
@@ -231,19 +240,52 @@ const SketchMod = {
                     infoPanel.style.display = "none";
                 }
             }
-            if (propPanel && propPanel.style.display === "block") {
-                if (!propPanel.contains(e.target) && e.target !== propIcon) {
-                    propPanel.style.display = "none";
-                }
+            if (propIcon && propPanel) {
+                propIcon.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const isOpen = propPanel.style.display === "block";
+
+                    // Close info panel if it's open
+                    const infoPanel =
+                        document.getElementById("sidebarInfoPanel");
+                    if (infoPanel) infoPanel.style.display = "none";
+
+                    // Toggle the floating panel
+                    propPanel.style.display = isOpen ? "none" : "block";
+
+                    // If we just opened it, populate its content from the current selection
+                    if (!isOpen) {
+                        if (this.selectedNodes.length === 1) {
+                            this._showProperties(this.selectedNodes[0]);
+                        } else if (this.selectedLinks.length === 1) {
+                            this._showLinkProperties();
+                        } else if (this.selectedPorts.length === 1) {
+                            this._showPortProperties();
+                        }
+                    }
+                });
+
+                // Close panel when clicking outside (already exists, no change needed)
+                document.addEventListener("click", (e) => {
+                    if (
+                        propPanel.style.display === "block" &&
+                        !propPanel.contains(e.target) &&
+                        e.target !== propIcon
+                    ) {
+                        propPanel.style.display = "none";
+                    }
+                });
             }
         });
         // Dataset search input
         document.addEventListener("input", (e) => {
-            if (e.target.id === "datasetSearch") {
+            if (e.target.classList.contains("dataset-search")) {
+                const container = this._getPropertiesContainer();
+                if (!container) return;
                 const section =
-                    document.querySelector(".dataset-tab.active")?.dataset
+                    container.querySelector(".dataset-tab.active")?.dataset
                         .section || "all";
-                this._loadDatasets(section, e.target.value);
+                this._loadDatasets(section, e.target.value, container);
             }
         });
         document.addEventListener("change", (e) => {
@@ -1919,16 +1961,20 @@ const SketchMod = {
             });
         }
     },
-    _toggleDatasetPicker() {
-        const picker = document.getElementById("datasetPicker");
+    _toggleDatasetPicker(node) {
+        const container = this._getPropertiesContainer();
+        if (!container) return;
+        const picker = container.querySelector(".dataset-picker");
         if (!picker) return;
         const isOpen = picker.style.display !== "none";
-        picker.style.display = isOpen ? "none" : "block";
-        if (!isOpen) this._loadDatasets("all", "");
+        picker.style.display = isOpen ? "none" : "flex";
+        if (!isOpen) this._loadDatasets("all", "", container);
     },
 
-    _loadDatasets(section, search) {
-        const list = document.getElementById("datasetList");
+    _loadDatasets(section, search, container) {
+        if (!container) container = this._getPropertiesContainer();
+        if (!container) return;
+        const list = container.querySelector(".dataset-list");
         if (!list) return;
         list.innerHTML = '<div class="dataset-loading">Loading...</div>';
 
@@ -1944,14 +1990,14 @@ const SketchMod = {
                 list.innerHTML = data.datasets
                     .map(
                         (d) => `
-                <div class="dataset-item" onclick="SketchMod._selectDataset('${d.id}', '${d.name.replace(/'/g, "\\'")}')">
-                    <div class="dataset-item-info">
-                        <span class="dataset-item-name">${d.name}</span>
-                        <span class="dataset-item-meta">${d.format} · ${d.owner} · ${d.created_at}</span>
+                    <div class="dataset-item" onclick="SketchMod._selectDataset('${d.id}', '${d.name.replace(/'/g, "\\'")}', this)">
+                        <div class="dataset-item-info">
+                            <span class="dataset-item-name">${d.name}</span>
+                            <span class="dataset-item-meta">${d.format} · ${d.owner} · ${d.created_at}</span>
+                        </div>
+                        ${d.is_private ? '<span class="dataset-badge">Private</span>' : ""}
                     </div>
-                    ${d.is_private ? '<span class="dataset-badge">Private</span>' : ""}
-                </div>
-            `,
+                `,
                     )
                     .join("");
             })
@@ -1961,13 +2007,16 @@ const SketchMod = {
             });
     },
 
-    _selectDataset(datasetId, datasetName) {
-        this.selectedDatasetId = datasetId;
-        this.selectedDatasetName = datasetName;
-        document.getElementById("selectedDatasetName").textContent =
-            datasetName;
-        document.getElementById("datasetPicker").style.display = "none";
+    _selectDataset(datasetId, datasetName, itemElement) {
+        // Find the container that contains the clicked item
+        const container = itemElement
+            ? itemElement.closest(".dataset-picker")
+            : null;
+        const panel = container
+            ? container.closest("#propertiesContent, #sidebarPropertiesContent")
+            : null;
 
+        // Update the selected node
         if (
             this.selectedNodes.length === 1 &&
             this.selectedNodes[0] instanceof InputDataNode
@@ -1976,21 +2025,24 @@ const SketchMod = {
             node.datasetId = datasetId;
             node.datasetName = datasetName;
 
-            // 1. Fetch dataset shape
+            // Fetch shape
             fetch(`/data/api/${datasetId}/shape/`)
                 .then((res) => res.json())
                 .then((data) => {
                     const shape = data.shape || "";
                     node.dataShape = shape;
-                    const shapeInput =
-                        document.getElementById("prop-manual-shape");
-                    if (shapeInput) shapeInput.value = shape;
+                    // Update the shape input in whichever panel is active
+                    if (panel) {
+                        const shapeInput =
+                            panel.querySelector("#prop-manual-shape");
+                        if (shapeInput) shapeInput.value = shape;
+                    }
                     this._propagateShapes();
                     this._saveToSession();
                 })
                 .catch(() => {});
 
-            // 2. Fetch dataset file info (name + format)
+            // Fetch file info
             fetch(`/data/api/${datasetId}/info/`)
                 .then((res) => res.json())
                 .then((data) => {
@@ -2000,8 +2052,15 @@ const SketchMod = {
                 })
                 .catch(() => {});
         }
-    },
 
+        // Close the picker
+        if (container) {
+            container.style.display = "none";
+        }
+
+        // Update the display in both panels
+        this._showProperties(this.selectedNodes[0]); // refresh properties to show new dataset name
+    },
     // ========== SESSION ==========
     _saveToSession() {
         const data = {
@@ -2312,13 +2371,13 @@ const SketchMod = {
     },
     //=========== toggle and manual shape for dataset ==============
     _updateManualShape(input) {
+        // input is the element itself, so no need to search
         if (this.selectedNodes.length !== 1) return;
         const node = this.selectedNodes[0];
         if (!(node instanceof InputDataNode)) return;
 
         this._saveUndoState();
         let value = input.value.trim();
-        // Auto-clean whitespace
         value = value
             .replace(/\s+/g, " ")
             .replace(/\s*,\s*/g, ", ")
@@ -4092,17 +4151,37 @@ const SketchMod = {
         return code;
     },
     _updateAllPropertiesContent(html) {
-        // Update the main properties panel
-        const content = document.getElementById("propertiesContent");
-        if (content) content.innerHTML = html;
-
-        // Update the floating properties panel
-        const floating = document.getElementById("sidebarPropertiesContent");
-        if (floating) floating.innerHTML = html;
+        const floatPanel = document.getElementById("sidebarPropertiesPanel");
+        if (floatPanel && floatPanel.style.display === "block") {
+            const container = document.getElementById(
+                "sidebarPropertiesContent",
+            );
+            if (container) container.innerHTML = html;
+            // Clear the inline panel while floating is open
+            const inline = document.getElementById("propertiesContent");
+            if (inline) inline.innerHTML = "";
+        } else {
+            const container = document.getElementById("propertiesContent");
+            if (container) container.innerHTML = html;
+            // Clear the floating panel when inline is used
+            const floatContainer = document.getElementById(
+                "sidebarPropertiesContent",
+            );
+            if (floatContainer) floatContainer.innerHTML = "";
+        }
     },
     _isSidebarNarrow() {
         const sidebar = document.querySelector(".sidebar-right");
         return sidebar ? sidebar.offsetWidth <= 56 : false;
+    },
+
+    _getPropertiesContainer() {
+        // When the floating panel is visible, use it; otherwise use the inline panel
+        const float = document.getElementById("sidebarPropertiesPanel");
+        if (float && float.style.display === "block") {
+            return document.getElementById("sidebarPropertiesContent");
+        }
+        return document.getElementById("propertiesContent");
     },
 };
 // ========== PORT BASE CLASS ==========
@@ -5692,49 +5771,31 @@ class InputDataNode extends RectNode {
         return this._makeShapes(shape, symbolic, !!shape);
     }
     getPropertiesHTML() {
-        const floating = SketchMod._floatingPropertiesMode;
-
-        // Build the dataset section
-        let datasetHTML;
-        if (floating) {
-            // Simplified display for the floating panel
-            datasetHTML = `
-            <div class="prop-group">
-                <label>Dataset</label>
-                <p class="prop-hint">
-                    ${this.datasetName || "No dataset selected"}
-                    ${this.datasetId ? `<br><small style="font-family: monospace; color: var(--accent);">${this.datasetId}</small>` : ""}
-                </p>
-            </div>`;
-        } else {
-            // Full interactive picker (only in expanded sidebar)
-            datasetHTML = `
-            <div class="prop-group">
-                <label>Dataset</label>
-                <div class="dataset-selector" id="datasetSelector">
-                    <div class="dataset-select-display" id="datasetSelectDisplay" onclick="SketchMod._toggleDatasetPicker()">
-                        <span id="selectedDatasetName">${this.datasetName || "Select a dataset..."}</span>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="6 9 12 15 18 9"/>
-                        </svg>
+        const datasetHTML = `
+        <div class="prop-group">
+            <label>Dataset</label>
+            <div class="dataset-selector">
+                <div class="dataset-select-display" onclick="SketchMod._toggleDatasetPicker()">
+                    <span class="selected-dataset-name">${this.datasetName || "Select a dataset..."}</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="dataset-picker" style="display: none;">
+                    <div class="dataset-picker-tabs">
+                        <button class="dataset-tab active" data-section="all">All</button>
+                        <button class="dataset-tab" data-section="mine">My</button>
+                        <button class="dataset-tab" data-section="liked">Liked</button>
                     </div>
-                    <div class="dataset-picker" id="datasetPicker" style="display: none;">
-                        <div class="dataset-picker-tabs">
-                            <button class="dataset-tab active" data-section="all">All</button>
-                            <button class="dataset-tab" data-section="mine">My</button>
-                            <button class="dataset-tab" data-section="liked">Liked</button>
-                        </div>
-                        <input type="text" class="prop-input dataset-search" id="datasetSearch" placeholder="Search datasets...">
-                        <div class="dataset-list" id="datasetList">
-                            <div class="dataset-loading">Loading...</div>
-                        </div>
+                    <input type="text" class="prop-input dataset-search" placeholder="Search datasets...">
+                    <div class="dataset-list">
+                        <div class="dataset-loading">Loading...</div>
                     </div>
                 </div>
-                ${this.datasetId ? `<div class="prop-group"><label>Dataset ID</label><p class="prop-hint" style="font-family: monospace;">${this.datasetId}</p></div>` : ""}
-            </div>`;
-        }
+            </div>
+            ${this.datasetId ? `<div class="prop-group"><label>Dataset ID</label><p class="prop-hint" style="font-family: monospace;">${this.datasetId}</p></div>` : ""}
+        </div>`;
 
-        // Build the shape override input (always present)
         const shapeHTML = `
         <div class="prop-group">
             <label>Shape</label>
@@ -5747,7 +5808,6 @@ class InputDataNode extends RectNode {
 
         return this._getShapeSummaryHTML() + datasetHTML + shapeHTML;
     }
-
     toJSON() {
         const b = super.toJSON();
         return {
