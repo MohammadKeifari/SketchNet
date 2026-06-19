@@ -1,0 +1,226 @@
+{
+    "nodes": [
+        {
+            "id": "in",
+            "type": "input-data",
+            "x": 100,
+            "y": 300,
+            "dataShape": "(30, 3)",
+            "datasetId": "local-test",
+            "datasetFile": "model23.csv",
+            "datasetFormat": "csv",
+            "inputPorts": [],
+            "outputPorts": [
+                {
+                    "id": "in_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": ["preprocessing"]
+                }
+            ],
+            "numInputs": 0,
+            "numOutputs": 1
+        },
+        {
+            "id": "split",
+            "type": "train-test",
+            "x": 300,
+            "y": 300,
+            "trainRatio": 0.7,
+            "inputPorts": [
+                {
+                    "id": "split_in",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": ["preprocessing"]
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "train",
+                    "type": "output",
+                    "index": 0,
+                    "subType": "train",
+                    "activationPhases": ["training", "preprocessing"]
+                },
+                {
+                    "id": "test",
+                    "type": "output",
+                    "index": 1,
+                    "subType": "test",
+                    "activationPhases": ["evaluation", "preprocessing"]
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 2
+        },
+        {
+            "id": "feat_x",
+            "type": "column-select",
+            "x": 500,
+            "y": 180,
+            "selectedColumns": [0],
+            "inputPorts": [
+                {
+                    "id": "feat_x_in",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "feat_x_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1
+        },
+        {
+            "id": "feat_y",
+            "type": "column-select",
+            "x": 500,
+            "y": 220,
+            "selectedColumns": [1],
+            "inputPorts": [
+                {
+                    "id": "feat_y_in",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "feat_y_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1
+        },
+        {
+            "id": "lab",
+            "type": "column-select",
+            "x": 500,
+            "y": 400,
+            "selectedColumns": [2],
+            "inputPorts": [
+                {
+                    "id": "lab_in",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "lab_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1
+        },
+        {
+            "id": "viz_plain",
+            "type": "visualization",
+            "x": 750,
+            "y": 150,
+            "colorMode": "none",
+            "maxInputs": 2,
+            "minInputs": 2,
+            "inputPorts": [
+                {
+                    "id": "viz_plain_x",
+                    "type": "input",
+                    "index": 0,
+                    "subType": "coord",
+                    "activationPhases": ["evaluation"]
+                },
+                {
+                    "id": "viz_plain_y",
+                    "type": "input",
+                    "index": 1,
+                    "subType": "coord",
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0
+        },
+        {
+            "id": "viz_color",
+            "type": "visualization",
+            "x": 750,
+            "y": 350,
+            "colorMode": "discrete",
+            "colorPalette": ["#ef4444", "#4ade80", "#60a5fa"],
+            "maxInputs": 3,
+            "minInputs": 3,
+            "inputPorts": [
+                {
+                    "id": "viz_color_x",
+                    "type": "input",
+                    "index": 0,
+                    "subType": "coord",
+                    "activationPhases": ["evaluation"]
+                },
+                {
+                    "id": "viz_color_y",
+                    "type": "input",
+                    "index": 1,
+                    "subType": "coord",
+                    "activationPhases": ["evaluation"]
+                },
+                {
+                    "id": "viz_color_c",
+                    "type": "input",
+                    "index": 2,
+                    "role": "color",
+                    "activationPhases": ["evaluation"]
+                }
+            ],
+            "outputPorts": [],
+            "numInputs": 3,
+            "numOutputs": 0
+        }
+    ],
+    "links": [
+        { "from": "in_out", "to": "split_in" },
+        { "from": "test", "to": "feat_x_in" },
+        { "from": "test", "to": "feat_y_in" },
+        { "from": "test", "to": "lab_in" },
+        { "from": "feat_x_out", "to": "viz_plain_x" },
+        { "from": "feat_y_out", "to": "viz_plain_y" },
+        { "from": "feat_x_out", "to": "viz_color_x" },
+        { "from": "feat_y_out", "to": "viz_color_y" },
+        { "from": "lab_out", "to": "viz_color_c" }
+    ],
+    "ports": [
+        { "id": "in_out", "activationPhases": ["preprocessing"] },
+        { "id": "split_in", "activationPhases": ["preprocessing"] },
+        { "id": "train", "activationPhases": ["training", "preprocessing"] },
+        { "id": "test", "activationPhases": ["evaluation", "preprocessing"] },
+        { "id": "feat_x_in", "activationPhases": ["evaluation"] },
+        { "id": "feat_x_out", "activationPhases": ["evaluation"] },
+        { "id": "feat_y_in", "activationPhases": ["evaluation"] },
+        { "id": "feat_y_out", "activationPhases": ["evaluation"] },
+        { "id": "lab_in", "activationPhases": ["evaluation"] },
+        { "id": "lab_out", "activationPhases": ["evaluation"] },
+        { "id": "viz_plain_x", "activationPhases": ["evaluation"] },
+        { "id": "viz_plain_y", "activationPhases": ["evaluation"] },
+        { "id": "viz_color_x", "activationPhases": ["evaluation"] },
+        { "id": "viz_color_y", "activationPhases": ["evaluation"] },
+        { "id": "viz_color_c", "activationPhases": ["evaluation"] }
+    ],
+    "nodeCounter": 6
+}
