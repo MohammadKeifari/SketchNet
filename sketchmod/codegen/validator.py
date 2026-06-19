@@ -385,6 +385,8 @@ class GraphValidator:
         for node in self.graph.nodes.values():
             if node.type != "reshape":
                 continue
+
+            # ---- get input shape ----
             inp = None
             for port in node.inputs:
                 for link in self.graph.links:
@@ -396,8 +398,15 @@ class GraphValidator:
                     break
             if not inp or not inp.shape:
                 continue
+
+            # ---- parse target shape ----
             target_str = node.properties.get("targetShape", "")
             parts = [x.strip() for x in target_str.strip("()").split(",") if x.strip()]
+            parts = [x for x in parts if x]  # remove any remaining empty strings
+            if not parts:
+                continue
+
+            # ---- count inferred / symbolic dimensions ----
             infer_count = 0
             for p in parts:
                 if p == "-1":
@@ -406,7 +415,7 @@ class GraphValidator:
                     try:
                         int(p)
                     except ValueError:
-                        infer_count += 1
+                        infer_count += 1  # symbolic name also counts as inferred
 
             if infer_count > 1:
                 warnings.append(
@@ -416,9 +425,12 @@ class GraphValidator:
                     }
                 )
                 continue
+
+            # ---- element count check ----
             total_inp = sympy.Integer(1)
             for d in inp.shape:
                 total_inp = total_inp * d._value
+
             total_target = sympy.Integer(1)
             for p in parts:
                 if p == "-1":
@@ -426,7 +438,8 @@ class GraphValidator:
                 try:
                     total_target = total_target * int(p)
                 except ValueError:
-                    pass  # symbolic, can't verify
+                    pass  # symbolic dimension, can't multiply
+
             if infer_count == 0:
                 if total_target != total_inp:
                     warnings.append(
@@ -436,6 +449,7 @@ class GraphValidator:
                         }
                     )
             else:
+                # there is exactly one inferred dimension (infer_count == 1)
                 if total_inp % total_target != 0:
                     warnings.append(
                         {

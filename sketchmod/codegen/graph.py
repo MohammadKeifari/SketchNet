@@ -593,7 +593,6 @@ def _shape_reshape(node, graph):
     if not parts:
         return
 
-    # Keep "batch" as symbolic – do NOT replace it
     infer_idx = -1
     concrete_product = sympy.Integer(1)
     for i, p in enumerate(parts):
@@ -605,8 +604,7 @@ def _shape_reshape(node, graph):
             try:
                 concrete_product = concrete_product * int(p)
             except ValueError:
-                pass  # symbolic dim – concrete_product stays as is
-
+                pass
     if infer_idx >= 0:
         total_inp = sympy.Integer(1)
         for d in inp.shape:
@@ -619,8 +617,9 @@ def _shape_reshape(node, graph):
 
 
 def _parse_target_shape(target_str: str) -> List[str]:
-    """Parse a shape string like '(batch, -1)' into a list of dimension strings."""
+    """Parse a shape string like '(batch, -1)' into a list of dimension strings.
+    Filters out any empty strings caused by trailing commas."""
     cleaned = target_str.strip("()")
     if not cleaned:
         return []
-    return [x.strip() for x in cleaned.split(",")]
+    return [x.strip() for x in cleaned.split(",") if x.strip() != ""]
