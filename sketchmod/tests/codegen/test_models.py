@@ -901,6 +901,58 @@ def check_model18(proc, code, graph):
     return ok
 
 
+def check_model19(proc, code, graph):
+    """
+    model19 checks (classification):
+      1. CrossEntropyLoss present
+      2. Softmax & argmax on correct output ports
+      3. Accuracy > 0.8 (should be near 1.0 on this linearly separable data)
+      4. Training completes
+    """
+    ok = True
+
+    # 1. Loss
+    if "CrossEntropyLoss" not in code:
+        print("❌ CrossEntropyLoss not found")
+        ok = False
+    else:
+        print("✅ CrossEntropyLoss present")
+
+    # 2. Output activations
+    if "softmax(x, dim=-1)" in code:
+        print("✅ Softmax on prediction port")
+    else:
+        print("❌ Softmax missing")
+        ok = False
+    if "argmax(x, dim=-1)" in code:
+        print("✅ Argmax on evaluation port")
+    else:
+        print("❌ Argmax missing")
+        ok = False
+
+    # 3. Accuracy
+    import re
+
+    acc_match = re.search(r"Accuracy: ([0-9.]+)", proc.stdout)
+    if acc_match:
+        acc = float(acc_match.group(1))
+        if acc > 0.8:
+            print(f"✅ Accuracy {acc:.4f} (>0.8)")
+        else:
+            print(f"❌ Accuracy {acc:.4f} ≤ 0.8")
+            ok = False
+    else:
+        print("❌ Accuracy not found in output")
+        ok = False
+
+    # 4. Training complete
+    if "Training complete." not in proc.stdout:
+        print("❌ Training incomplete")
+        ok = False
+
+    return ok
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
 VALIDATION_ONLY_MODELS = {11, 13, 14, 15, 16, 17}
 
@@ -923,6 +975,7 @@ MODEL_CHECKS = {
     16: check_model16,
     17: check_model17,
     18: check_model18,
+    19: check_model19,
 }
 
 
