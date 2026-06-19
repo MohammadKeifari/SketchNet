@@ -38,6 +38,7 @@ class GraphValidator:
         self._check_reshape_feasibility(warnings)
         self._check_multiple_optimizers(warnings)
         self._check_eval_entry_point(warnings)
+        self._check_optimizer_label_shape(warnings)
 
         return {
             "errors": errors,
@@ -504,8 +505,63 @@ class GraphValidator:
             if color[nid] == WHITE and dfs(nid):
                 errors.append(
                     {
-                        "message": "Data‑flow cycle detected – the graph is not a DAG.",
+                        "message": "Data-flow cycle detected - the graph is not a DAG.",
                         "nodeId": None,
                     }
                 )
                 return
+
+    def _check_optimizer_label_shape(self, warnings):
+        """Warn if CrossEntropyLoss / NLL labels are not 1‑D."""
+        for node in self.graph.nodes.values():
+            if node.type != "optimizer":
+                continue
+            loss_type = node.properties.get("lossType", "mse")
+            if loss_type not in ("cross_entropy", "nll"):
+                continue
+
+            # Find the label input port (second input, index 1)
+            if len(node.inputs) < 2:
+                continue
+            label_port = node.inputs[1]
+
+            # Get the source shape via the link
+            src_shape = None
+            for link in self.graph.links:
+                if link.id_to == label_port.id:
+                    src_port = self.graph.ports[link.id_from]
+                    src_shape = src_port.shape
+                    break
+
+            if src_shape is None or not src_shape.shape:
+                warnings.append(
+                    {
+                        "message": (
+                            f"Optimizer '{node.id}' uses {loss_type} loss, "
+                            "but the label shape cannot be determined. "
+                            "Model might not work."
+                        ),
+                        "nodeId": node.id,
+                    }
+                )
+                continue
+
+            if len(src_shape.shape) != 1:
+                warnings.append(
+                    {
+                        "message": (
+                            f"Optimizer '{node.id}' uses {loss_type} loss, "
+                            f"but the label shape is {self._shape_str(src_shape)}. "
+                            "CrossEntropyLoss requires 1‑D integer labels. "
+                            "Insert a Reshape node with target shape (-1) to flatten. "
+                            "Model might not work."
+                        ),
+                        "nodeId": node.id,
+                    }
+                )
+
+    @staticmethod
+    def _shape_str(shape_info):
+        if not shape_info or not shape_info.shape:
+            return "unknown"
+        return "(" + ", ".join(str(d) for d in shape_info.shape) + ")"
