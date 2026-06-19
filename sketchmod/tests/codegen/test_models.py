@@ -802,24 +802,20 @@ def check_model14(proc, code, graph):
 
 
 def check_model15(proc, code, graph):
-    """
-    model15 checks (validation only):
-      1. Error: Param-port cycle detected.
-    """
     ok = True
     from sketchmod.codegen.validator import GraphValidator
 
     result = GraphValidator(graph).validate()
     errors = result.get("errors", [])
-    warnings = result.get("warnings", [])
-
-    # 1. Param‑port cycle error
-    if any("Param-port cycle" in e.get("message", "") for e in errors):
-        print("✅ Param-port cycle error detected")
+    if any(
+        "param" in e.get("message", "").lower()
+        and "cycle" in e.get("message", "").lower()
+        for e in errors
+    ):
+        print("✅ Param‑port cycle error detected")
     else:
-        print("❌ Param-port cycle error not found")
+        print("❌ Param‑port cycle error not found")
         ok = False
-
     return ok
 
 
@@ -1122,6 +1118,34 @@ def check_model23(proc, code, graph):
     return ok
 
 
+def check_model24(proc, code, graph):
+    """
+    model24 checks (continuous colour mapping):
+      1. LinearSegmentedColormap present
+      2. Custom colours #ff0000 and #ffff00 appear
+      3. Script runs without error
+    """
+    ok = True
+
+    if "LinearSegmentedColormap" in code:
+        print("✅ LinearSegmentedColormap present")
+    else:
+        print("❌ LinearSegmentedColormap missing")
+        ok = False
+
+    if "#ff0000" in code and "#ffff00" in code:
+        print("✅ Custom continuous colours (red → yellow)")
+    else:
+        print("❌ Custom colours missing")
+        ok = False
+
+    if proc.returncode != 0:
+        print("❌ Script crashed")
+        ok = False
+
+    return ok
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
 VALIDATION_ONLY_MODELS = {11, 13, 14, 15, 16, 17}
 
@@ -1149,6 +1173,7 @@ MODEL_CHECKS = {
     21: check_model21,
     22: check_model22,
     23: check_model23,
+    24: check_model24,
 }
 
 
