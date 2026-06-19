@@ -953,6 +953,53 @@ def check_model19(proc, code, graph):
     return ok
 
 
+def check_model20(proc, code, graph):
+    """
+    model20 checks (Conv2D + Flatten):
+      1. Code contains nn.Conv2d and nn.Flatten (or flatten logic)
+      2. Accuracy > 0.8 (should be near 1.0)
+      3. Training loss decreases
+    """
+    ok = True
+
+    # 1. Conv2D & Flatten in code
+    if "nn.Conv2d" in code:
+        print("✅ Conv2D present")
+    else:
+        print("❌ Conv2D missing")
+        ok = False
+    if "nn.Flatten" in code or "flatten" in code.lower():
+        print("✅ Flatten present")
+    else:
+        print("❌ Flatten missing")
+        ok = False
+
+    # 2. Accuracy
+    import re
+
+    acc_match = re.search(r"Accuracy: ([0-9.]+)", proc.stdout)
+    if acc_match:
+        acc = float(acc_match.group(1))
+        if acc > 0.8:
+            print(f"✅ Accuracy {acc:.4f} (>0.8)")
+        else:
+            print(f"❌ Accuracy {acc:.4f} ≤ 0.8")
+            ok = False
+    else:
+        print("❌ Accuracy not found")
+        ok = False
+
+    # 3. Training loss decrease
+    losses = re.findall(r"Train Loss: ([0-9.]+)", proc.stdout)
+    if len(losses) >= 2 and float(losses[-1]) < float(losses[0]):
+        print(f"✅ Loss decreased ({losses[0]} → {losses[-1]})")
+    else:
+        print("❌ Loss did not decrease")
+        ok = False
+
+    return ok
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
 VALIDATION_ONLY_MODELS = {11, 13, 14, 15, 16, 17}
 
@@ -976,6 +1023,7 @@ MODEL_CHECKS = {
     17: check_model17,
     18: check_model18,
     19: check_model19,
+    20: check_model20,
 }
 
 
