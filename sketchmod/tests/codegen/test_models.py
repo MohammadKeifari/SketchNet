@@ -1000,6 +1000,81 @@ def check_model20(proc, code, graph):
     return ok
 
 
+def check_model21(proc, code, graph):
+    """
+    model21 checks (multi‑branch Add):
+      1. Add operation present in generated code
+      2. Two Linear layers with matching output dimensions (both 1)
+      3. Training loss < 0.01 (perfect data, should converge easily)
+    """
+    ok = True
+
+    # 1. Add operation
+    if "a + b" in code or "x = a + b" in code:
+        print("✅ Add merge present")
+    else:
+        print("❌ Add merge missing")
+        ok = False
+
+    # 2. Two branches with matching output size
+    import re
+
+    linear_matches = re.findall(r"nn\.Linear\((\d+), (\d+)\)", code)
+    if len(linear_matches) >= 2:
+        out_dims = [int(m[1]) for m in linear_matches]
+        if out_dims[0] == out_dims[1]:
+            print("✅ Branches have matching output dimensions")
+        else:
+            print("❌ Branch output dimensions mismatch")
+            ok = False
+    else:
+        print("❌ Not enough Linear layers")
+        ok = False
+
+    # 3. Convergence
+    losses = re.findall(r"Train Loss: ([0-9.]+)", proc.stdout)
+    if losses and float(losses[-1]) < 0.01:
+        print(f"✅ Converged (final loss {losses[-1]})")
+    else:
+        print("❌ Did not converge or final loss > 0.01")
+        ok = False
+
+    return ok
+
+
+def check_model22(proc, code, graph):
+    ok = True
+    import re
+
+    # 1. No crash
+    if proc.returncode != 0:
+        print("❌ Script crashed")
+        return False
+
+    # 2. Training complete
+    if "Training complete." not in proc.stdout:
+        print("❌ Training incomplete")
+        ok = False
+
+    # 3. Accuracy > 0.9
+    acc = re.search(r"Accuracy: ([0-9.]+)", proc.stdout)
+    if acc and float(acc.group(1)) > 0.9:
+        print(f"✅ Accuracy {acc.group(1)}")
+    else:
+        print(f"❌ Accuracy missing or ≤ 0.9")
+        ok = False
+
+    # 4. Loss decreasing
+    losses = re.findall(r"Train Loss: ([0-9.]+)", proc.stdout)
+    if len(losses) >= 2 and float(losses[-1]) < float(losses[0]):
+        print("✅ Loss decreased")
+    else:
+        print("❌ Loss did not decrease")
+        ok = False
+
+    return ok
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
 VALIDATION_ONLY_MODELS = {11, 13, 14, 15, 16, 17}
 
@@ -1024,6 +1099,8 @@ MODEL_CHECKS = {
     18: check_model18,
     19: check_model19,
     20: check_model20,
+    21: check_model21,
+    22: check_model22,
 }
 
 
