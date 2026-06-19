@@ -13,6 +13,7 @@ from django.contrib import messages
 def settings_view(request):
     """Display and update the current user's theme and sidebar preferences."""
     user_settings = request.user.settings
+    saved = False
 
     if request.method == "POST":
         theme = request.POST.get("theme")
@@ -37,11 +38,13 @@ def settings_view(request):
         )
 
         user_settings.save()
-        messages.success(request, "Settings saved.")
-        return redirect("setting:settings")
+        saved = True
 
     return render(
         request,
         "setting/settings.html",
-        {"settings": user_settings},
+        {
+            "settings": user_settings,
+            "saved": saved,
+        },
     )
