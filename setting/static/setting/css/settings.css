@@ -278,3 +278,16 @@
 .toggle-switch input:checked + .toggle-slider::before {
     transform: translateX(22px);
 }
+
+.settings-saved-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(46, 204, 113, 0.1);
+    border: 1px solid rgba(46, 204, 113, 0.3);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    color: #27ae60;
+    font-size: 0.85rem;
+}
