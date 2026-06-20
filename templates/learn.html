@@ -1,0 +1,486 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}
+    Learn SketchNet – Visual ML Guide
+{% endblock title %}
+{% block current_page %}
+    home
+{% endblock current_page %}
+{% block extra_css %}
+    <style>
+        /* ===== Container ===== */
+        .learn-container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 40px 20px 80px;
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-bottom: 32px;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: var(--accent); }
+
+        /* ===== Header ===== */
+        .learn-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .learn-header h1 {
+            font-size: 2.4rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .learn-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            max-width: 560px;
+            margin: 0 auto;
+        }
+
+        /* ===== Tabs ===== */
+        .learn-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 36px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .learn-tab {
+            padding: 14px 26px;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            white-space: nowrap;
+            transition: color 0.2s, border-color 0.2s;
+        }
+        .learn-tab:hover { color: var(--text-primary); }
+        .learn-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        /* ===== Panels ===== */
+        .learn-panel {
+            display: none;
+            animation: fadeSlideIn 0.3s ease;
+        }
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .learn-panel.active { display: block; }
+        .learn-panel h2 {
+            font-size: 1.5rem;
+            margin-bottom: 18px;
+            color: var(--text-primary);
+        }
+        .learn-panel p,
+        .learn-panel li {
+            color: var(--text-secondary);
+            line-height: 1.75;
+            margin-bottom: 14px;
+        }
+        .learn-panel ul {
+            padding-left: 22px;
+            margin-bottom: 20px;
+        }
+        .learn-panel code {
+            background: var(--bg-secondary);
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            color: var(--accent);
+            font-family: "SF Mono", "Fira Code", monospace;
+        }
+
+        /* ===== Cards ===== */
+        .learn-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 24px;
+            margin-bottom: 18px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .learn-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+        .learn-card h3 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            color: var(--text-primary);
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+        .learn-card p {
+            margin-bottom: 0;
+        }
+
+        /* Phase badge colours */
+        .phase-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .phase-preprocessing {
+            background: rgba(239, 68, 68, 0.12);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+        .phase-training {
+            background: rgba(59, 130, 246, 0.12);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.25);
+        }
+        .phase-evaluation {
+            background: rgba(234, 179, 8, 0.12);
+            color: #eab308;
+            border: 1px solid rgba(234, 179, 8, 0.25);
+        }
+
+        .phase-icon {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .phase-icon-preprocessing { background: #ef4444; }
+        .phase-icon-training { background: #3b82f6; }
+        .phase-icon-evaluation { background: #eab308; }
+
+        /* Pattern links */
+        .pattern-list li {
+            margin-bottom: 10px;
+        }
+        .pattern-list a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .pattern-list a:hover {
+            text-decoration: underline;
+        }
+
+        /* ===== Call to Action (matches home page) ===== */
+        .learn-cta {
+            margin-top: 50px;
+            text-align: center;
+            padding: 60px 20px;
+            background: var(--bg-secondary);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+        }
+        .learn-cta h2 {
+            font-size: 2rem;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+        .learn-cta p {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 28px;
+            max-width: 500px;
+            margin-inline: auto;
+        }
+        .btn-hero {
+            padding: 14px 32px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            text-decoration: none;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: inherit;
+        }
+        .btn-hero-primary {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 4px 20px var(--accent-glow);
+        }
+        .btn-hero-primary:hover {
+            background: var(--accent-light);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px var(--accent-glow);
+        }
+
+        @media (max-width: 600px) {
+            .learn-header h1 { font-size: 1.8rem; }
+            .learn-tab { padding: 12px 16px; font-size: 0.82rem; }
+            .learn-cta h2 { font-size: 1.5rem; }
+        }
+    </style>
+{% endblock extra_css %}
+{% block content %}
+    <div class="learn-container">
+        <!-- Back link -->
+        <a href="{% url 'home' %}" class="back-link">
+            <svg width="16"
+                 height="16"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2">
+                <polyline points="15 18 9 12 15 6" />
+            </svg>
+            Back to Home
+        </a>
+        <!-- Header -->
+        <div class="learn-header">
+            <h1>Learn SketchNet</h1>
+            <p class="learn-subtitle">Everything you need to design neural networks visually.</p>
+        </div>
+        <!-- Tabs -->
+        <div class="learn-tabs" id="learnTabs">
+            <button class="learn-tab active" data-tab="quickstart">Quick Start</button>
+            <button class="learn-tab" data-tab="phases">Phases</button>
+            <button class="learn-tab" data-tab="nodes">Node Reference</button>
+            <button class="learn-tab" data-tab="patterns">Common Patterns</button>
+            <button class="learn-tab" data-tab="troubleshooting">Troubleshooting</button>
+        </div>
+        <!-- Panels -->
+        <!-- Quick Start -->
+        <div class="learn-panel active" id="panel-quickstart">
+            <h2>Quick Start Guide</h2>
+            <p>Follow these three steps to build your first model in SketchMod.</p>
+            <div class="learn-card">
+                <h3>1. Place Nodes</h3>
+                <p>
+                    Click a node in the left toolbar — like <strong>Layer</strong> — then click on the canvas to place it.
+                    Every model needs at least an <strong>Input Data</strong>, a <strong>Layer</strong>, an <strong>Output</strong>, and an <strong>Optimizer</strong>.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>2. Connect Ports</h3>
+                <p>
+                    Drag from an output port (right side of a node) to an input port (left side).
+                    SketchNet automatically propagates tensor shapes and shows you the data flow.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>3. Configure &amp; Export</h3>
+                <p>
+                    Select the <strong>Optimizer</strong> to set your loss function and training parameters.
+                    Click <strong>Check</strong> to validate your graph, then <strong>Export</strong> to download a runnable <code>.py</code> file.
+                </p>
+            </div>
+        </div>
+        <!-- Phases -->
+        <div class="learn-panel" id="panel-phases">
+            <h2>The Phase System</h2>
+            <p>
+                SketchNet splits your graph into three execution phases.
+                Each port carries checkboxes that tell the code generator when that port is active.
+            </p>
+            <div class="learn-card">
+                <h3>
+                    <span class="phase-icon phase-icon-preprocessing"></span>
+                    Preprocessing
+                    <span class="phase-badge phase-preprocessing">Preprocessing</span>
+                </h3>
+                <p>
+                    Data loading, normalisation, one‑hot encoding, and train/test splits happen here.
+                    Preprocessing runs once before training starts.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>
+                    <span class="phase-icon phase-icon-training"></span>
+                    Training
+                    <span class="phase-badge phase-training">Training</span>
+                </h3>
+                <p>
+                    Model layers, loss computation, and weight updates.
+                    The training loop runs for the number of epochs you specify in the Optimizer.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>
+                    <span class="phase-icon phase-icon-evaluation"></span>
+                    Evaluation
+                    <span class="phase-badge phase-evaluation">Evaluation</span>
+                </h3>
+                <p>
+                    Runs the trained model on test data.
+                    Visualizations, accuracy nodes, and DeOneHot belong here.
+                </p>
+            </div>
+            <p>
+                <strong>Pro tip:</strong> Use the <em>Highlight Path</em> button to colour‑code your graph by phase.
+            </p>
+        </div>
+        <!-- Node Reference -->
+        <div class="learn-panel" id="panel-nodes">
+            <h2>Node Reference</h2>
+            <div class="learn-card">
+                <h3>Input Data</h3>
+                <p>
+                    Loads a CSV, Excel, JSON, or Parquet file.
+                    Attach a dataset from the properties panel or enter a shape manually.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>Layer / Neuron</h3>
+                <p>
+                    A fully‑connected linear layer.
+                    Set the number of neurons and activation function.
+                    Accepts multiple inputs (they are concatenated along the feature dimension).
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>Conv2D</h3>
+                <p>2‑D convolution. Specify filters, kernel size, stride, padding, and activation.</p>
+            </div>
+            <div class="learn-card">
+                <h3>Output</h3>
+                <p>
+                    Defines the model's outputs.
+                    Three ports: <strong>loss</strong> (used during training), <strong>prediction</strong> and <strong>evaluation</strong> (used during evaluation).
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>Optimizer</h3>
+                <p>
+                    Configures loss function, optimizer type, learning rate, batch size, epochs, early stopping, and validation split.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>Accuracy / Print / Visualization</h3>
+                <p>
+                    Analytics nodes that run during evaluation (Accuracy, Print) or any phase (Print in preprocessing).
+                    Visualizations support 1‑D, 2‑D, and 3‑D scatter plots with discrete or continuous colour mapping.
+                </p>
+            </div>
+        </div>
+        <!-- Common Patterns -->
+        <div class="learn-panel" id="panel-patterns">
+            <h2>Common Patterns</h2>
+            <p>Click any link to open a pre‑built graph on the canvas. You only need to replace the dataset.</p>
+            <ul class="pattern-list">
+                <li>
+                    <a href="{% url 'sketchmod:canvas' %}?template=linear-regression">Linear Regression</a>
+                    – Input → ColumnSelect → Layer → Output → Optimizer (MSE)
+                </li>
+                <li>
+                    <a href="{% url 'sketchmod:canvas' %}?template=binary-classification">Binary Classification</a>
+                    – Input → ColumnSelect → Layer → Output(softmax) → Optimizer(CrossEntropy) → Accuracy
+                </li>
+                <li>
+                    <a href="{% url 'sketchmod:canvas' %}?template=cnn">Image Classifier (CNN)</a>
+                    – Input → Reshape → Conv2D → Flatten → Layer → Output → Optimizer
+                </li>
+                <li>
+                    <a href="{% url 'sketchmod:canvas' %}?template=skip-connection">Skip Connection</a>
+                    – Input → Layer → Layer → Add ← Layer (skip) → Output
+                </li>
+            </ul>
+            <p style="margin-top: 16px;
+                      color: var(--text-secondary);
+                      font-size: 0.9rem">
+                Templates are empty — you'll need to attach your own dataset in the Input Data node.
+            </p>
+        </div>
+        <!-- Troubleshooting -->
+        <div class="learn-panel" id="panel-troubleshooting">
+            <h2>Troubleshooting</h2>
+            <div class="learn-card">
+                <h3>"Missing Input Data node"</h3>
+                <p>
+                    Add an <strong>Input Data</strong> node from the toolbar. Every model needs one.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>"Optimizer node must be in the training phase"</h3>
+                <p>
+                    Select the Optimizer's input ports and ensure <strong>Training</strong> is checked in the properties panel.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>"CrossEntropyLoss requires 1‑D integer labels"</h3>
+                <p>
+                    Insert a <strong>Reshape</strong> node between your label column and the Optimizer with target shape <code>(-1)</code>.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>Model doesn't converge</h3>
+                <p>
+                    Try increasing the <strong>learning rate</strong> or <strong>epochs</strong>.
+                    For classification, make sure your labels are integers (0, 1, 2, …).
+                    For Conv2D models, ensure the input shape is <code>(batch, channels, height, width)</code>.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>"Data‑flow cycle detected"</h3>
+                <p>
+                    Your graph contains a loop — the output of a node eventually feeds back into itself.
+                    Remove one of the links in the cycle.
+                </p>
+            </div>
+        </div>
+        <!-- CTA -->
+        <div class="learn-cta">
+            <h2>Ready to try it yourself?</h2>
+            <p>Open the editor and start building your first model right now.</p>
+            <a href="{% url 'sketchmod:canvas' %}" class="btn-hero btn-hero-primary">
+                <svg width="20"
+                     height="20"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="8" y="14" width="7" height="7" rx="1" />
+                    <line x1="6.5" y1="10" x2="6.5" y2="17" />
+                    <line x1="17.5" y1="10" x2="17.5" y2="14" />
+                </svg>
+                Open SketchMod
+            </a>
+        </div>
+    </div>
+{% endblock content %}
+{% block extra_js %}
+    <script>
+        // Simple tab switcher
+        const tabs = document.querySelectorAll('.learn-tab');
+        const panels = document.querySelectorAll('.learn-panel');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                panels.forEach(p => p.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+            });
+        });
+    </script>
+{% endblock extra_js %}
