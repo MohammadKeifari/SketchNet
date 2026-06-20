@@ -1186,6 +1186,45 @@ def check_model25(proc, code, graph):
     return ok
 
 
+def check_model26(proc, code, graph):
+    """
+    model26 checks (multiple model inputs):
+      1. Forward pass contains references to both feat1_out and feat2_out
+      2. Training completes
+      3. Accuracy > 0.8
+    """
+    ok = True
+
+    # 1. Both feature source port IDs appear in the generated code
+    if "feat1_out" in code and "feat2_out" in code:
+        print("✅ Multiple input sources detected")
+    else:
+        print("❌ Expected both feat1_out and feat2_out in code")
+        ok = False
+
+    # 2. Training completion
+    if "Training complete." not in proc.stdout:
+        print("❌ Training incomplete")
+        ok = False
+
+    # 3. Accuracy
+    import re
+
+    acc = re.search(r"Accuracy: ([0-9.]+)", proc.stdout)
+    if acc:
+        val = float(acc.group(1))
+        if val > 0.8:
+            print(f"✅ Accuracy {val:.4f}")
+        else:
+            print(f"❌ Accuracy {val:.4f} ≤ 0.8")
+            ok = False
+    else:
+        print("❌ Accuracy not found")
+        ok = False
+
+    return ok
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
 VALIDATION_ONLY_MODELS = {11, 13, 14, 15, 16, 17}
 
@@ -1215,6 +1254,7 @@ MODEL_CHECKS = {
     23: check_model23,
     24: check_model24,
     25: check_model25,
+    26: check_model26,
 }
 
 
