@@ -40,11 +40,32 @@
                     "id": "c_feat_out",
                     "type": "output",
                     "index": 0,
-                    "activationPhases": [
-                        "preprocessing",
-                        "training",
-                        "evaluation"
-                    ]
+                    "activationPhases": ["preprocessing", "training"]
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "selectedColumns": [0, 1, 2]
+        },
+        {
+            "id": "c_feat_eval",
+            "type": "column-select",
+            "x": 180,
+            "y": 220,
+            "inputPorts": [
+                {
+                    "id": "c_feat_eval_in",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": ["preprocessing"]
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "c_feat_eval_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": ["evaluation"]
                 }
             ],
             "numInputs": 1,
@@ -55,7 +76,7 @@
             "id": "c_label",
             "type": "column-select",
             "x": 180,
-            "y": 280,
+            "y": 300,
             "inputPorts": [
                 {
                     "id": "c_label_in",
@@ -174,8 +195,6 @@
                     "activationPhases": ["evaluation"]
                 }
             ],
-            "numInputs": 2,
-            "numOutputs": 3,
             "outputActivations": {
                 "loss": "none",
                 "prediction": "none",
@@ -216,9 +235,11 @@
     ],
     "links": [
         { "from": "inp_out", "to": "c_feat_in" },
+        { "from": "inp_out", "to": "c_feat_eval_in" },
         { "from": "inp_out", "to": "c_label_in" },
         { "from": "c_feat_out", "to": "layer1_in" },
         { "from": "layer1_out", "to": "layer2_in" },
+        { "from": "c_feat_eval_out", "to": "layer2_in" },
         { "from": "layer2_out", "to": "out_in_train" },
         { "from": "layer2_out", "to": "out_in_test" },
         { "from": "loss_p", "to": "opt_loss" },
@@ -232,8 +253,10 @@
         { "id": "c_feat_in", "activationPhases": ["preprocessing"] },
         {
             "id": "c_feat_out",
-            "activationPhases": ["preprocessing", "training", "evaluation"]
+            "activationPhases": ["preprocessing", "training"]
         },
+        { "id": "c_feat_eval_in", "activationPhases": ["preprocessing"] },
+        { "id": "c_feat_eval_out", "activationPhases": ["evaluation"] },
         { "id": "c_label_in", "activationPhases": ["preprocessing"] },
         {
             "id": "c_label_out",

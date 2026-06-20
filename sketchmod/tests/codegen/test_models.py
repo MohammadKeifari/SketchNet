@@ -600,14 +600,7 @@ def check_model9(proc, code, graph):
 
 
 def check_model10(proc, code, graph):
-    """
-    model10 checks:
-      1. Validator warns about evaluation entry point.
-      2. No evaluation function is generated.
-      3. Script exits cleanly (no NameError).
-    """
     ok = True
-
     from sketchmod.codegen.validator import GraphValidator
 
     result = GraphValidator(graph).validate()
@@ -617,20 +610,16 @@ def check_model10(proc, code, graph):
     else:
         print("❌ Expected warning for evaluation entry point not found")
         ok = False
-
     if "def evaluate(" not in code:
         print("✅ No evaluation function generated")
     else:
         print("❌ Evaluation function should not be generated")
         ok = False
-
-    # The script should exit cleanly (returncode 0, 'Training complete.' present)
     if proc.returncode == 0 and "Training complete." in proc.stdout:
         print("✅ Script exited cleanly")
     else:
         print("❌ Script crashed or training incomplete")
         ok = False
-
     return ok
 
 
