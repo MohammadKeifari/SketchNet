@@ -102,13 +102,20 @@ class CodeGenerator:
             self.translators[nid].generate(w, "preprocessing", "data")
 
         # Build pre_data with train/eval seed ports and param-sharing variables
+        added = set()
         w.line("pre_data = {")
         for port_id in self.flow["train_seed_ports"]:
             if port_id in self.var_map:
-                w.line(f"    '{port_id}': {self.var_map[port_id]},")
+                var = self.var_map[port_id]
+                if var not in added:
+                    w.line(f"    '{port_id}': {var},")
+                    added.add(var)
         for port_id in self.flow["eval_seed_ports"]:
             if port_id in self.var_map:
-                w.line(f"    '{port_id}': {self.var_map[port_id]},")
+                var = self.var_map[port_id]
+                if var not in added:
+                    w.line(f"    '{port_id}': {var},")
+                    added.add(var)
 
         # Include param outputs (OneHot categories, Normalize statistics)
         for nid in order:
@@ -511,14 +518,19 @@ class CodeGenerator:
 
     def _unpack_pre_data(self, w: CodeWriter):
         """Write lines that unpack pre_data into local variables."""
+        added = set()
         for port_id in self.flow["train_seed_ports"]:
             if port_id in self.var_map:
                 var = self.var_map[port_id]
-                w.line(f"{var} = pre_data['{port_id}']")
+                if var not in added:
+                    w.line(f"{var} = pre_data['{port_id}']")
+                    added.add(var)
         for port_id in self.flow["eval_seed_ports"]:
             if port_id in self.var_map:
                 var = self.var_map[port_id]
-                w.line(f"{var} = pre_data['{port_id}']")
+                if var not in added:
+                    w.line(f"{var} = pre_data['{port_id}']")
+                    added.add(var)
         for nid in self.flow["preprocessing_order"]:
             node = self.graph.nodes[nid]
             if node.type == "onehot" and node.paramOutputs:
