@@ -202,30 +202,27 @@ class CodeGenerator:
     # ------------------------------------------------------------------
     #  TRAIN MODEL
     # ------------------------------------------------------------------
-    def _emit_train_model(self, w: CodeWriter):
-        """Emit the train_model function with training loop.
 
-        Non‑model training nodes that process labels are executed once before
-        the loop.  Analytics (Print, Accuracy) that depend on model outputs
-        are executed inside the loop after the forward pass.
-        """
+    def _emit_train_model(self, w: CodeWriter):
+        """Emit the train_model function with built‑in validation split."""
         opt_node = self.flow["optimizer"]
         w.line("def train_model(model, pre_data, config):")
         w.indent()
 
         self._unpack_pre_data(w)
 
+        # ---- Get model / non‑model node sets ----
         model_nodes = set(self._get_model_nodes())
         pre_set = self.flow.get("preprocessing_set", set())
 
-        # ---- Execute label‑processing nodes (non‑model, no dependency on model) ----
+        # ---- Translate label‑processing nodes (non‑model) once before loop ----
         for nid in self.flow["train_order"]:
             if nid in model_nodes or nid in pre_set:
                 continue
             node = self.graph.nodes[nid]
             if node.type in ("optimizer", "visualization"):
                 continue
-            # Check if this node reads from a model node
+            # skip nodes that read from a model node (they will run inside the loop)
             reads_from_model = False
             for port in node.inputs:
                 for link in self.graph.links:
@@ -237,17 +234,35 @@ class CodeGenerator:
                 if reads_from_model:
                     break
             if reads_from_model:
-                continue  # will run inside the loop
+                continue
             self.translators[nid].generate(w, "training", "data")
 
-        # ---- Feature & label extraction ----
+        # ---- extract features and labels ----
         feat_var = self._get_var_for_first_model_input("train")
         label_var = self._get_var_for_optimizer_labels()
 
         w.line(f"features = {feat_var}.float()")
         w.line(f"labels = {label_var}")
 
-        # ---- Loss & optimizer setup (including label cast) ----
+        # ---- validation split (if enabled) ----
+        val_mode = opt_node.properties.get("validationMode", "none")
+        val_split = opt_node.properties.get("validationSplit", 0.2)
+        has_val = val_mode == "split"
+
+        if has_val:
+            w.line("")
+            w.line("# ----- Hold‑out validation split -----")
+            w.line(f"val_size = int(features.size(0) * {val_split})")
+            w.line("indices = torch.randperm(features.size(0))")
+            w.line("val_idx = indices[:val_size]")
+            w.line("train_idx = indices[val_size:]")
+            w.line("val_features = features[val_idx]")
+            w.line("val_labels = labels[val_idx]")
+            w.line("features = features[train_idx]")
+            w.line("labels = labels[train_idx]")
+            w.line("")
+
+        # ---- loss & optimizer setup ----
         translator = self.translators[opt_node.id]
         translator.emit_training_setup(w)
 
@@ -258,13 +273,20 @@ class CodeGenerator:
         )
         w.line("")
 
-        w.line("best_loss = float('inf')")
-        w.line(
-            "patience = config.get('early_stopping_patience', 10) if config.get('early_stopping') else None"
-        )
-        w.line("no_improve = 0")
+        # ---- early stopping setup ----
+        early_stop = opt_node.properties.get("earlyStopping", False)
+        if early_stop and has_val:
+            w.line("best_metric = float('inf')")
+            patience_val = opt_node.properties.get("earlyStoppingPatience", 10)
+            w.line(
+                f"patience = {patience_val} if config.get('early_stopping') else None"
+            )
+            w.line("no_improve = 0")
+        else:
+            w.line("# Early stopping disabled (no validation or turned off)")
         w.line("")
 
+        # ---- epoch loop ----
         w.line("for epoch in range(config.get('epochs', 10)):")
         w.indent()
         w.line("model.train()")
@@ -291,8 +313,8 @@ class CodeGenerator:
         w.line("optimizer.step()")
         w.line("total_loss += loss.item() * batch_X.size(0)")
 
-        # ---- Run output‑dependent analytics (Print, Accuracy) ----
-        # Store output port variables so they can be referenced
+        # ---- Run output‑dependent analytics (Print, Accuracy) inside loop ----
+        # store output port variables so they can be referenced
         output_node = next(
             (n for n in self.graph.nodes.values() if n.type == "output"), None
         )
@@ -308,6 +330,7 @@ class CodeGenerator:
             node = self.graph.nodes[nid]
             if node.type in ("optimizer", "visualization"):
                 continue
+            # skip nodes that were already executed before the loop
             reads_from_model = False
             for port in node.inputs:
                 for link in self.graph.links:
@@ -323,53 +346,59 @@ class CodeGenerator:
             self.translators[nid].generate(w, "training", "data")
 
         w.dedent()  # end batch loop
+
         w.line("avg_train_loss = total_loss / len(loader.dataset)")
         w.line("print(f'Epoch {epoch+1:3d}  Train Loss: {avg_train_loss:.6f}')")
 
-        # Validation (only if test labels exist)
-        test_label_var = self._get_var_for_eval_labels()
-        if test_label_var != "None":
-            w.line(
-                f"val_features = {self._get_var_for_first_model_input('eval')}.float()"
-            )
-            w.line(f"val_labels = {test_label_var}")
-            loss_type = opt_node.properties.get("lossType", "mse")
-            if loss_type in ("cross_entropy", "nll"):
-                w.line("val_labels = val_labels.long()")
+        # ---- validation block (inside epoch) ----
+        if has_val:
+            metric = opt_node.properties.get("validationMetric", "loss")
             w.line("model.eval()")
             w.line("with torch.inference_mode():")
             w.indent()
-            eval_feed_key, _ = self._get_feed_key("eval")
-            w.line(f"outputs = model({{'{eval_feed_key}': val_features.to(device)}})")
+            w.line(f"val_out = model({{'{feed_key}': val_features.to(device)}})")
             if loss_port:
-                w.line(
-                    f"val_loss = criterion(outputs['{loss_port}'], val_labels.to(device)).item()"
-                )
-            else:
-                w.line(
-                    "val_loss = criterion(list(outputs.values())[0], val_labels.to(device)).item()"
-                )
-            w.dedent()
-            w.line("print(f'           Val Loss: {val_loss:.6f}')")
-            w.line("if patience is not None:")
-            w.indent()
-            w.line("if val_loss < best_loss:")
-            w.indent()
-            w.line("best_loss = val_loss")
-            w.line("no_improve = 0")
-            w.dedent()
-            w.line("else:")
-            w.indent()
-            w.line("no_improve += 1")
-            w.line("if no_improve >= patience:")
-            w.indent()
-            w.line("print('Early stopping.')")
-            w.line("break")
-            w.dedent()
-            w.dedent()
+                if metric == "accuracy":
+                    w.line(
+                        "val_preds = val_out['{}'].argmax(dim=1)".format(
+                            loss_port.replace("loss_p", "pred_p")
+                            if "loss_p" in loss_port
+                            else loss_port
+                        )
+                    )
+                    w.line(
+                        "val_acc = (val_preds == val_labels.to(device)).float().mean().item()"
+                    )
+                    w.line("print(f'           Val Accuracy: {val_acc:.4f}')")
+                    w.line("metric = 1.0 - val_acc")
+                else:
+                    w.line(
+                        f"val_loss = criterion(val_out['{loss_port}'], val_labels.to(device)).item()"
+                    )
+                    w.line("print(f'           Val Loss: {val_loss:.6f}')")
+                    w.line("metric = val_loss")
             w.dedent()
 
-        w.dedent()
+            if early_stop:
+                w.line("if patience is not None:")
+                w.indent()
+                w.line("if metric < best_metric:")
+                w.indent()
+                w.line("best_metric = metric")
+                w.line("no_improve = 0")
+                w.dedent()
+                w.line("else:")
+                w.indent()
+                w.line("no_improve += 1")
+                w.line("if no_improve >= patience:")
+                w.indent()
+                w.line("print('Early stopping.')")
+                w.line("break")
+                w.dedent()
+                w.dedent()
+                w.dedent()
+
+        w.dedent()  # end epoch loop
         w.line("return model")
         w.dedent()
         w.line("")
@@ -383,6 +412,7 @@ class CodeGenerator:
         Runs the trained model on evaluation data and then executes
         any evaluation‑only nodes (DeOneHot, visualizations, etc.).
         """
+
         w.line("def evaluate(model, pre_data):")
         w.indent()
         self._unpack_pre_data(w)
@@ -400,6 +430,7 @@ class CodeGenerator:
                 f"eval_in = {{'{eval_feed_key}': {eval_feed_var}.float().to(device)}}"
             )
             w.line("outputs = model(eval_in)")
+            # store output port variables for later nodes (accuracy, prints, etc.)
             output_node = next(
                 (n for n in self.graph.nodes.values() if n.type == "output"), None
             )
@@ -412,7 +443,7 @@ class CodeGenerator:
         else:
             w.line("# No trained model – running evaluation nodes untrained")
 
-        # Run evaluation‑only nodes not already executed by the model
+        # Run evaluation‑only nodes (not already executed by the model)
         train_set = set(self.flow["train_order"])
         for nid in self.flow["eval_order"]:
             if nid in train_set:
@@ -568,27 +599,6 @@ class CodeGenerator:
                 src_nid = self.graph.ports[src].node_id
                 if src_nid in self.var_map:
                     return self.var_map[src_nid]
-        return "None"
-
-    def _get_var_for_eval_labels(self) -> str:
-        """Return the test‑label variable connected to the output node."""
-        output_node = next(
-            (n for n in self.graph.nodes.values() if n.type == "output"), None
-        )
-        if not output_node:
-            return "None"
-        for port in output_node.inputs:
-            for link in self.graph.links:
-                if link.id_to == port.id:
-                    src_port = self.graph.ports[link.id_from]
-                    if "evaluation" in src_port.activation_phases:
-                        for l2 in self.graph.links:
-                            if l2.id_to == src_port.id:
-                                if l2.id_from in self.var_map:
-                                    return self.var_map[l2.id_from]
-                                src_nid = self.graph.ports[l2.id_from].node_id
-                                if src_nid in self.var_map:
-                                    return self.var_map[src_nid]
         return "None"
 
     def _get_loss_port_id(self) -> str | None:
