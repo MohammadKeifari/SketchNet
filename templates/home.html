@@ -145,6 +145,37 @@
             line-height: 1.5;
         }
 
+        /* ---------- Learn Teaser ---------- */
+        .learn-section {
+            padding: 80px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .learn-card-wrapper {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 60px 40px;
+            text-align: center;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .learn-card-wrapper:hover {
+            border-color: var(--accent);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+        }
+        .learn-card-wrapper h2 {
+            font-size: 2rem;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+        .learn-card-wrapper p {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 28px;
+            max-width: 600px;
+            margin-inline: auto;
+        }
+
         /* ---------- Call to Action ---------- */
         .cta {
             text-align: center;
@@ -167,6 +198,7 @@
             .hero h1 { font-size: 2.2rem; }
             .hero p { font-size: 1rem; }
             .features h2 { font-size: 1.6rem; }
+            .learn-card-wrapper h2 { font-size: 1.5rem; }
         }
     </style>
 {% endblock extra_css %}
@@ -257,6 +289,31 @@
                 <h3>Dataset Management</h3>
                 <p>Upload your own datasets, let SketchNet infer shapes, or generate synthetic data right from the browser.</p>
             </div>
+        </div>
+    </section>
+    <!-- Learn Section -->
+    <section class="learn-section">
+        <div class="learn-card-wrapper">
+            <h2>New to SketchNet?</h2>
+            <p>
+                Learn how to design, connect, and export neural networks — all visually.
+                Our step‑by‑step guide covers the phase system, node reference, common patterns, and troubleshooting.
+            </p>
+            <a href="{% url 'learn' %}" class="btn-hero btn-hero-secondary">
+                <svg width="20"
+                     height="20"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     stroke-linecap="round"
+                     stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                Learn SketchNet
+            </a>
         </div>
     </section>
     <!-- Call to Action -->
