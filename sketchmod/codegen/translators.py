@@ -368,6 +368,7 @@ class NeuronTranslator(BaseTranslator):
     node_type = "neuron"
 
     def _guess_in_features(self):
+        total = 0
         for port in self.node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
@@ -381,19 +382,24 @@ class NeuronTranslator(BaseTranslator):
                         try:
                             val = int(dim)
                             if val > 0:
-                                return val
+                                total += val  # sum features from all inputs
+                                break
                         except (ValueError, TypeError):
                             pass
+                    # fallback: link weight_shape
                     if link.weight_shape:
                         shape = link.weight_shape.get("shape", [])
                         if len(shape) >= 2:
                             try:
                                 val = int(shape[1])
                                 if val > 0:
-                                    return val
+                                    total += val
+                                    break
                             except (ValueError, TypeError):
                                 pass
-        raise ValueError(f"Cannot infer in_features for {self.node.id}")
+        if total == 0:
+            raise ValueError(f"Cannot infer in_features for {self.node.id}")
+        return total
 
     def generate(self, w, phase, placement, is_first=False):
         n = self.node
