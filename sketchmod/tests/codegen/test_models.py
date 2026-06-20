@@ -1234,6 +1234,87 @@ def check_model27(proc, code, graph):
     return ok
 
 
+def check_model28(proc, code, graph):
+    """
+    model28 checks:
+      1. SGD with momentum, weight decay, gradient clipping present
+      2. Validation split with accuracy metric used
+      3. Early stopping triggered
+      4. Confusion matrix printed
+      5. Continuous colour visualisation present
+      6. Training stopped before max epochs
+    """
+    ok = True
+    import re
+
+    # 1. SGD + momentum + weight decay + gradient clip
+    if "optim.SGD" in code:
+        print("✅ SGD optimizer")
+    else:
+        print("❌ SGD not found")
+        ok = False
+    if "momentum=0.9" in code:
+        print("✅ Momentum configured")
+    else:
+        print("❌ Momentum missing")
+        ok = False
+    if "weight_decay=0.0001" in code:
+        print("✅ Weight decay present")
+    else:
+        print("❌ Weight decay missing")
+        ok = False
+    if "clip_grad_norm_" in code:
+        print("✅ Gradient clipping present")
+    else:
+        print("❌ Gradient clipping missing")
+        ok = False
+
+    # 2. Validation split with accuracy
+    if "val_size = int(features.size(0) * 0.2)" in code:
+        print("✅ Validation split present")
+    else:
+        print("❌ Validation split missing")
+        ok = False
+    if "Val Accuracy:" in proc.stdout or "val_acc" in code:
+        print("✅ Accuracy metric used for validation")
+    else:
+        print("❌ Accuracy metric not found")
+        ok = False
+
+    # 3. Early stopping
+    if "Early stopping." in proc.stdout:
+        print("✅ Early stopping triggered")
+    else:
+        print("❌ Early stopping not triggered")
+        ok = False
+
+    # 4. Confusion matrix
+    if "Confusion Matrix:" in proc.stdout or "confusion_matrix" in code:
+        print("✅ Confusion matrix printed")
+    else:
+        print("❌ Confusion matrix not found")
+        ok = False
+
+    # 5. Discrete colour visualisation
+    if "ListedColormap" in code:
+        print("✅ Discrete colour visualisation present")
+    else:
+        print("❌ Discrete colour visualisation missing")
+        ok = False
+
+    # 6. Epoch count < max
+    epochs = re.findall(r"Epoch\s+(\d+)", proc.stdout)
+    if epochs:
+        last = int(epochs[-1])
+        if last < 200:
+            print(f"✅ Stopped at epoch {last}")
+        else:
+            print(f"❌ Ran full 200 epochs")
+            ok = False
+
+    return ok
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
 VALIDATION_ONLY_MODELS = {11, 13, 14, 15, 16, 17, 27}
 
@@ -1265,6 +1346,7 @@ MODEL_CHECKS = {
     25: check_model25,
     26: check_model26,
     27: check_model27,
+    28: check_model28,
 }
 
 
