@@ -25,6 +25,7 @@ class GraphValidator:
         self._check_required_inputs(errors)
         self._check_multiple_train_entries(errors)
         self._check_data_flow_cycles(errors)
+        self._check_multi_input_batch_sizes(errors)
 
         self._check_optimizer_missing(warnings)
         self._check_model_in_preprocessing(warnings)
@@ -595,3 +596,30 @@ class GraphValidator:
                     "nodeId": opt.id,
                 }
             )
+
+    def _check_multi_input_batch_sizes(self, errors):
+        for node in self.graph.nodes.values():
+            if node.type not in ("neuron", "layer"):
+                continue
+            connected = []
+            for port in node.inputs:
+                for link in self.graph.links:
+                    if link.id_to == port.id:
+                        src_port = self.graph.ports[link.id_from]
+                        if src_port.shape and src_port.shape.shape:
+                            connected.append((port.id, src_port.shape))
+            if len(connected) < 2:
+                continue
+            ref = connected[0][1].shape[0]
+            for pid, shape in connected[1:]:
+                if shape.shape[0] != ref:
+                    errors.append(
+                        {
+                            "message": (
+                                f"Model node '{node.id}' has multiple inputs with different batch sizes "
+                                f"({ref} vs {shape.shape[0]}). Batch sizes must match when feeding into the same model node."
+                            ),
+                            "nodeId": node.id,
+                        }
+                    )
+                    break
