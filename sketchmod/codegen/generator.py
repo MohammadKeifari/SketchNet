@@ -536,13 +536,19 @@ class CodeGenerator:
             if node.type == "onehot" and node.paramOutputs:
                 pid = node.paramOutputs[0].id
                 if pid in self.var_map:
-                    w.line(f"{self.var_map[pid]} = pre_data['{pid}']")
+                    var = self.var_map[pid]
+                    if var not in added:
+                        w.line(f"{var} = pre_data['{pid}']")
+                        added.add(var)
             if node.type == "normalize" and node.paramOutputs:
                 pid = node.paramOutputs[0].id
                 for suffix in ("_mean", "_std"):
                     key = pid + suffix
                     if key in self.var_map:
-                        w.line(f"{self.var_map[key]} = pre_data['{key}']")
+                        var = self.var_map[key]
+                        if var not in added:
+                            w.line(f"{var} = pre_data['{key}']")
+                            added.add(var)
         w.line("")
 
     def _get_first_model_node_id(self, phase: str) -> str | None:
