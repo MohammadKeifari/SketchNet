@@ -1225,8 +1225,28 @@ def check_model26(proc, code, graph):
     return ok
 
 
+def check_model27(proc, code, graph):
+    """
+    model27 checks (validation only):
+      - Error: batch size mismatch for multi‑input model node.
+    """
+    ok = True
+    from sketchmod.codegen.validator import GraphValidator
+
+    result = GraphValidator(graph).validate()
+    errors = result.get("errors", [])
+
+    if any("different batch sizes" in e.get("message", "") for e in errors):
+        print("✅ Batch size mismatch error detected")
+    else:
+        print("❌ Expected batch size mismatch error not found")
+        ok = False
+
+    return ok
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
-VALIDATION_ONLY_MODELS = {11, 13, 14, 15, 16, 17}
+VALIDATION_ONLY_MODELS = {11, 13, 14, 15, 16, 17, 27}
 
 MODEL_CHECKS = {
     1: check_model1,
@@ -1255,6 +1275,7 @@ MODEL_CHECKS = {
     24: check_model24,
     25: check_model25,
     26: check_model26,
+    27: check_model27,
 }
 
 
