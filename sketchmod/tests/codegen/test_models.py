@@ -1146,6 +1146,46 @@ def check_model24(proc, code, graph):
     return ok
 
 
+def check_model25(proc, code, graph):
+    """
+    model25 checks (validation split + early stopping):
+      1. Generated code contains the validation split logic
+      2. "Early stopping." appears in stdout
+      3. Training stopped before max epochs (last epoch < 200)
+    """
+    ok = True
+    import re
+
+    # 1. Code includes validation split
+    if "val_size = int(features.size(0) * 0.2)" in code:
+        print("✅ Validation split code present")
+    else:
+        print("❌ Validation split code missing")
+        ok = False
+
+    # 2. Early stopping message
+    if "Early stopping." in proc.stdout:
+        print("✅ Early stopping triggered")
+    else:
+        print("❌ Early stopping not triggered")
+        ok = False
+
+    # 3. Epoch count < max epochs (200)
+    epochs = re.findall(r"Epoch\s+(\d+)", proc.stdout)
+    if epochs:
+        last = int(epochs[-1])
+        if last < 200:
+            print(f"✅ Stopped at epoch {last}")
+        else:
+            print(f"❌ Ran full 200 epochs")
+            ok = False
+    else:
+        print("❌ No epoch output found")
+        ok = False
+
+    return ok
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
 VALIDATION_ONLY_MODELS = {11, 13, 14, 15, 16, 17}
 
@@ -1174,6 +1214,7 @@ MODEL_CHECKS = {
     22: check_model22,
     23: check_model23,
     24: check_model24,
+    25: check_model25,
 }
 
 
