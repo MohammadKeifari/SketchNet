@@ -215,34 +215,41 @@
         }
     ],
     "links": [
-        { "from": "inp_out", "to": "c_feat_in", "weight": 1 },
-        { "from": "inp_out", "to": "c_label_in", "weight": 1 },
-        {
-            "from": "c_feat_out",
-            "to": "layer1_in",
-            "weight": 1,
-            "weightShape": { "shape": [8, 3], "dtype": "float32" },
-            "hasWeight": true
-        },
-        {
-            "from": "layer1_out",
-            "to": "layer2_in",
-            "weight": 1,
-            "weightShape": { "shape": [3, 8], "dtype": "float32" },
-            "hasWeight": true
-        },
-        { "from": "layer2_out", "to": "out_in_train", "weight": 1 },
-        { "from": "layer2_out", "to": "out_in_test", "weight": 1 },
-        { "from": "loss_p", "to": "opt_loss", "weight": 1 },
-        {
-            "from": "c_feat_out",
-            "to": "layer2_in",
-            "weight": 1,
-            "weightShape": { "shape": [3, 3], "dtype": "float32" },
-            "hasWeight": true
-        },
-        { "from": "c_label_out", "to": "opt_labels", "weight": 1 }
+        { "from": "inp_out", "to": "c_feat_in" },
+        { "from": "inp_out", "to": "c_label_in" },
+        { "from": "c_feat_out", "to": "layer1_in" },
+        { "from": "layer1_out", "to": "layer2_in" },
+        { "from": "layer2_out", "to": "out_in_train" },
+        { "from": "layer2_out", "to": "out_in_test" },
+        { "from": "loss_p", "to": "opt_loss" },
+        { "from": "c_label_out", "to": "opt_labels" }
     ],
-    "ports": [],
+    "ports": [
+        {
+            "id": "inp_out",
+            "activationPhases": ["preprocessing", "training", "evaluation"]
+        },
+        { "id": "c_feat_in", "activationPhases": ["preprocessing"] },
+        {
+            "id": "c_feat_out",
+            "activationPhases": ["preprocessing", "training", "evaluation"]
+        },
+        { "id": "c_label_in", "activationPhases": ["preprocessing"] },
+        {
+            "id": "c_label_out",
+            "activationPhases": ["preprocessing", "training"]
+        },
+        { "id": "layer1_in", "activationPhases": ["training"] },
+        { "id": "layer1_out", "activationPhases": ["training"] },
+        { "id": "layer2_in", "activationPhases": ["training", "evaluation"] },
+        { "id": "layer2_out", "activationPhases": ["training", "evaluation"] },
+        { "id": "out_in_train", "activationPhases": ["training"] },
+        { "id": "out_in_test", "activationPhases": ["evaluation"] },
+        { "id": "loss_p", "activationPhases": ["training"] },
+        { "id": "pred_p", "activationPhases": ["evaluation"] },
+        { "id": "eval_p", "activationPhases": ["evaluation"] },
+        { "id": "opt_loss", "activationPhases": ["training"] },
+        { "id": "opt_labels", "activationPhases": ["training"] }
+    ],
     "nodeCounter": 0
 }
