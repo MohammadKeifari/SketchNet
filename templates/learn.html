@@ -388,20 +388,20 @@
             <p>Click any link to open a pre‑built graph on the canvas. You only need to replace the dataset.</p>
             <ul class="pattern-list">
                 <li>
-                    <a href="{% url 'sketchmod:canvas' %}?template=linear-regression">Linear Regression</a>
-                    – Input → ColumnSelect → Layer → Output → Optimizer (MSE)
+                    <a href="{% url 'sketchmod:template_load' 'linear-regression' %}">Linear Regression</a>
+                    - Input → ColumnSelect → Layer → Output → Optimizer (MSE)
                 </li>
                 <li>
-                    <a href="{% url 'sketchmod:canvas' %}?template=binary-classification">Binary Classification</a>
-                    – Input → ColumnSelect → Layer → Output(softmax) → Optimizer(CrossEntropy) → Accuracy
+                    <a href="{% url 'sketchmod:template_load' 'binary-classification' %}">Binary Classification</a>
+                    - Input → ColumnSelect → Layer → Output(softmax) → Optimizer(CrossEntropy) → Accuracy
                 </li>
                 <li>
-                    <a href="{% url 'sketchmod:canvas' %}?template=cnn">Image Classifier (CNN)</a>
-                    – Input → Reshape → Conv2D → Flatten → Layer → Output → Optimizer
+                    <a href="{% url 'sketchmod:template_load' 'cnn' %}">Image Classifier (CNN)</a>
+                    - Input → Reshape → Conv2D → Flatten → Layer → Output → Optimizer
                 </li>
                 <li>
-                    <a href="{% url 'sketchmod:canvas' %}?template=skip-connection">Skip Connection</a>
-                    – Input → Layer → Layer → Add ← Layer (skip) → Output
+                    <a href="{% url 'sketchmod:template_load' 'skip-connection' %}">Skip Connection</a>
+                    - Input → Layer → Layer → Add ← Layer (skip) → Output
                 </li>
             </ul>
             <p style="margin-top: 16px;
