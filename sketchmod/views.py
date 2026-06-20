@@ -204,3 +204,36 @@ def highlight_path_api(request):
         return JsonResponse({"success": True, **result})
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+def template_view(request, template_name):
+    """Load a template and redirect to canvas with session storage set."""
+    import json, os
+    from django.conf import settings
+    from django.shortcuts import redirect
+
+    template_path = os.path.join(
+        settings.BASE_DIR,
+        "sketchmod",
+        "static",
+        "sketchmod",
+        "templates",
+        f"{template_name}.json",
+    )
+
+    if os.path.exists(template_path):
+        with open(template_path) as f:
+            graph = json.load(f)
+        request.session["template_graph"] = graph
+    else:
+        request.session["template_error"] = f"Template '{template_name}' not found."
+
+    return redirect("sketchmod:canvas")
+
+
+@login_required
+def consume_template_api(request):
+    """Return and clear the template stored in session."""
+    graph = request.session.pop("template_graph", None)
+    error = request.session.pop("template_error", None)
+    return JsonResponse({"graph": graph, "error": error})
