@@ -39,6 +39,7 @@ class GraphValidator:
         self._check_multiple_optimizers(warnings)
         self._check_eval_entry_point(warnings)
         self._check_optimizer_label_shape(warnings)
+        self._check_early_stopping_no_validation(warnings)
 
         return {
             "errors": errors,
@@ -579,3 +580,18 @@ class GraphValidator:
                         "nodeId": node.id,
                     }
                 )
+
+    def _check_early_stopping_no_validation(self, warnings):
+        opt = self.flow.get("optimizer")
+        if not opt:
+            return
+        if (
+            opt.properties.get("earlyStopping")
+            and opt.properties.get("validationMode", "none") == "none"
+        ):
+            warnings.append(
+                {
+                    "message": "Early stopping is enabled but validation mode is 'none' – early stopping will have no effect.",
+                    "nodeId": opt.id,
+                }
+            )
