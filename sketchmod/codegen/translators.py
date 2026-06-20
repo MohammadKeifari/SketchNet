@@ -371,7 +371,6 @@ class NeuronTranslator(BaseTranslator):
         for port in self.node.inputs:
             for link in self.graph.links:
                 if link.id_to == port.id:
-                    # First try the source port's shape (most reliable)
                     src_port = self.graph.ports[link.id_from]
                     if (
                         src_port.shape
@@ -385,7 +384,6 @@ class NeuronTranslator(BaseTranslator):
                                 return val
                         except (ValueError, TypeError):
                             pass
-                    # Fallback: link weight_shape
                     if link.weight_shape:
                         shape = link.weight_shape.get("shape", [])
                         if len(shape) >= 2:
@@ -404,6 +402,7 @@ class NeuronTranslator(BaseTranslator):
             in_f = self._guess_in_features()
             w.line(f"self.fc_{sid} = nn.Linear({in_f}, 1)")
         elif placement == "forward":
+            # ---- collect distinct source node ids for all connected inputs ----
             src_ids = []
             for port in n.inputs:
                 for link in self.graph.links:
@@ -413,40 +412,41 @@ class NeuronTranslator(BaseTranslator):
                             src_ids.append(src)
 
             if is_first:
-                # First node – read from inputs_dict (may have multiple sources)
-                if not src_ids:
-                    expr = "None"
-                else:
-                    expr = f"inputs_dict.get('{src_ids[0]}'"
-                    for src in src_ids[1:]:
-                        expr += f", inputs_dict.get('{src}')"
-                    expr += ")"
-                w.line(f"x = {expr}")
-            else:
-                # Not first node
-                if not src_ids:
+                # first node – gather from inputs_dict
+                if len(src_ids) == 0:
                     w.line("x = None")
                 elif len(src_ids) == 1:
-                    # Single source – simple read from outputs
-                    src = src_ids[0]
-                    w.line(f"x = outputs.get('{src}', inputs_dict.get('{src}'))")
+                    w.line(
+                        f"x = inputs_dict.get('{src_ids[0]}', inputs_dict.get('{src_ids[0]}'))"
+                    )
                 else:
-                    # Multiple sources – try each in outputs first, then fallback
-                    w.line("x = None")
+                    w.line("tensors = []")
                     for src in src_ids:
-                        w.line(f"if x is None and '{src}' in outputs:")
-                        w.indent()
-                        w.line(f"x = outputs['{src}']")
-                        w.dedent()
-                    w.line("if x is None:")
-                    w.indent()
-                    fallback = f"inputs_dict.get('{src_ids[0]}'"
-                    for src in src_ids[1:]:
-                        fallback += f", inputs_dict.get('{src}')"
-                    fallback += ")"
-                    w.line(f"x = {fallback}")
-                    w.dedent()
+                        w.line(
+                            f"tmp = inputs_dict.get('{src}', inputs_dict.get('{src}'))"
+                        )
+                        w.line("if tmp is not None: tensors.append(tmp)")
+                    w.line(
+                        "x = torch.cat(tensors, dim=1) if len(tensors) > 1 else tensors[0]"
+                    )
+            else:
+                # not first – try outputs first, then fallback to inputs_dict
+                if len(src_ids) == 0:
+                    w.line("x = None")
+                elif len(src_ids) == 1:
+                    w.line(
+                        f"x = outputs.get('{src_ids[0]}', inputs_dict.get('{src_ids[0]}'))"
+                    )
+                else:
+                    w.line("tensors = []")
+                    for src in src_ids:
+                        w.line(f"tmp = outputs.get('{src}', inputs_dict.get('{src}'))")
+                        w.line("if tmp is not None: tensors.append(tmp)")
+                    w.line(
+                        "x = torch.cat(tensors, dim=1) if len(tensors) > 1 else tensors[0]"
+                    )
 
+            # ---- apply the linear layer and activation ----
             w.line(f"x = self.fc_{sid}(x)")
             act = n.properties.get("activation", "relu")
             if act != "linear":
