@@ -100,24 +100,44 @@ const SketchMod = {
         const loadModelId = urlParams.get("load");
 
         const hasSession = sessionStorage.getItem("sketchmod-graph");
-        if (loadModelId) {
-            // Check if session has THIS model
-            if (hasSession) {
-                const sessionData = JSON.parse(hasSession);
-                if (sessionData.modelId === loadModelId) {
-                    // Session has the latest — use it
-                    this._loadFromSession();
+
+        // Helper that runs the correct graph loader
+        const loadGraph = () => {
+            if (loadModelId) {
+                if (hasSession) {
+                    const sessionData = JSON.parse(hasSession);
+                    if (sessionData.modelId === loadModelId) {
+                        this._loadFromSession();
+                    } else {
+                        this._loadModelFromServer(loadModelId);
+                    }
                 } else {
-                    // Different model — load from server
                     this._loadModelFromServer(loadModelId);
                 }
             } else {
-                // No session — load from server
-                this._loadModelFromServer(loadModelId);
+                this._loadFromSession();
             }
-        } else {
-            this._loadFromSession();
-        }
+        };
+
+        // Try template first, fall back to normal load
+        fetch("/sketchmod/api/consume-template/")
+            .then((r) => r.json())
+            .then((data) => {
+                if (data.graph) {
+                    this._importGraphFromJSON(data.graph);
+                    this._showToast(
+                        "Template loaded! Attach your dataset in the Input Data node.",
+                    );
+                    this._saveToSession();
+                    this._propagateShapes();
+                } else {
+                    if (data.error) this._showToast(data.error);
+                    loadGraph();
+                }
+            })
+            .catch(() => {
+                loadGraph();
+            });
         // Apply sidebar collapse preferences
         const container = document.querySelector(".sketchmod-container");
         const collapseLeft = container?.dataset.collapseLeft === "true";
