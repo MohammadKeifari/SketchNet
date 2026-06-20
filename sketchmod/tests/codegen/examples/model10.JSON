@@ -3,14 +3,23 @@
         {
             "id": "inp",
             "type": "input-data",
-            "x": 50,
-            "y": 200,
+            "x": 80,
+            "y": 701.5448977623456,
             "inputPorts": [],
             "outputPorts": [
                 {
                     "id": "inp_out",
                     "type": "output",
                     "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "6"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": [
                         "preprocessing",
                         "training",
@@ -20,18 +29,35 @@
             ],
             "numInputs": 0,
             "numOutputs": 1,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "datasetId": null,
+            "datasetName": null,
             "dataShape": "(200, 6)"
         },
         {
             "id": "c_feat",
             "type": "column-select",
-            "x": 180,
-            "y": 140,
+            "x": 220,
+            "y": 609.223990483539,
             "inputPorts": [
                 {
                     "id": "c_feat_in",
                     "type": "input",
                     "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "6"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": ["preprocessing"]
                 }
             ],
@@ -40,23 +66,51 @@
                     "id": "c_feat_out",
                     "type": "output",
                     "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": ["preprocessing", "training"]
                 }
             ],
             "numInputs": 1,
             "numOutputs": 1,
-            "selectedColumns": [0, 1, 2]
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "selectedColumns": [0, 1, 2],
+            "columnInput": "",
+            "availableColumns": [],
+            "columnCount": 0,
+            "datasetId": null
         },
         {
             "id": "c_feat_eval",
             "type": "column-select",
-            "x": 180,
-            "y": 220,
+            "x": 220.9484375,
+            "y": 725.3271154835389,
             "inputPorts": [
                 {
                     "id": "c_feat_eval_in",
                     "type": "input",
                     "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "6"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": ["preprocessing"]
                 }
             ],
@@ -65,23 +119,51 @@
                     "id": "c_feat_eval_out",
                     "type": "output",
                     "index": 0,
-                    "activationPhases": ["evaluation"]
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
+                    "activationPhases": ["evaluation", "preprocessing"]
                 }
             ],
             "numInputs": 1,
             "numOutputs": 1,
-            "selectedColumns": [0, 1, 2]
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "selectedColumns": [0, 1, 2],
+            "columnInput": "",
+            "availableColumns": [],
+            "columnCount": 0,
+            "datasetId": null
         },
         {
             "id": "c_label",
             "type": "column-select",
-            "x": 180,
-            "y": 300,
+            "x": 220,
+            "y": 845.223990483539,
             "inputPorts": [
                 {
                     "id": "c_label_in",
                     "type": "input",
                     "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "6"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": ["preprocessing"]
                 }
             ],
@@ -90,23 +172,50 @@
                     "id": "c_label_out",
                     "type": "output",
                     "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": ["preprocessing", "training"]
                 }
             ],
             "numInputs": 1,
             "numOutputs": 1,
-            "selectedColumns": [3, 4, 5]
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
+            "selectedColumns": [3, 4, 5],
+            "columnInput": "",
+            "availableColumns": [],
+            "columnCount": 0,
+            "datasetId": null
         },
         {
             "id": "layer1",
             "type": "layer",
-            "x": 320,
-            "y": 140,
+            "x": 360,
+            "y": 584.2045958719135,
             "inputPorts": [
                 {
                     "id": "layer1_in",
                     "type": "input",
                     "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
                     "portKind": "multi",
                     "activationPhases": ["training"]
                 }
@@ -116,24 +225,47 @@
                     "id": "layer1_out",
                     "type": "output",
                     "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "8"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": ["training"]
                 }
             ],
             "numInputs": 1,
             "numOutputs": 1,
             "activation": "relu",
-            "numNeurons": 8
+            "numNeurons": 8,
+            "bias": 0,
+            "hasBias": true,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0
         },
         {
             "id": "layer2",
             "type": "layer",
-            "x": 470,
-            "y": 140,
+            "x": 500,
+            "y": 621.5758048268175,
             "inputPorts": [
                 {
                     "id": "layer2_in",
                     "type": "input",
                     "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
                     "portKind": "multi",
                     "activationPhases": ["training", "evaluation"]
                 }
@@ -143,25 +275,48 @@
                     "id": "layer2_out",
                     "type": "output",
                     "index": 0,
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": ["training", "evaluation"]
                 }
             ],
             "numInputs": 1,
             "numOutputs": 1,
             "activation": "relu",
-            "numNeurons": 3
+            "numNeurons": 3,
+            "bias": 0,
+            "hasBias": true,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0
         },
         {
             "id": "out",
             "type": "output",
-            "x": 620,
-            "y": 140,
+            "x": 920,
+            "y": 621.5758048268175,
             "inputPorts": [
                 {
                     "id": "out_in_train",
                     "type": "input",
                     "index": 0,
                     "subType": "train",
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": ["training"]
                 },
                 {
@@ -169,6 +324,14 @@
                     "type": "input",
                     "index": 1,
                     "subType": "test",
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": ["evaluation"]
                 }
             ],
@@ -177,24 +340,59 @@
                     "id": "loss_p",
                     "type": "output",
                     "index": 0,
-                    "role": "loss",
-                    "activationPhases": ["training"]
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "role",
+                    "activationPhases": ["training"],
+                    "role": "loss"
                 },
                 {
                     "id": "pred_p",
                     "type": "output",
                     "index": 1,
-                    "role": "prediction",
-                    "activationPhases": ["evaluation"]
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "role",
+                    "activationPhases": ["evaluation"],
+                    "role": "prediction"
                 },
                 {
                     "id": "eval_p",
                     "type": "output",
                     "index": 2,
-                    "role": "evaluation",
-                    "activationPhases": ["evaluation"]
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "role",
+                    "activationPhases": ["evaluation"],
+                    "role": "evaluation"
                 }
             ],
+            "numInputs": 2,
+            "numOutputs": 3,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
             "outputActivations": {
                 "loss": "none",
                 "prediction": "none",
@@ -204,75 +402,424 @@
         {
             "id": "opt",
             "type": "optimizer",
-            "x": 770,
-            "y": 140,
+            "x": 1074,
+            "y": 621.5758048268175,
             "inputPorts": [
                 {
                     "id": "opt_loss",
                     "type": "input",
                     "index": 0,
-                    "role": "loss",
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": ["training"]
                 },
                 {
                     "id": "opt_labels",
                     "type": "input",
                     "index": 1,
-                    "role": "labels",
+                    "subType": null,
+                    "shape": {
+                        "shape": ["200", "3"],
+                        "dtype": "float32",
+                        "known": true,
+                        "symbolic": false
+                    },
+                    "bias": 0,
+                    "portKind": "data",
                     "activationPhases": ["training"]
                 }
             ],
             "outputPorts": [],
             "numInputs": 2,
             "numOutputs": 0,
+            "bias": 0,
+            "hasBias": false,
+            "paramInputs": [],
+            "paramOutputs": [],
+            "numParamInputs": 0,
+            "numParamOutputs": 0,
             "lossType": "mse",
             "optimizerType": "adam",
             "learningRate": 0.001,
+            "adamBeta1": 0.9,
+            "adamBeta2": 0.999,
+            "adamEpsilon": 1e-8,
+            "sgdMomentum": 0.9,
+            "weightDecay": 0,
+            "nesterov": false,
             "epochs": 5,
             "batchSize": 16,
-            "shuffle": true
+            "shuffle": true,
+            "gradientClip": null,
+            "earlyStopping": false,
+            "earlyStoppingPatience": 10,
+            "validationMode": "none",
+            "validationSplit": 0.2,
+            "validationMetric": "loss"
         }
     ],
     "links": [
-        { "from": "inp_out", "to": "c_feat_in" },
-        { "from": "inp_out", "to": "c_feat_eval_in" },
-        { "from": "inp_out", "to": "c_label_in" },
-        { "from": "c_feat_out", "to": "layer1_in" },
-        { "from": "layer1_out", "to": "layer2_in" },
-        { "from": "c_feat_eval_out", "to": "layer2_in" },
-        { "from": "layer2_out", "to": "out_in_train" },
-        { "from": "layer2_out", "to": "out_in_test" },
-        { "from": "loss_p", "to": "opt_loss" },
-        { "from": "c_label_out", "to": "opt_labels" }
+        {
+            "from": "inp_out",
+            "to": "c_feat_in",
+            "weight": 1,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "inp_out",
+            "to": "c_feat_eval_in",
+            "weight": 1,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "inp_out",
+            "to": "c_label_in",
+            "weight": 1,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "c_feat_out",
+            "to": "layer1_in",
+            "weight": 1,
+            "weightShape": {
+                "shape": [8, "3"],
+                "dtype": "float32"
+            },
+            "hasWeight": true
+        },
+        {
+            "from": "layer1_out",
+            "to": "layer2_in",
+            "weight": 1,
+            "weightShape": {
+                "shape": [3, "8"],
+                "dtype": "float32"
+            },
+            "hasWeight": true
+        },
+        {
+            "from": "c_feat_eval_out",
+            "to": "layer2_in",
+            "weight": 1,
+            "weightShape": {
+                "shape": [3, "3"],
+                "dtype": "float32"
+            },
+            "hasWeight": true
+        },
+        {
+            "from": "layer2_out",
+            "to": "out_in_train",
+            "weight": 1,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "layer2_out",
+            "to": "out_in_test",
+            "weight": 1,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "loss_p",
+            "to": "opt_loss",
+            "weight": 1,
+            "weightShape": null,
+            "hasWeight": false
+        },
+        {
+            "from": "c_label_out",
+            "to": "opt_labels",
+            "weight": 1,
+            "weightShape": null,
+            "hasWeight": false
+        }
     ],
     "ports": [
         {
             "id": "inp_out",
+            "type": "output",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "6"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
             "activationPhases": ["preprocessing", "training", "evaluation"]
         },
-        { "id": "c_feat_in", "activationPhases": ["preprocessing"] },
+        {
+            "id": "c_feat_in",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "6"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["preprocessing"]
+        },
         {
             "id": "c_feat_out",
+            "type": "output",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
             "activationPhases": ["preprocessing", "training"]
         },
-        { "id": "c_feat_eval_in", "activationPhases": ["preprocessing"] },
-        { "id": "c_feat_eval_out", "activationPhases": ["evaluation"] },
-        { "id": "c_label_in", "activationPhases": ["preprocessing"] },
+        {
+            "id": "c_feat_eval_in",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "6"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["preprocessing"]
+        },
+        {
+            "id": "c_feat_eval_out",
+            "type": "output",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["evaluation", "preprocessing"]
+        },
+        {
+            "id": "c_label_in",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "6"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["preprocessing"]
+        },
         {
             "id": "c_label_out",
+            "type": "output",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
             "activationPhases": ["preprocessing", "training"]
         },
-        { "id": "layer1_in", "activationPhases": ["training"] },
-        { "id": "layer1_out", "activationPhases": ["training"] },
-        { "id": "layer2_in", "activationPhases": ["training", "evaluation"] },
-        { "id": "layer2_out", "activationPhases": ["training", "evaluation"] },
-        { "id": "out_in_train", "activationPhases": ["training"] },
-        { "id": "out_in_test", "activationPhases": ["evaluation"] },
-        { "id": "loss_p", "activationPhases": ["training"] },
-        { "id": "pred_p", "activationPhases": ["evaluation"] },
-        { "id": "eval_p", "activationPhases": ["evaluation"] },
-        { "id": "opt_loss", "activationPhases": ["training"] },
-        { "id": "opt_labels", "activationPhases": ["training"] }
+        {
+            "id": "layer1_in",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "multi",
+            "activationPhases": ["training"]
+        },
+        {
+            "id": "layer1_out",
+            "type": "output",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "8"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["training"]
+        },
+        {
+            "id": "layer2_in",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "multi",
+            "activationPhases": ["training", "evaluation"]
+        },
+        {
+            "id": "layer2_out",
+            "type": "output",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["training", "evaluation"]
+        },
+        {
+            "id": "out_in_train",
+            "type": "input",
+            "index": 0,
+            "subType": "train",
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["training"]
+        },
+        {
+            "id": "out_in_test",
+            "type": "input",
+            "index": 1,
+            "subType": "test",
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["evaluation"]
+        },
+        {
+            "id": "loss_p",
+            "type": "output",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "role",
+            "activationPhases": ["training"],
+            "role": "loss"
+        },
+        {
+            "id": "pred_p",
+            "type": "output",
+            "index": 1,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "role",
+            "activationPhases": ["evaluation"],
+            "role": "prediction"
+        },
+        {
+            "id": "eval_p",
+            "type": "output",
+            "index": 2,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "role",
+            "activationPhases": ["evaluation"],
+            "role": "evaluation"
+        },
+        {
+            "id": "opt_loss",
+            "type": "input",
+            "index": 0,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["training"]
+        },
+        {
+            "id": "opt_labels",
+            "type": "input",
+            "index": 1,
+            "subType": null,
+            "shape": {
+                "shape": ["200", "3"],
+                "dtype": "float32",
+                "known": true,
+                "symbolic": false
+            },
+            "bias": 0,
+            "portKind": "data",
+            "activationPhases": ["training"]
+        }
     ],
     "nodeCounter": 0
 }
