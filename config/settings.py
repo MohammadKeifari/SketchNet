@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "data_manager",
     "sketchmod",
     "models_library",
+    "bug_reports",
 ]
 
 MIDDLEWARE = [
