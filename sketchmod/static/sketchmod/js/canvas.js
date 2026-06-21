@@ -257,55 +257,6 @@ const SketchMod = {
                     ?.classList.remove("open");
             }
         });
-        // Close any open floating panel when clicking outside its icon or panel
-        document.addEventListener("click", (e) => {
-            const infoPanel = document.getElementById("sidebarInfoPanel");
-            const infoIcon = document.getElementById("sidebarModelInfoIcon");
-            const propPanel = document.getElementById("sidebarPropertiesPanel");
-            const propIcon = document.getElementById("sidebarPropertiesIcon");
-
-            if (infoPanel && infoPanel.style.display === "block") {
-                if (!infoPanel.contains(e.target) && e.target !== infoIcon) {
-                    infoPanel.style.display = "none";
-                }
-            }
-            if (propIcon && propPanel) {
-                propIcon.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    const isOpen = propPanel.style.display === "block";
-
-                    // Close info panel if it's open
-                    const infoPanel =
-                        document.getElementById("sidebarInfoPanel");
-                    if (infoPanel) infoPanel.style.display = "none";
-
-                    // Toggle the floating panel
-                    propPanel.style.display = isOpen ? "none" : "block";
-
-                    // If we just opened it, populate its content from the current selection
-                    if (!isOpen) {
-                        if (this.selectedNodes.length === 1) {
-                            this._showProperties(this.selectedNodes[0]);
-                        } else if (this.selectedLinks.length === 1) {
-                            this._showLinkProperties();
-                        } else if (this.selectedPorts.length === 1) {
-                            this._showPortProperties();
-                        }
-                    }
-                });
-
-                // Close panel when clicking outside (already exists, no change needed)
-                document.addEventListener("click", (e) => {
-                    if (
-                        propPanel.style.display === "block" &&
-                        !propPanel.contains(e.target) &&
-                        e.target !== propIcon
-                    ) {
-                        propPanel.style.display = "none";
-                    }
-                });
-            }
-        });
         // Dataset search input
         document.addEventListener("input", (e) => {
             if (e.target.classList.contains("dataset-search")) {
@@ -607,32 +558,74 @@ const SketchMod = {
         document.addEventListener("click", () => {
             this._hidePortContextMenu();
         });
-        // Info icon toggle – closes properties panel if open
+        // Info panel toggle (model name/ID)
         const infoIcon = document.getElementById("sidebarModelInfoIcon");
         const infoPanel = document.getElementById("sidebarInfoPanel");
         if (infoIcon && infoPanel) {
             infoIcon.addEventListener("click", (e) => {
                 e.stopPropagation();
                 const isOpen = infoPanel.style.display === "block";
-                // Close properties panel if it's open
-                const propPanel = document.getElementById(
-                    "sidebarPropertiesPanel",
-                );
-                if (propPanel) propPanel.style.display = "none";
                 infoPanel.style.display = isOpen ? "none" : "block";
+                if (!isOpen) {
+                    void infoPanel.offsetWidth;
+                    const sidebar = document.querySelector(".sidebar-right");
+                    const rect = sidebar.getBoundingClientRect();
+                    infoPanel.style.top = rect.top + 8 + "px";
+                    infoPanel.style.right =
+                        window.innerWidth - rect.left + 8 + "px";
+                }
+            });
+            document.addEventListener("click", (e) => {
+                if (infoPanel.style.display === "block") {
+                    if (
+                        !infoPanel.contains(e.target) &&
+                        e.target !== infoIcon
+                    ) {
+                        infoPanel.style.display = "none";
+                    }
+                }
             });
         }
 
-        // Properties icon toggle – closes info panel if open
+        // Properties panel toggle (gear icon)
         const propIcon = document.getElementById("sidebarPropertiesIcon");
         const propPanel = document.getElementById("sidebarPropertiesPanel");
         if (propIcon && propPanel) {
             propIcon.addEventListener("click", (e) => {
                 e.stopPropagation();
                 const isOpen = propPanel.style.display === "block";
-                // Close info panel if it's open
+
+                const infoPanel = document.getElementById("sidebarInfoPanel");
                 if (infoPanel) infoPanel.style.display = "none";
+
                 propPanel.style.display = isOpen ? "none" : "block";
+
+                if (!isOpen) {
+                    void propPanel.offsetWidth;
+                    const sidebar = document.querySelector(".sidebar-right");
+                    const rect = sidebar.getBoundingClientRect();
+                    propPanel.style.top = rect.top + 8 + "px";
+                    propPanel.style.right =
+                        window.innerWidth - rect.left + 8 + "px";
+
+                    if (this.selectedNodes.length === 1) {
+                        this._showProperties(this.selectedNodes[0]);
+                    } else if (this.selectedLinks.length === 1) {
+                        this._showLinkProperties();
+                    } else if (this.selectedPorts.length === 1) {
+                        this._showPortProperties();
+                    }
+                }
+            });
+
+            document.addEventListener("click", (e) => {
+                if (
+                    propPanel.style.display === "block" &&
+                    !propPanel.contains(e.target) &&
+                    e.target !== propIcon
+                ) {
+                    propPanel.style.display = "none";
+                }
             });
         }
         this._loadFromSession();
