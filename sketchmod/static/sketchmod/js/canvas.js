@@ -101,43 +101,52 @@ const SketchMod = {
 
         const hasSession = sessionStorage.getItem("sketchmod-graph");
 
-        // Helper that runs the correct graph loader
-        const loadGraph = () => {
-            if (loadModelId) {
-                if (hasSession) {
-                    const sessionData = JSON.parse(hasSession);
-                    if (sessionData.modelId === loadModelId) {
-                        this._loadFromSession();
+        // ----- Admin bug report graph (loaded via Django template) -----
+        if (window.SKETCHNET_TEMPLATE) {
+            this._importGraphFromJSON(window.SKETCHNET_TEMPLATE);
+            this._showToast("Bug report graph loaded.");
+            this._saveToSession();
+            this._propagateShapes();
+            // Skip the rest of graph loading — go straight to UI setup
+        } else {
+            // Helper that runs the correct graph loader
+            const loadGraph = () => {
+                if (loadModelId) {
+                    if (hasSession) {
+                        const sessionData = JSON.parse(hasSession);
+                        if (sessionData.modelId === loadModelId) {
+                            this._loadFromSession();
+                        } else {
+                            this._loadModelFromServer(loadModelId);
+                        }
                     } else {
                         this._loadModelFromServer(loadModelId);
                     }
                 } else {
-                    this._loadModelFromServer(loadModelId);
+                    this._loadFromSession();
                 }
-            } else {
-                this._loadFromSession();
-            }
-        };
+            };
 
-        // Try template first, fall back to normal load
-        fetch("/sketchmod/api/consume-template/")
-            .then((r) => r.json())
-            .then((data) => {
-                if (data.graph) {
-                    this._importGraphFromJSON(data.graph);
-                    this._showToast(
-                        "Template loaded! Attach your dataset in the Input Data node.",
-                    );
-                    this._saveToSession();
-                    this._propagateShapes();
-                } else {
-                    if (data.error) this._showToast(data.error);
+            // Try template first, fall back to normal load
+            fetch("/sketchmod/api/consume-template/")
+                .then((r) => r.json())
+                .then((data) => {
+                    if (data.graph) {
+                        this._importGraphFromJSON(data.graph);
+                        this._showToast(
+                            "Template loaded! Attach your dataset in the Input Data node.",
+                        );
+                        this._saveToSession();
+                        this._propagateShapes();
+                    } else {
+                        if (data.error) this._showToast(data.error);
+                        loadGraph();
+                    }
+                })
+                .catch(() => {
                     loadGraph();
-                }
-            })
-            .catch(() => {
-                loadGraph();
-            });
+                });
+        }
         // Apply sidebar collapse preferences
         const container = document.querySelector(".sketchmod-container");
         const collapseLeft = container?.dataset.collapseLeft === "true";
@@ -459,6 +468,11 @@ const SketchMod = {
                 this._updateSaveToggleTexts();
             }
         });
+
+        //Bug report
+        document
+            .getElementById("btnReportBug")
+            ?.addEventListener("click", () => this._openReportModal());
         // Toolbar
         this._buildToolbar();
 
@@ -2863,6 +2877,16 @@ const SketchMod = {
     closeSaveModal() {
         document.getElementById("saveModal").style.display = "none";
     },
+
+    // Report Bug Modal
+    _openReportModal() {
+        document.getElementById("reportModal").style.display = "flex";
+    },
+
+    _closeReportModal() {
+        document.getElementById("reportModal").style.display = "none";
+    },
+
     _handleQuickSave() {
         const graphData = JSON.stringify(SketchMod._getGraphData());
 
@@ -4211,6 +4235,62 @@ const SketchMod = {
             return document.getElementById("sidebarPropertiesContent");
         }
         return document.getElementById("propertiesContent");
+    },
+
+    _submitReport() {
+        const type = document.getElementById("reportType").value;
+        const title = document.getElementById("reportTitle").value.trim();
+        const description = document
+            .getElementById("reportDescription")
+            .value.trim();
+        const expected = document.getElementById("reportExpected").value.trim();
+        const error = document.getElementById("reportError").value.trim();
+
+        if (!title || !description) {
+            this._showToast(
+                "Please fill in at least the title and description.",
+            );
+            return;
+        }
+
+        const payload = {
+            issue_type: type,
+            title: title,
+            description: description,
+            expected_behavior: expected,
+            error_message: error,
+            graph_json: this._getGraphData(),
+        };
+
+        fetch("/bug-reports/api/submit/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": this._getCsrfToken(),
+            },
+            body: JSON.stringify(payload),
+        })
+            .then((r) => r.json())
+            .then((data) => {
+                if (data.success) {
+                    this._showToast(
+                        "Thank you! Your report has been submitted.",
+                    );
+                    this._closeReportModal();
+                    document.getElementById("reportTitle").value = "";
+                    document.getElementById("reportDescription").value = "";
+                    document.getElementById("reportExpected").value = "";
+                    document.getElementById("reportError").value = "";
+                } else {
+                    this._showToast(
+                        "Failed to submit report: " +
+                            (data.error || "Unknown error"),
+                    );
+                }
+            })
+            .catch(() => {
+                this._showToast("Network error. Please try again.");
+            });
     },
 };
 // ========== PORT BASE CLASS ==========
