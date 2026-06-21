@@ -59,15 +59,17 @@ a:hover {
     color: var(--admin-accent-hover) !important;
 }
 
-/* Buttons */
+/* Buttons — force white text */
 .button,
 input[type="submit"],
 input[type="button"],
-.submit-row input {
+.submit-row input,
+.button:link,
+.button:visited {
     background: var(--admin-accent) !important;
     border: none !important;
     border-radius: 6px !important;
-    color: #fff !important;
+    color: #ffffff !important;
 }
 
 .button:hover,
@@ -75,16 +77,35 @@ input[type="submit"]:hover,
 input[type="button"]:hover,
 .submit-row input:hover {
     background: var(--admin-accent-hover) !important;
+    color: #ffffff !important;
 }
 
 .button.default,
 input[type="submit"].default {
     background: #27ae60 !important;
+    color: #ffffff !important;
 }
 
 .button.default:hover,
 input[type="submit"].default:hover {
     background: #219a52 !important;
+    color: #ffffff !important;
+}
+
+/* Danger buttons (delete) */
+.deletelink,
+a.deletelink:link,
+a.deletelink:visited {
+    color: #ffffff !important;
+    background: #e74c3c !important;
+    border-radius: 6px !important;
+    padding: 6px 14px !important;
+    text-decoration: none !important;
+}
+
+.deletelink:hover {
+    background: #c0392b !important;
+    color: #ffffff !important;
 }
 
 /* Form focus */
@@ -108,4 +129,18 @@ tr:hover td {
 /* Dashboard */
 .dashboard #content {
     max-width: 1400px;
+}
+
+/* Object tools (History, View on site) */
+.object-tools a:link,
+.object-tools a:visited {
+    color: #ffffff !important;
+    background: var(--admin-accent) !important;
+    border-radius: 6px !important;
+    padding: 6px 14px !important;
+}
+
+.object-tools a:hover {
+    background: var(--admin-accent-hover) !important;
+    color: #ffffff !important;
 }
