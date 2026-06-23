@@ -2860,7 +2860,7 @@ const SketchMod = {
         const forkCb = document.getElementById("saveForkAccessCheckbox");
         if (viewCb) viewCb.checked = false;
         if (forkCb) forkCb.checked = true;
-        updateSaveToggleTexts();
+        this._updateSaveToggleTexts();
 
         setTimeout(() => {
             document.getElementById("saveName")?.focus();
