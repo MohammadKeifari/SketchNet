@@ -667,7 +667,7 @@
                                   placeholder="What does this model do?"></textarea>
                     </div>
                     <div class="form-group">
-                        <label>Cover Image (optional)</label>
+                        <label for="saveCoverInput">Cover Image (optional)</label>
                         <div class="cover-upload-wrapper">
                             <label class="cover-upload-label" for="saveCoverInput">
                                 <svg width="20"
@@ -692,7 +692,7 @@
                     </div>
                     <!-- View Access Toggle -->
                     <div class="form-group">
-                        <label>View Access</label>
+                        <label for="saveViewAccessCheckbox">View Access</label>
                         <div class="toggle-wrapper">
                             <label class="toggle-label">
                                 <input type="checkbox"
@@ -706,7 +706,7 @@
                     </div>
                     <!-- Fork Access Toggle -->
                     <div class="form-group">
-                        <label>Fork Access</label>
+                        <label for="saveForkAccessCheckbox">Fork Access</label>
                         <div class="toggle-wrapper">
                             <label class="toggle-label">
                                 <input type="checkbox"
@@ -746,7 +746,7 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>Paste JSON</label>
+                    <label for="importJsonText">Paste JSON</label>
                     <textarea id="importJsonText"
                               class="form-input"
                               rows="8"
@@ -757,7 +757,7 @@
                             color: var(--text-secondary);
                             font-size: 0.85rem">— or —</div>
                 <div class="form-group">
-                    <label>Upload JSON File</label>
+                    <label for="importJsonFile">Upload JSON File</label>
                     <div class="cover-upload-wrapper">
                         <label class="cover-upload-label" for="importJsonFile">
                             <svg width="20"
@@ -803,7 +803,7 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>Issue Type</label>
+                    <label for="reportType">Issue Type</label>
                     <select id="reportType" class="form-input">
                         <option value="code_error">Code Error (crash / traceback)</option>
                         <option value="unexpected_behavior">Unexpected Behavior</option>
@@ -812,28 +812,28 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Title</label>
+                    <label for="reportTitle">Title</label>
                     <input type="text"
                            id="reportTitle"
                            class="form-input"
                            placeholder="Short summary of the issue">
                 </div>
                 <div class="form-group">
-                    <label>What happened?</label>
+                    <label for="reportDescription">What happened?</label>
                     <textarea id="reportDescription"
                               class="form-input"
                               rows="4"
                               placeholder="Describe the issue…"></textarea>
                 </div>
                 <div class="form-group">
-                    <label>What did you expect to happen?</label>
+                    <label for="reportExpected">What did you expect to happen?</label>
                     <textarea id="reportExpected"
                               class="form-input"
                               rows="3"
                               placeholder="Describe the expected behavior…"></textarea>
                 </div>
                 <div class="form-group">
-                    <label>Error Message (if any)</label>
+                    <label for="reportError">Error Message (if any)</label>
                     <textarea id="reportError"
                               class="form-input"
                               rows="3"
