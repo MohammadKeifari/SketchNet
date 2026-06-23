@@ -411,7 +411,7 @@ const SketchMod = {
             .getElementById("btnImportSubmit")
             ?.addEventListener("click", () => this._handleImportSubmit());
 
-        document.addEventListener("change", function (e) {
+        document.addEventListener("change", (e) => {
             if (
                 e.target.id === "saveViewAccessCheckbox" ||
                 e.target.id === "saveForkAccessCheckbox"
