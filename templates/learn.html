@@ -234,6 +234,38 @@
             box-shadow: 0 6px 25px var(--accent-glow);
         }
 
+        /* Fix vertical scrollbar on the learn page */
+        .learn-container {
+            overflow-y: visible;
+            min-height: 0;
+        }
+
+        /* If the main content area is causing the scroll, override it for this page */
+        main.main-content {
+            overflow-y: visible;
+            height: auto;
+            min-height: 100vh;
+        }
+
+        /* Ensure the panels don't have internal scrollbars */
+        .learn-panel {
+            overflow: visible;
+        }
+
+        /* Hide horizontal scrollbar on tabs */
+        .learn-tabs {
+            scrollbar-width: none;           /* Firefox */
+            -ms-overflow-style: none;        /* IE/Edge */
+        }
+        .learn-tabs::-webkit-scrollbar {
+            display: none;                   /* Chrome/Safari */
+        }
+
+        /* Prevent body scroll on this page */
+        html, body {
+            overflow-y: auto;
+            height: auto;
+        }
         @media (max-width: 600px) {
             .learn-header h1 { font-size: 1.8rem; }
             .learn-tab { padding: 12px 16px; font-size: 0.82rem; }
@@ -299,9 +331,31 @@
         <div class="learn-panel" id="panel-phases">
             <h2>The Phase System</h2>
             <p>
-                SketchNet splits your graph into three execution phases.
-                Each port carries checkboxes that tell the code generator when that port is active.
+                SketchNet does <strong>not</strong> assign nodes to phases — any node can participate in any phase.
+                Instead, <strong>ports</strong> carry phase checkboxes.  A node is active in a phase only when its
+                <strong>inner circuit</strong> is complete for that phase.
             </p>
+            <div class="learn-card">
+                <h3>How a node becomes active</h3>
+                <p>
+                    A node's inner circuit is <strong>active</strong> when:
+                </p>
+                <ul>
+                    <li>
+                        <strong>At least one</strong> data input port carries the phase, AND
+                    </li>
+                    <li>The corresponding output port also carries the phase</li>
+                </ul>
+                <p>
+                    For <strong>conjunctive nodes</strong> (Add, Optimizer, Visualization, Accuracy), <strong>all</strong>
+                    connected data inputs must carry the phase — not just one.
+                </p>
+                <p>
+                    <strong>Intersecting ports</strong> are output ports from the preprocessing set that also carry
+                    a training or evaluation phase.  They act as <em>seeds</em> that start the training/evaluation
+                    subgraph.  Without them, data cannot flow from preprocessing into training or evaluation.
+                </p>
+            </div>
             <div class="learn-card">
                 <h3>
                     <span class="phase-icon phase-icon-preprocessing"></span>
@@ -309,8 +363,9 @@
                     <span class="phase-badge phase-preprocessing">Preprocessing</span>
                 </h3>
                 <p>
-                    Data loading, normalisation, one‑hot encoding, and train/test splits happen here.
-                    Preprocessing runs once before training starts.
+                    Data loading, normalisation, one‑hot encoding, train/test splits, and row/column selection.
+                    Runs once before training.  Use the <em>Highlight Path → Preprocessing</em> button to see which
+                    nodes are active.
                 </p>
             </div>
             <div class="learn-card">
@@ -321,7 +376,7 @@
                 </h3>
                 <p>
                     Model layers, loss computation, and weight updates.
-                    The training loop runs for the number of epochs you specify in the Optimizer.
+                    Begins at preprocessing output ports that carry the <strong>training</strong> phase.
                 </p>
             </div>
             <div class="learn-card">
@@ -330,55 +385,212 @@
                     Evaluation
                     <span class="phase-badge phase-evaluation">Evaluation</span>
                 </h3>
+                <p>Runs the trained model on test data.  Visualizations, Accuracy, and DeOneHot belong here.</p>
+            </div>
+            <div class="learn-card">
+                <h3>⚠️ Evaluation must enter the model at the same point as training</h3>
                 <p>
-                    Runs the trained model on test data.
-                    Visualizations, accuracy nodes, and DeOneHot belong here.
+                    The trained model is reused during evaluation — so the <strong>first model node</strong> in the
+                    evaluation phase must be the <strong>same node</strong> as in the training phase.
+                    If evaluation enters the model at a different node, it will be skipped.
+                    Use a <strong>MultiPort</strong> and connect both the train and test data streams to the same input port.
                 </p>
             </div>
-            <p>
-                <strong>Pro tip:</strong> Use the <em>Highlight Path</em> button to colour‑code your graph by phase.
-            </p>
         </div>
         <!-- Node Reference -->
         <div class="learn-panel" id="panel-nodes">
             <h2>Node Reference</h2>
             <div class="learn-card">
-                <h3>Input Data</h3>
+                <h3>
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                    Input Data
+                </h3>
                 <p>
                     Loads a CSV, Excel, JSON, or Parquet file.
                     Attach a dataset from the properties panel or enter a shape manually.
+                    The output port carries the raw data tensor — typically 2‑D <code>(rows, columns)</code> for tabular data,
+                    but can also be 3‑D or higher for image data.
                 </p>
             </div>
             <div class="learn-card">
-                <h3>Layer / Neuron</h3>
+                <h3>
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1" />
+                        <rect x="14" y="3" width="7" height="7" rx="1" />
+                        <rect x="3" y="14" width="7" height="7" rx="1" />
+                        <rect x="14" y="14" width="7" height="7" rx="1" />
+                    </svg>
+                    Data Restructuring Nodes
+                </h3>
+                <p>These nodes reshape and filter your data before it enters the model.</p>
+                <ul>
+                    <li>
+                        <strong>Column Select</strong> — pick specific columns by index or range (e.g. <code>0, 2:5</code>).  Use it to separate features from labels.
+                    </li>
+                    <li>
+                        <strong>Row Select</strong> — keep only certain rows (first‑N, random sample, slice, or specific indices).
+                    </li>
+                    <li>
+                        <strong>Dim Select</strong> — slice along arbitrary dimensions.  Useful for selecting channels or spatial regions.
+                    </li>
+                    <li>
+                        <strong>Reshape</strong> — change the tensor shape.  Use <code>-1</code> for one inferred dimension, and keep symbolic names like <code>batch</code> if needed.
+                    </li>
+                    <li>
+                        <strong>Flatten</strong> — collapse all dimensions except the batch into one feature vector.
+                    </li>
+                    <li>
+                        <strong>Train / Test Split</strong> — randomly split data into training and evaluation sets.
+                    </li>
+                    <li>
+                        <strong>Normalize</strong> — standard (Z‑score) or min‑max scaling.  Param ports share statistics between train and test.
+                    </li>
+                    <li>
+                        <strong>OneHot Encode / DeOneHot</strong> — convert class indices to one‑hot vectors and back.  Param ports share the category list.
+                    </li>
+                    <li>
+                        <strong>Concatenate</strong> — join multiple tensors along a specified axis.
+                    </li>
+                </ul>
+            </div>
+            <div class="learn-card">
+                <h3>
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <rect x="2" y="4" width="20" height="4" rx="1" />
+                        <rect x="2" y="10" width="20" height="4" rx="1" />
+                        <rect x="2" y="16" width="20" height="4" rx="1" />
+                    </svg>
+                    Layer / Neuron
+                </h3>
                 <p>
                     A fully‑connected linear layer.
                     Set the number of neurons and activation function.
-                    Accepts multiple inputs (they are concatenated along the feature dimension).
+                    Accepts multiple inputs — they are concatenated along the feature dimension (dim=1).
+                    Batch sizes must match across all inputs.
                 </p>
             </div>
             <div class="learn-card">
-                <h3>Conv2D</h3>
-                <p>2‑D convolution. Specify filters, kernel size, stride, padding, and activation.</p>
-            </div>
-            <div class="learn-card">
-                <h3>Output</h3>
+                <h3>
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <rect x="6" y="6" width="12" height="12" rx="1" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    Conv2D
+                </h3>
                 <p>
-                    Defines the model's outputs.
-                    Three ports: <strong>loss</strong> (used during training), <strong>prediction</strong> and <strong>evaluation</strong> (used during evaluation).
+                    2‑D convolution. Specify filters, kernel size, stride, padding, and activation. Expects input shape <code>(N, C, H, W)</code>.
                 </p>
             </div>
             <div class="learn-card">
-                <h3>Optimizer</h3>
+                <h3>
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="16" />
+                        <line x1="8" y1="12" x2="16" y2="12" />
+                    </svg>
+                    Dropout / BatchNorm / Add
+                </h3>
                 <p>
-                    Configures loss function, optimizer type, learning rate, batch size, epochs, early stopping, and validation split.
+                    <strong>Dropout</strong> — randomly zeroes activations during training (rate configurable).
+                    <strong>BatchNorm</strong> — normalises activations across the batch.
+                    <strong>Add</strong> — element‑wise addition of two tensors (used for skip/residual connections).  Both inputs must have identical shapes.
                 </p>
             </div>
             <div class="learn-card">
-                <h3>Accuracy / Print / Visualization</h3>
+                <h3>
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <polyline points="16 18 22 12 16 6" />
+                        <polyline points="8 6 2 12 8 18" />
+                    </svg>
+                    Output
+                </h3>
                 <p>
-                    Analytics nodes that run during evaluation (Accuracy, Print) or any phase (Print in preprocessing).
-                    Visualizations support 1‑D, 2‑D, and 3‑D scatter plots with discrete or continuous colour mapping.
+                    Defines the model's outputs.  Three ports:
+                    <strong>loss</strong> (raw logits, used during training),
+                    <strong>prediction</strong> (e.g. softmax, used during evaluation),
+                    <strong>evaluation</strong> (e.g. argmax, used during evaluation).
+                    Configure activations per port in the properties panel.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M12 1v4" />
+                        <path d="M12 19v4" />
+                        <path d="M4.22 4.22l2.83 2.83" />
+                        <path d="M16.95 16.95l2.83 2.83" />
+                        <path d="M1 12h4" />
+                        <path d="M19 12h4" />
+                        <path d="M4.22 19.78l2.83-2.83" />
+                        <path d="M16.95 7.05l2.83-2.83" />
+                    </svg>
+                    Optimizer
+                </h3>
+                <p>
+                    Configures loss function, optimizer type (Adam, SGD, AdamW), learning rate, batch size, epochs,
+                    gradient clipping, early stopping, and validation split.
+                    Two inputs: <strong>loss</strong> (from Output) and <strong>labels</strong> (from your data pipeline).
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>
+                    <svg width="18"
+                         height="18"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                    Accuracy / Print / Visualization
+                </h3>
+                <p>
+                    <strong>Accuracy</strong> — computes classification accuracy and optionally a confusion matrix.
+                    <strong>Print</strong> — prints tensor shapes and values to the console (useful for debugging).
+                    <strong>Visualization</strong> — scatter plots (1‑D, 2‑D, 3‑D) with discrete or continuous colour mapping.
                 </p>
             </div>
         </div>
@@ -420,9 +632,27 @@
                 </p>
             </div>
             <div class="learn-card">
+                <h3>"Missing Output node"</h3>
+                <p>
+                    Add an <strong>Output</strong> node and connect your model's last layer to it.
+                </p>
+            </div>
+            <div class="learn-card">
                 <h3>"Optimizer node must be in the training phase"</h3>
                 <p>
                     Select the Optimizer's input ports and ensure <strong>Training</strong> is checked in the properties panel.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>"No optimizer node — training loop will not be generated"</h3>
+                <p>
+                    Add an <strong>Optimizer</strong> node and connect it to the Output's loss port and your label data.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>"Preprocessing does not reach training or evaluation"</h3>
+                <p>
+                    Make sure at least one output port from preprocessing (e.g. a Train/Test Split) has <strong>Training</strong> or <strong>Evaluation</strong> checked.  These are the <em>intersecting ports</em> that bridge phases.
                 </p>
             </div>
             <div class="learn-card">
@@ -432,18 +662,52 @@
                 </p>
             </div>
             <div class="learn-card">
-                <h3>Model doesn't converge</h3>
+                <h3>"Evaluation will be skipped because it cannot reuse the trained model"</h3>
                 <p>
-                    Try increasing the <strong>learning rate</strong> or <strong>epochs</strong>.
-                    For classification, make sure your labels are integers (0, 1, 2, …).
-                    For Conv2D models, ensure the input shape is <code>(batch, channels, height, width)</code>.
+                    Evaluation must enter the model at the <strong>same node</strong> as training.  Connect both train and test data to the same input port using a MultiPort.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>"Batch sizes must match when feeding into the same model node"</h3>
+                <p>
+                    When a Layer or Neuron has multiple inputs, all inputs must have the <strong>same batch size</strong> (first dimension).  Use Row Select or adjust your split ratios to match them.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>"Multiple training entry points detected"</h3>
+                <p>
+                    Your model has two nodes that receive training data but are not connected to each other.  Merge the data streams or remove one entry point.
                 </p>
             </div>
             <div class="learn-card">
                 <h3>"Data‑flow cycle detected"</h3>
                 <p>
-                    Your graph contains a loop — the output of a node eventually feeds back into itself.
-                    Remove one of the links in the cycle.
+                    Your graph contains a loop — the output of a node eventually feeds back into itself.  Remove one of the links in the cycle.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>"Param‑port cycle detected"</h3>
+                <p>
+                    Two Normalize (or OneHot) nodes are referencing each other's statistics, creating a circular dependency.  Break the cycle by removing one param‑port link.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>Model doesn't converge</h3>
+                <p>
+                    Try increasing the <strong>learning rate</strong> or <strong>epochs</strong>.
+                    For classification, make sure your labels are integers (0, 1, 2, …).
+                    For Conv2D models, ensure the input shape is <code>(batch, channels, height, width)</code>.
+                    If using ReLU activation, try switching to <strong>Linear</strong> first to check if activations are dying.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>Accuracy is 0.5 (binary) or 0.33 (3‑class) — random guessing</h3>
+                <p>
+                    Your model is not learning.  Check that:
+                    (1) the features actually contain information about the labels,
+                    (2) the label column is correctly selected,
+                    (3) the learning rate is not too low,
+                    (4) the labels are properly reshaped to 1‑D for CrossEntropyLoss.
                 </p>
             </div>
         </div>
