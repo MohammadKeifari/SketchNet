@@ -23,7 +23,6 @@ class GraphValidator:
         self._check_optimizer_phase(errors)
         self._check_param_port_cycles(errors)
         self._check_required_inputs(errors)
-        self._check_multiple_train_entries(errors)
         self._check_data_flow_cycles(errors)
         self._check_multi_input_batch_sizes(errors)
 
@@ -41,6 +40,7 @@ class GraphValidator:
         self._check_eval_entry_point(warnings)
         self._check_optimizer_label_shape(warnings)
         self._check_early_stopping_no_validation(warnings)
+        self._check_missing_dataset_or_shape(warnings)
 
         return {
             "errors": errors,
@@ -175,29 +175,6 @@ class GraphValidator:
                             "nodeId": node.id,
                         }
                     )
-
-    def _check_multiple_train_entries(self, errors):
-        model_nodes = self._get_model_nodes()
-        if not model_nodes:
-            return
-        # Find model nodes with no predecessors that are also model nodes
-        # (they are entry points)
-        entries = []
-        for nid in model_nodes:
-            preds = self.graph.predecessors(nid)
-            model_preds = [p for p in preds if p in model_nodes]
-            if not model_preds:
-                entries.append(nid)
-        if len(entries) > 1:
-            errors.append(
-                {
-                    "message": (
-                        f"Multiple training entry points detected: {entries}. "
-                        "The model must have a single entry point."
-                    ),
-                    "nodeId": entries[0],
-                }
-            )
 
     # ----------------------------------------------------------------
     #  WARNINGS
@@ -623,3 +600,35 @@ class GraphValidator:
                         }
                     )
                     break
+
+    def _check_missing_dataset_or_shape(self, warnings):
+        """Warn if InputData node has no dataset and no manual shape."""
+        for node in self.graph.nodes.values():
+            if node.type != "input-data":
+                continue
+            has_dataset = bool(node.properties.get("datasetId"))
+            has_shape = bool(node.properties.get("dataShape"))
+            if not has_dataset and not has_shape:
+                warnings.append(
+                    {
+                        "message": (
+                            f"InputData node '{node.id}' has no dataset attached and no shape defined. "
+                            "The generated code will use random data. Model may not work as expected."
+                        ),
+                        "nodeId": node.id,
+                    }
+                )
+            elif has_shape:
+                # Check if shape is symbolic (contains None or '?')
+                shape_str = node.properties.get("dataShape", "")
+                if shape_str and ("None" in shape_str or "?" in shape_str):
+                    warnings.append(
+                        {
+                            "message": (
+                                f"InputData node '{node.id}' has an unclear shape '{shape_str}'. "
+                                "Symbolic dimensions (None / ?) will be replaced with placeholder values. "
+                                "Consider attaching a dataset or specifying concrete dimensions."
+                            ),
+                            "nodeId": node.id,
+                        }
+                    )
