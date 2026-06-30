@@ -624,22 +624,18 @@ def check_model10(proc, code, graph):
 
 
 def check_model11(proc, code, graph):
-    """
-    model11 checks:
-      1. Validator reports error about multiple training entry points.
-         (The UI would block export when this error exists, so the test
-          only needs to confirm the error is present.)
-    """
     ok = True
+    import re
 
-    from sketchmod.codegen.validator import GraphValidator
+    if "Training complete." not in proc.stdout:
+        print("❌ Training incomplete")
+        ok = False
 
-    result = GraphValidator(graph).validate()
-    errors = result.get("errors", [])
-    if any("Multiple training entry points" in e.get("message", "") for e in errors):
-        print("✅ Multiple training entry points error detected")
+    losses = re.findall(r"Train Loss: ([0-9.]+)", proc.stdout)
+    if losses and float(losses[-1]) < 0.05:
+        print(f"✅ Converged (final loss {losses[-1]})")
     else:
-        print("❌ Expected error for multiple training entry points not found")
+        print("❌ Did not converge")
         ok = False
 
     return ok
@@ -1316,7 +1312,7 @@ def check_model28(proc, code, graph):
 
 
 # Models that only test validator errors – their generated code must NOT be executed.
-VALIDATION_ONLY_MODELS = {11, 13, 14, 15, 16, 17, 27}
+VALIDATION_ONLY_MODELS = {13, 14, 15, 16, 17, 27}
 
 MODEL_CHECKS = {
     1: check_model1,
