@@ -511,7 +511,7 @@ class GraphValidator:
                 return
 
     def _check_optimizer_label_shape(self, warnings):
-        """Warn if CrossEntropyLoss / NLL labels are not 1‑D."""
+        """Warn about label shape for CrossEntropyLoss / NLL."""
         for node in self.graph.nodes.values():
             if node.type != "optimizer":
                 continue
@@ -519,12 +519,10 @@ class GraphValidator:
             if loss_type not in ("cross_entropy", "nll"):
                 continue
 
-            # Find the label input port (second input, index 1)
             if len(node.inputs) < 2:
                 continue
             label_port = node.inputs[1]
 
-            # Get the source shape via the link
             src_shape = None
             for link in self.graph.links:
                 if link.id_to == label_port.id:
@@ -545,14 +543,54 @@ class GraphValidator:
                 )
                 continue
 
-            if len(src_shape.shape) != 1:
+            if len(src_shape.shape) == 1:
+                continue  # 1‑D — OK
+
+            if len(src_shape.shape) == 2:
+                dim = src_shape.shape[-1]
+                try:
+                    last_dim = int(dim) if dim.is_concrete else -1
+                except (ValueError, TypeError):
+                    last_dim = -1
+                if last_dim == 1:
+                    warnings.append(
+                        {
+                            "message": (
+                                f"Optimizer '{node.id}' uses {loss_type} loss. "
+                                f"Label shape is {self._shape_str(src_shape)} – will be automatically squeezed to (N)."
+                            ),
+                            "nodeId": node.id,
+                        }
+                    )
+                elif last_dim > 1:
+                    warnings.append(
+                        {
+                            "message": (
+                                f"Optimizer '{node.id}' uses {loss_type} loss, "
+                                f"but the label shape is {self._shape_str(src_shape)}. "
+                                "Labels appear to be one‑hot encoded. CrossEntropyLoss expects class indices. "
+                                "Insert a Reshape node with target shape (-1) to flatten."
+                            ),
+                            "nodeId": node.id,
+                        }
+                    )
+                else:
+                    warnings.append(
+                        {
+                            "message": (
+                                f"Optimizer '{node.id}' uses {loss_type} loss, "
+                                f"but the label shape is {self._shape_str(src_shape)}. "
+                                "Model might not work."
+                            ),
+                            "nodeId": node.id,
+                        }
+                    )
+            else:
                 warnings.append(
                     {
                         "message": (
                             f"Optimizer '{node.id}' uses {loss_type} loss, "
                             f"but the label shape is {self._shape_str(src_shape)}. "
-                            "CrossEntropyLoss requires 1‑D integer labels. "
-                            "Insert a Reshape node with target shape (-1) to flatten. "
                             "Model might not work."
                         ),
                         "nodeId": node.id,
