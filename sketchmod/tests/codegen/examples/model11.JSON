@@ -1,31 +1,35 @@
 {
     "nodes": [
         {
-            "id": "inp",
+            "id": "in",
             "type": "input-data",
-            "x": 50,
-            "y": 200,
+            "x": 100,
+            "y": 300,
+            "dataShape": "(30, 3)",
+            "datasetId": "local-test",
+            "datasetFile": "model11.csv",
+            "datasetFormat": "csv",
             "inputPorts": [],
             "outputPorts": [
                 {
-                    "id": "inp_out",
+                    "id": "in_out",
                     "type": "output",
                     "index": 0,
-                    "activationPhases": ["preprocessing", "training"]
+                    "activationPhases": ["preprocessing"]
                 }
             ],
             "numInputs": 0,
-            "numOutputs": 1,
-            "dataShape": "(200, 6)"
+            "numOutputs": 1
         },
         {
-            "id": "c_feat1",
+            "id": "feat",
             "type": "column-select",
-            "x": 180,
-            "y": 120,
+            "x": 280,
+            "y": 240,
+            "selectedColumns": [0, 1],
             "inputPorts": [
                 {
-                    "id": "c_feat1_in",
+                    "id": "feat_in",
                     "type": "input",
                     "index": 0,
                     "activationPhases": ["preprocessing"]
@@ -33,24 +37,28 @@
             ],
             "outputPorts": [
                 {
-                    "id": "c_feat1_out",
+                    "id": "feat_out",
                     "type": "output",
                     "index": 0,
-                    "activationPhases": ["preprocessing", "training"]
+                    "activationPhases": [
+                        "preprocessing",
+                        "training",
+                        "evaluation"
+                    ]
                 }
             ],
             "numInputs": 1,
-            "numOutputs": 1,
-            "selectedColumns": [0, 1, 2]
+            "numOutputs": 1
         },
         {
-            "id": "c_feat2",
+            "id": "lab",
             "type": "column-select",
-            "x": 180,
-            "y": 280,
+            "x": 280,
+            "y": 380,
+            "selectedColumns": [2],
             "inputPorts": [
                 {
-                    "id": "c_feat2_in",
+                    "id": "lab_in",
                     "type": "input",
                     "index": 0,
                     "activationPhases": ["preprocessing"]
@@ -58,90 +66,36 @@
             ],
             "outputPorts": [
                 {
-                    "id": "c_feat2_out",
+                    "id": "lab_out",
                     "type": "output",
                     "index": 0,
                     "activationPhases": ["preprocessing", "training"]
                 }
             ],
             "numInputs": 1,
-            "numOutputs": 1,
-            "selectedColumns": [3, 4, 5]
+            "numOutputs": 1
         },
         {
-            "id": "layer1",
+            "id": "layer",
             "type": "layer",
-            "x": 320,
-            "y": 120,
+            "x": 460,
+            "y": 240,
+            "numNeurons": 1,
+            "activation": "linear",
             "inputPorts": [
                 {
-                    "id": "layer1_in",
+                    "id": "layer_in",
                     "type": "input",
                     "index": 0,
-                    "portKind": "multi",
-                    "activationPhases": ["training"]
+                    "activationPhases": ["training", "evaluation"]
                 }
             ],
             "outputPorts": [
                 {
-                    "id": "layer1_out",
+                    "id": "layer_out",
                     "type": "output",
                     "index": 0,
-                    "activationPhases": ["training"]
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "activation": "relu",
-            "numNeurons": 8
-        },
-        {
-            "id": "layer2",
-            "type": "layer",
-            "x": 320,
-            "y": 280,
-            "inputPorts": [
-                {
-                    "id": "layer2_in",
-                    "type": "input",
-                    "index": 0,
-                    "portKind": "multi",
-                    "activationPhases": ["training"]
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "layer2_out",
-                    "type": "output",
-                    "index": 0,
-                    "activationPhases": ["training"]
-                }
-            ],
-            "numInputs": 1,
-            "numOutputs": 1,
-            "activation": "relu",
-            "numNeurons": 4
-        },
-        {
-            "id": "add",
-            "type": "add",
-            "x": 480,
-            "y": 200,
-            "inputPorts": [
-                {
-                    "id": "add_in",
-                    "type": "input",
-                    "index": 0,
-                    "portKind": "multi",
-                    "activationPhases": ["training"]
-                }
-            ],
-            "outputPorts": [
-                {
-                    "id": "add_out",
-                    "type": "output",
-                    "index": 0,
-                    "activationPhases": ["training"]
+                    "activationPhases": ["training", "evaluation"]
                 }
             ],
             "numInputs": 1,
@@ -150,18 +104,18 @@
         {
             "id": "out",
             "type": "output",
-            "x": 630,
-            "y": 200,
+            "x": 620,
+            "y": 240,
             "inputPorts": [
                 {
-                    "id": "out_in_train",
+                    "id": "out_train",
                     "type": "input",
                     "index": 0,
                     "subType": "train",
                     "activationPhases": ["training"]
                 },
                 {
-                    "id": "out_in_test",
+                    "id": "out_test",
                     "type": "input",
                     "index": 1,
                     "subType": "test",
@@ -191,8 +145,6 @@
                     "activationPhases": ["evaluation"]
                 }
             ],
-            "numInputs": 2,
-            "numOutputs": 3,
             "outputActivations": {
                 "loss": "none",
                 "prediction": "none",
@@ -203,7 +155,13 @@
             "id": "opt",
             "type": "optimizer",
             "x": 780,
-            "y": 200,
+            "y": 240,
+            "lossType": "mse",
+            "optimizerType": "adam",
+            "learningRate": 0.1,
+            "epochs": 200,
+            "batchSize": 8,
+            "shuffle": true,
             "inputPorts": [
                 {
                     "id": "opt_loss",
@@ -222,38 +180,17 @@
             ],
             "outputPorts": [],
             "numInputs": 2,
-            "numOutputs": 0,
-            "lossType": "mse",
-            "optimizerType": "adam",
-            "learningRate": 0.001,
-            "epochs": 5,
-            "batchSize": 16,
-            "shuffle": true
+            "numOutputs": 0
         }
     ],
     "links": [
-        { "from": "inp_out", "to": "c_feat1_in", "weight": 1 },
-        { "from": "inp_out", "to": "c_feat2_in", "weight": 1 },
-        {
-            "from": "c_feat1_out",
-            "to": "layer1_in",
-            "weight": 1,
-            "weightShape": { "shape": [8, 3], "dtype": "float32" },
-            "hasWeight": true
-        },
-        {
-            "from": "c_feat2_out",
-            "to": "layer2_in",
-            "weight": 1,
-            "weightShape": { "shape": [4, 3], "dtype": "float32" },
-            "hasWeight": true
-        },
-        { "from": "layer1_out", "to": "add_in", "weight": 1 },
-        { "from": "layer2_out", "to": "add_in", "weight": 1 },
-        { "from": "add_out", "to": "out_in_train", "weight": 1 },
-        { "from": "add_out", "to": "out_in_test", "weight": 1 },
-        { "from": "loss_p", "to": "opt_loss", "weight": 1 },
-        { "from": "c_feat1_out", "to": "opt_labels", "weight": 1 }
+        { "from": "in_out", "to": "feat_in" },
+        { "from": "in_out", "to": "lab_in" },
+        { "from": "feat_out", "to": "layer_in" },
+        { "from": "layer_out", "to": "out_train" },
+        { "from": "layer_out", "to": "out_test" },
+        { "from": "loss_p", "to": "opt_loss" },
+        { "from": "lab_out", "to": "opt_labels" }
     ],
     "ports": [],
     "nodeCounter": 0
