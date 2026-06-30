@@ -5832,7 +5832,14 @@ class LayerNode extends RectNode {
         );
     }
     getPropertiesHTML() {
-        return this._getShapeSummaryHTML() + `${this._activationSelect()}`;
+        return (
+            this._getShapeSummaryHTML() +
+            `${this._activationSelect()}
+            <div class="prop-group">
+                <label>Neurons</label>
+                <input type="number" id="prop-size" class="prop-input" value="${this.numNeurons}" min="1" max="4096">
+            </div>`
+        );
     }
     _activationSelect() {
         return NeuronNode.prototype._activationSelect.call(this);
