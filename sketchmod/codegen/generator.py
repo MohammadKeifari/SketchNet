@@ -251,6 +251,28 @@ class CodeGenerator:
         w.line(f"features = {feat_var}.float()")
         w.line(f"labels = {label_var}")
 
+        # Auto‑squeeze (N,1) labels for CrossEntropyLoss / NLL
+        loss_type = opt_node.properties.get("lossType", "mse")
+        if loss_type in ("cross_entropy", "nll"):
+            # Check if the label source shape is (N,1)
+            label_shape = None
+            opt = self.flow.get("optimizer")
+            if opt and len(opt.inputs) >= 2:
+                label_port = opt.inputs[1]
+                for link in self.graph.links:
+                    if link.id_to == label_port.id:
+                        src_port = self.graph.ports[link.id_from]
+                        if src_port.shape and src_port.shape.shape:
+                            label_shape = src_port.shape.shape
+                        break
+            if label_shape and len(label_shape) == 2:
+                try:
+                    last_dim = int(label_shape[1]) if label_shape[1].is_concrete else -1
+                except (ValueError, TypeError):
+                    last_dim = -1
+                if last_dim == 1:
+                    w.line(f"labels = {label_var}.squeeze(-1)")
+
         # ---- validation split (if enabled) ----
         val_mode = opt_node.properties.get("validationMode", "none")
         val_split = opt_node.properties.get("validationSplit", 0.2)
