@@ -5416,6 +5416,75 @@ class BaseNode {
 
         return html;
     }
+    _getCodeReferenceHTML() {
+        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
+        let moduleName = "";
+        let varName = "";
+
+        switch (this.type) {
+            case "layer":
+            case "neuron":
+                moduleName = `self.fc_${sid}`;
+                varName = `outputs['${this.id}']`;
+                break;
+            case "conv2d":
+                moduleName = `self.conv_${sid}`;
+                varName = `outputs['${this.id}']`;
+                break;
+            case "flatten":
+                moduleName = `self.flatten_${sid}`;
+                varName = `outputs['${this.id}']`;
+                break;
+            case "dropout":
+                moduleName = `self.dropout_${sid}`;
+                varName = `outputs['${this.id}']`;
+                break;
+            case "batchnorm":
+                moduleName = `self.bn_${sid}`;
+                varName = `outputs['${this.id}']`;
+                break;
+            case "column-select":
+            case "row-select":
+            case "dim-select":
+            case "normalize":
+            case "onehot":
+            case "deonehot":
+            case "reshape":
+                varName = `${sid}_out`;
+                break;
+            case "train-test":
+                varName = `train_data_${sid} / test_data_${sid}`;
+                break;
+            case "add":
+            case "concat":
+            case "output":
+                varName = `outputs['${this.id}']`;
+                break;
+            case "optimizer":
+                varName = `criterion / optimizer`;
+                break;
+            case "input-data":
+                varName = `raw_data`;
+                break;
+            case "accuracy":
+            case "visualization":
+            case "print":
+                varName = `—`;
+                break;
+            default:
+                varName = `${sid}_out`;
+        }
+
+        let html = '<div class="prop-group"><label>Code Reference</label>';
+        html +=
+            '<p class="prop-hint" style="font-family: monospace; font-size: 0.8rem;">';
+        if (moduleName) {
+            html += `Module: <strong style="color:var(--accent)">${moduleName}</strong><br>`;
+        }
+        html += `Variable: <strong style="color:var(--accent)">${varName}</strong>`;
+        html += "</p></div>";
+        return html;
+    }
 }
 
 // ========== NODE FACTORY ==========
@@ -5758,7 +5827,11 @@ class NeuronNode extends CircleNode {
     }
 
     getPropertiesHTML() {
-        return this._getShapeSummaryHTML() + this._activationSelect();
+        return (
+            this._getCodeReferenceHTML() +
+            this._getShapeSummaryHTML() +
+            this._activationSelect()
+        );
     }
     _activationSelect() {
         return `
@@ -5833,6 +5906,7 @@ class LayerNode extends RectNode {
     }
     getPropertiesHTML() {
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             `${this._activationSelect()}
             <div class="prop-group">
@@ -5915,7 +5989,12 @@ class InputDataNode extends RectNode {
             <p class="prop-hint">You can override the dataset shape manually.</p>
         </div>`;
 
-        return this._getShapeSummaryHTML() + datasetHTML + shapeHTML;
+        return (
+            this._getCodeReferenceHTML() +
+            this._getShapeSummaryHTML() +
+            datasetHTML +
+            shapeHTML
+        );
     }
     toJSON() {
         const b = super.toJSON();
@@ -6148,7 +6227,7 @@ class OutputNode extends RectNode {
         }
 
         html += `<p class="prop-hint">Loss port always uses raw logits.</p>`;
-        return html;
+        return this._getCodeReferenceHTML() + html;
     }
 }
 // ========== COLUMN SELECT NODE ==========
@@ -6235,6 +6314,7 @@ class ColumnSelectNode extends RectNode {
         const hasDataset = this.columnCount > 0;
 
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             `
         ${
@@ -6382,6 +6462,7 @@ class RowSelectNode extends RectNode {
         ];
 
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             `
             <div class="prop-group">
@@ -6650,6 +6731,7 @@ class DimSelectNode extends RectNode {
         }
 
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             `
             ${
@@ -6776,6 +6858,7 @@ class TrainTestSplitNode extends RectNode {
 
     getPropertiesHTML() {
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             `
             <div class="prop-group">
@@ -6896,7 +6979,7 @@ class NormalizeNode extends RectNode {
         }
 
         return `
-        ${this._getShapeSummaryHTML()}
+        ${this._getCodeReferenceHTML() + this._getShapeSummaryHTML()}
         ${paramHTML}
         <div class="prop-group">
             <label>Method</label>
@@ -7012,6 +7095,7 @@ class Conv2DNode extends RectNode {
 
     getPropertiesHTML() {
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             `<div class="prop-group"><label>Filters</label><input type="number" id="prop-filters" class="prop-input" value="${this.filters}" min="1" max="2048"></div>
         <div class="prop-group"><label>Kernel Size</label><input type="number" id="prop-kernel" class="prop-input" value="${this.kernelSize}" min="1" max="11"></div>
@@ -7085,6 +7169,7 @@ class FlattenNode extends RectNode {
 
     getPropertiesHTML() {
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             "<p class='prop-hint'>Flattens all dimensions except batch into a single feature vector.</p>"
         );
@@ -7137,6 +7222,7 @@ class DropoutNode extends RectNode {
 
     getPropertiesHTML() {
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             `<div class="prop-group"><label>Dropout Rate</label>
             <input type="range" id="prop-dropout-rate" class="prop-range" min="0" max="0.9" step="0.05"
@@ -7192,6 +7278,7 @@ class BatchNormNode extends RectNode {
 
     getPropertiesHTML() {
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             `<div class="prop-group"><label>Epsilon</label><input type="number" id="prop-eps" class="prop-input" value="${this.eps}" step="0.0001" min="0.00001" max="0.1"></div>
             <div class="prop-group"><label>Momentum</label><input type="number" id="prop-momentum" class="prop-input" value="${this.momentum}" step="0.01" min="0" max="1"></div>
@@ -7293,6 +7380,7 @@ class OneHotEncodeNode extends RectNode {
         }
 
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             paramHTML +
             `<div class="prop-group"><label>Number of Classes</label>
@@ -7367,6 +7455,7 @@ class DeOneHotNode extends RectNode {
         }
 
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             paramHTML +
             `<p class="prop-hint">Converts one-hot vectors back to class indices.</p>`
@@ -7396,7 +7485,7 @@ class PrintNode extends RectNode {
     }
 
     getPropertiesHTML() {
-        return `
+        return `${this._getCodeReferenceHTML()}
             <div class="prop-group">
                 <label>Label</label>
                 <input type="text" id="prop-print-label" class="prop-input"
@@ -7447,6 +7536,7 @@ class AccuracyNode extends RectNode {
 
     getPropertiesHTML() {
         return `
+            ${this._getCodeReferenceHTML()}
             <div class="prop-group">
                 <label>Show Confusion Matrix</label>
                 <label class="checkbox-label">
@@ -7585,6 +7675,7 @@ class ConcatenateNode extends RectNode {
 
     getPropertiesHTML() {
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             `<div class="prop-group"><label>Concatenate Axis</label>
         <input type="number" id="prop-concat-axis" class="prop-input" value="${this.axis}" 
@@ -7656,6 +7747,7 @@ class AddNode extends RectNode {
 
     getPropertiesHTML() {
         return (
+            this._getCodeReferenceHTML() +
             this._getShapeSummaryHTML() +
             "<p class='prop-hint'>Element-wise addition of two inputs. Both inputs must have the same shape. Used for skip/residual connections.</p>"
         );
@@ -7854,7 +7946,7 @@ class OptimizerNode extends RectNode {
         }
 
         return `
-        ${this._getShapeSummaryHTML()}
+        ${this._getCodeReferenceHTML() + this._getShapeSummaryHTML()}
         <div class="prop-group">
             <label>Input Ports</label>
             <div class="port-legend">
@@ -8249,6 +8341,7 @@ class VisualizationNode extends RectNode {
         }
 
         return `
+            ${this._getCodeReferenceHTML()}
             ${portLegendHTML}
             ${modeHTML}
             ${discreteHTML}
@@ -8340,6 +8433,7 @@ class ReshapeNode extends RectNode {
 
     getPropertiesHTML() {
         return `
+            ${this._getCodeReferenceHTML()}
             <div class="prop-group">
                 <label>Target Shape</label>
                 <input type="text" id="prop-target-shape" class="prop-input"
