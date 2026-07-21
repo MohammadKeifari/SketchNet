@@ -5444,11 +5444,23 @@ class BaseNode {
                 varName = `outputs['${this.id}']`;
                 break;
             case "column-select":
+                varName = `${sid}_out`;
+                break;
             case "row-select":
+                varName = `${sid}_out`;
+                break;
             case "dim-select":
+                varName = `${sid}_out`;
+                break;
             case "normalize":
+                varName = `${sid}_out`;
+                break;
             case "onehot":
+                varName = `${sid}_out`;
+                break;
             case "deonehot":
+                varName = `${sid}_out`;
+                break;
             case "reshape":
                 varName = `${sid}_out`;
                 break;
@@ -5456,7 +5468,11 @@ class BaseNode {
                 varName = `train_data_${sid} / test_data_${sid}`;
                 break;
             case "add":
+                varName = `outputs['${this.id}']`;
+                break;
             case "concat":
+                varName = `outputs['${this.id}']`;
+                break;
             case "output":
                 varName = `outputs['${this.id}']`;
                 break;
@@ -5467,7 +5483,11 @@ class BaseNode {
                 varName = `raw_data`;
                 break;
             case "accuracy":
+                varName = `—`;
+                break;
             case "visualization":
+                varName = `—`;
+                break;
             case "print":
                 varName = `—`;
                 break;
@@ -5484,6 +5504,14 @@ class BaseNode {
         html += `Variable: <strong style="color:var(--accent)">${varName}</strong>`;
         html += "</p></div>";
         return html;
+    }
+    _drawCodeLabel(ctx) {
+        ctx.font = "8px monospace";
+        ctx.fillStyle = "rgba(255,255,255,0.35)";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const b = this.getBounds();
+        ctx.fillText(this.id, this.x, b.y + b.h - 8);
     }
 }
 
@@ -5803,13 +5831,8 @@ class NeuronNode extends CircleNode {
     }
 
     drawLabel(ctx) {
-        ctx.font = "bold 15px Inter, sans-serif";
-        ctx.fillStyle = "#ffffff";
         ctx.fillText("N", this.x, this.y - 4);
-        ctx.font = "8px monospace";
-        ctx.fillStyle = "rgba(255,255,255,0.4)";
-        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
-        ctx.fillText("fc_" + sid, this.x, this.y + 12);
+        this._drawCodeLabel(ctx);
     }
 
     computeOutputShapes() {
@@ -5886,16 +5909,10 @@ class LayerNode extends RectNode {
         return false;
     }
     drawLabel(ctx) {
-        ctx.font = "bold 13px Inter, sans-serif";
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(this.numNeurons + "", this.x, this.y - 9);
+        ctx.fillText(this.numNeurons + "", this.x, this.y - 10);
         ctx.font = "11px Inter, sans-serif";
         ctx.fillText("Layer", this.x, this.y + 6);
-        // Code name
-        ctx.font = "8px monospace";
-        ctx.fillStyle = "rgba(255,255,255,0.8)";
-        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
-        ctx.fillText("fc_" + sid, this.x, this.y + 20);
+        this._drawCodeLabel(ctx);
     }
 
     computeOutputShapes() {
@@ -5949,7 +5966,8 @@ class InputDataNode extends RectNode {
         this.outputs[0].activationPhases = ["preprocessing"];
     }
     drawLabel(ctx) {
-        ctx.fillText("Input", this.x, this.y);
+        ctx.fillText("Input", this.x, this.y - 4);
+        this._drawCodeLabel(ctx);
     }
     computeOutputShapes() {
         let shape = null,
@@ -6129,7 +6147,8 @@ class OutputNode extends RectNode {
     }
 
     drawLabel(ctx) {
-        ctx.fillText("Output", this.x, this.y);
+        ctx.fillText("Output", this.x, this.y - 4);
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -6267,7 +6286,8 @@ class ColumnSelectNode extends RectNode {
             this.selectedColumns.length > 0
                 ? this.selectedColumns.length + " cols"
                 : "Columns";
-        ctx.fillText(label, this.x, this.y);
+        ctx.fillText(label, this.x, this.y - 4);
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -6398,7 +6418,8 @@ class RowSelectNode extends RectNode {
 
     drawLabel(ctx) {
         const label = this.rowCount > 0 ? this.rowCount + " rows" : "Rows";
-        ctx.fillText(label, this.x, this.y);
+        ctx.fillText(label, this.x, this.y - 4);
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -6567,13 +6588,14 @@ class DimSelectNode extends RectNode {
     drawLabel(ctx) {
         const dims = this.dimSelections.length;
         const used = this.dimSelections.filter((d) => d && d !== ":").length;
-        ctx.fillText(dims + "D", this.x, this.y - 6);
+        ctx.fillText(dims + "D", this.x, this.y - 8);
         ctx.font = "10px Inter, sans-serif";
         ctx.fillText(
             used > 0 ? used + " sliced" : "Select",
             this.x,
-            this.y + 12,
+            this.y + 6,
         );
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -6803,13 +6825,14 @@ class TrainTestSplitNode extends RectNode {
     }
 
     drawLabel(ctx) {
-        ctx.fillText("Train/Test", this.x, this.y - 8);
+        ctx.fillText("Train/Test", this.x, this.y - 10);
         ctx.font = "10px Inter, sans-serif";
         ctx.fillText(
             `${Math.round(this.trainRatio * 100)}/${Math.round(this.testRatio * 100)}`,
             this.x,
-            this.y + 10,
+            this.y + 6,
         );
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -6932,10 +6955,11 @@ class NormalizeNode extends RectNode {
         ctx.fillText(
             this.method === "standard" ? "Standard" : "MinMax",
             this.x,
-            this.y - 6,
+            this.y - 8,
         );
         ctx.font = "10px Inter, sans-serif";
-        ctx.fillText("Normalize", this.x, this.y + 12);
+        ctx.fillText("Normalize", this.x, this.y + 6);
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -7027,20 +7051,15 @@ class Conv2DNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(this.filters + "", this.x, this.y - 12);
+        ctx.fillText(this.filters + "", this.x, this.y - 14);
         ctx.font = "9px Inter, sans-serif";
-        ctx.fillText("Conv2D", this.x, this.y + 2);
+        ctx.fillText("Conv2D", this.x, this.y);
         ctx.fillText(
             this.kernelSize + "×" + this.kernelSize,
             this.x,
-            this.y + 14,
+            this.y + 12,
         );
-        // Code name
-        ctx.font = "8px monospace";
-        ctx.fillStyle = "rgba(255,255,255,0.4)";
-        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
-        ctx.fillText("conv_" + sid, this.x, this.y + 26);
+        this._drawCodeLabel(ctx);
     }
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
@@ -7154,12 +7173,8 @@ class FlattenNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillStyle = "#ffffff";
         ctx.fillText("Flatten", this.x, this.y - 4);
-        ctx.font = "8px monospace";
-        ctx.fillStyle = "rgba(255,255,255,0.4)";
-        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
-        ctx.fillText("flatten_" + sid, this.x, this.y + 12);
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -7217,14 +7232,10 @@ class DropoutNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText("Dropout", this.x, this.y - 6);
+        ctx.fillText("Dropout", this.x, this.y - 8);
         ctx.font = "10px Inter, sans-serif";
-        ctx.fillText(Math.round(this.rate * 100) + "%", this.x, this.y + 10);
-        ctx.font = "8px monospace";
-        ctx.fillStyle = "rgba(255,255,255,0.4)";
-        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
-        ctx.fillText("dropout_" + sid, this.x, this.y + 22);
+        ctx.fillText(Math.round(this.rate * 100) + "%", this.x, this.y + 8);
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -7278,12 +7289,8 @@ class BatchNormNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillStyle = "#ffffff";
         ctx.fillText("BatchNorm", this.x, this.y - 4);
-        ctx.font = "8px monospace";
-        ctx.fillStyle = "rgba(255,255,255,0.4)";
-        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
-        ctx.fillText("bn_" + sid, this.x, this.y + 12);
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -7341,9 +7348,10 @@ class OneHotEncodeNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 11px Inter, sans-serif";
-        ctx.fillText("OneHot", this.x, this.y - 6);
+        ctx.fillText("OneHot", this.x, this.y - 8);
         ctx.font = "9px Inter, sans-serif";
-        ctx.fillText(this.numClasses + " classes", this.x, this.y + 10);
+        ctx.fillText(this.numClasses + " classes", this.x, this.y + 6);
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -7448,7 +7456,8 @@ class DeOneHotNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 11px Inter, sans-serif";
-        ctx.fillText("DeOneHot", this.x, this.y);
+        ctx.fillText("DeOneHot", this.x, this.y - 4);
+        this._drawCodeLabel(ctx);
     }
 
     computeOutputShapes() {
@@ -7511,7 +7520,8 @@ class PrintNode extends RectNode {
     }
 
     drawLabel(ctx) {
-        ctx.fillText("Print", this.x, this.y);
+        ctx.fillText("Print", this.x, this.y - 4);
+        this._drawCodeLabel(ctx);
     }
 
     computeOutputShapes() {
@@ -7561,9 +7571,9 @@ class AccuracyNode extends RectNode {
     }
 
     drawLabel(ctx) {
-        ctx.fillText("Accuracy", this.x, this.y);
+        ctx.fillText("Accuracy", this.x, this.y - 4);
+        this._drawCodeLabel(ctx);
     }
-
     computeOutputShapes() {
         return [];
     }
@@ -7646,10 +7656,11 @@ class ConcatenateNode extends RectNode {
     }
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillText("Concat", this.x, this.y - 5);
+        ctx.fillText("Concat", this.x, this.y - 7);
         ctx.font = "9px Inter, sans-serif";
         const axisLabel = this.axis === -1 ? "last" : this.axis;
-        ctx.fillText("axis: " + axisLabel, this.x, this.y + 10);
+        ctx.fillText("axis: " + axisLabel, this.x, this.y + 7);
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -7738,7 +7749,8 @@ class AddNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 14px Inter, sans-serif";
-        ctx.fillText("+", this.x, this.y);
+        ctx.fillText("+", this.x, this.y - 4);
+        this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -7864,21 +7876,18 @@ class OptimizerNode extends RectNode {
         const lossLabel =
             this.lossOptions.find((o) => o.value === this.lossType)?.label ||
             "Loss";
-        ctx.fillText(lossLabel, this.x, this.y - 14);
+        ctx.fillText(lossLabel, this.x, this.y - 16);
         ctx.font = "9px Inter, sans-serif";
         const optLabel =
             this.optimizerOptions.find((o) => o.value === this.optimizerType)
                 ?.label || "Adam";
-        ctx.fillText(optLabel + " · " + this.epochs + "ep", this.x, this.y);
+        ctx.fillText(optLabel + " · " + this.epochs + "ep", this.x, this.y - 4);
         ctx.fillText(
             "bs=" + this.batchSize + " lr=" + this.learningRate,
             this.x,
-            this.y + 12,
+            this.y + 8,
         );
-        // validation hint
-        if (this.validationMode !== "none") {
-            ctx.fillText("val", this.x, this.y + 22);
-        }
+        this._drawCodeLabel(ctx);
     }
 
     computeOutputShapes() {
@@ -8197,7 +8206,7 @@ class VisualizationNode extends RectNode {
     drawLabel(ctx) {
         const coordCount = this._coordPorts().length;
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillText(`${coordCount}D Viz`, this.x, this.y - 6);
+        ctx.fillText(`${coordCount}D Viz`, this.x, this.y - 8);
         ctx.font = "9px Inter, sans-serif";
         const modeLabel =
             this.colorMode === "discrete"
@@ -8205,7 +8214,8 @@ class VisualizationNode extends RectNode {
                 : this.colorMode === "continuous"
                   ? "Continuous"
                   : "No Color";
-        ctx.fillText(modeLabel, this.x, this.y + 10);
+        ctx.fillText(modeLabel, this.x, this.y + 6);
+        this._drawCodeLabel(ctx);
     }
 
     computeOutputShapes() {
@@ -8401,9 +8411,10 @@ class ReshapeNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillText("Reshape", this.x, this.y - 8);
+        ctx.fillText("Reshape", this.x, this.y - 10);
         ctx.font = "9px Inter, sans-serif";
-        ctx.fillText(this.targetShape, this.x, this.y + 10);
+        ctx.fillText(this.targetShape, this.x, this.y + 4);
+        this._drawCodeLabel(ctx);
     }
 
     computeOutputShapes() {
@@ -8467,7 +8478,7 @@ class ReshapeNode extends RectNode {
 
     getPropertiesHTML() {
         return `
-            ${this._getCodeReferenceHTML()}
+            ${this._getCodeReferenceHTML() + this._getShapeSummaryHTML()}
             <div class="prop-group">
                 <label>Target Shape</label>
                 <input type="text" id="prop-target-shape" class="prop-input"
