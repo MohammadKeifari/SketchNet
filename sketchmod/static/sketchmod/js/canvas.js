@@ -5803,7 +5803,13 @@ class NeuronNode extends CircleNode {
     }
 
     drawLabel(ctx) {
-        ctx.fillText("N", this.x, this.y);
+        ctx.font = "bold 15px Inter, sans-serif";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText("N", this.x, this.y - 4);
+        ctx.font = "8px monospace";
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
+        ctx.fillText("fc_" + sid, this.x, this.y + 12);
     }
 
     computeOutputShapes() {
@@ -5880,9 +5886,16 @@ class LayerNode extends RectNode {
         return false;
     }
     drawLabel(ctx) {
+        ctx.font = "bold 13px Inter, sans-serif";
+        ctx.fillStyle = "#ffffff";
         ctx.fillText(this.numNeurons + "", this.x, this.y - 9);
         ctx.font = "11px Inter, sans-serif";
-        ctx.fillText("Layer", this.x, this.y + 12);
+        ctx.fillText("Layer", this.x, this.y + 6);
+        // Code name
+        ctx.font = "8px monospace";
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
+        ctx.fillText("fc_" + sid, this.x, this.y + 20);
     }
 
     computeOutputShapes() {
@@ -7014,6 +7027,7 @@ class Conv2DNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
+        ctx.fillStyle = "#ffffff";
         ctx.fillText(this.filters + "", this.x, this.y - 12);
         ctx.font = "9px Inter, sans-serif";
         ctx.fillText("Conv2D", this.x, this.y + 2);
@@ -7022,6 +7036,11 @@ class Conv2DNode extends RectNode {
             this.x,
             this.y + 14,
         );
+        // Code name
+        ctx.font = "8px monospace";
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
+        ctx.fillText("conv_" + sid, this.x, this.y + 26);
     }
     computeOutputShapes() {
         const s = this._getFirstInputShapeObj();
@@ -7135,7 +7154,12 @@ class FlattenNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillText("Flatten", this.x, this.y);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText("Flatten", this.x, this.y - 4);
+        ctx.font = "8px monospace";
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
+        ctx.fillText("flatten_" + sid, this.x, this.y + 12);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -7193,9 +7217,14 @@ class DropoutNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
+        ctx.fillStyle = "#ffffff";
         ctx.fillText("Dropout", this.x, this.y - 6);
         ctx.font = "10px Inter, sans-serif";
         ctx.fillText(Math.round(this.rate * 100) + "%", this.x, this.y + 10);
+        ctx.font = "8px monospace";
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
+        ctx.fillText("dropout_" + sid, this.x, this.y + 22);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
@@ -7249,7 +7278,12 @@ class BatchNormNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillText("BatchNorm", this.x, this.y);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText("BatchNorm", this.x, this.y - 4);
+        ctx.font = "8px monospace";
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        const sid = this.id.replace(/[^a-zA-Z0-9_]/g, "_");
+        ctx.fillText("bn_" + sid, this.x, this.y + 12);
     }
     // validateConnections(incomingCount) {
     //     const errors = [];
