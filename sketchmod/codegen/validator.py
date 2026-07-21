@@ -613,31 +613,42 @@ class GraphValidator:
             )
 
     def _check_multi_input_batch_sizes(self, errors):
+        """Error if model node has multiple inputs with different batch sizes
+        that are active in the SAME phase."""
         for node in self.graph.nodes.values():
             if node.type not in ("neuron", "layer"):
                 continue
-            connected = []
+            connected = []  # list of (port_id, shape, phases_set)
             for port in node.inputs:
                 for link in self.graph.links:
                     if link.id_to == port.id:
                         src_port = self.graph.ports[link.id_from]
                         if src_port.shape and src_port.shape.shape:
-                            connected.append((port.id, src_port.shape))
+                            phases = set(src_port.activation_phases)
+                            connected.append((port.id, src_port.shape, phases))
+
             if len(connected) < 2:
                 continue
-            ref = connected[0][1].shape[0]
-            for pid, shape in connected[1:]:
-                if shape.shape[0] != ref:
-                    errors.append(
-                        {
-                            "message": (
-                                f"Model node '{node.id}' has multiple inputs with different batch sizes "
-                                f"({ref} vs {shape.shape[0]}). Batch sizes must match when feeding into the same model node."
-                            ),
-                            "nodeId": node.id,
-                        }
-                    )
-                    break
+
+            # Compare every pair that shares at least one phase
+            for i in range(len(connected)):
+                for j in range(i + 1, len(connected)):
+                    pid1, shape1, phases1 = connected[i]
+                    pid2, shape2, phases2 = connected[j]
+                    if phases1 & phases2:  # overlap = same phase active
+                        if str(shape1.shape[0]) != str(shape2.shape[0]):
+                            errors.append(
+                                {
+                                    "message": (
+                                        f"Model node '{node.id}' has multiple inputs with "
+                                        f"different batch sizes ({shape1.shape[0]} vs {shape2.shape[0]}) "
+                                        f"that are active in the same phase(s): {phases1 & phases2}. "
+                                        "Batch sizes must match when feeding into the same model node."
+                                    ),
+                                    "nodeId": node.id,
+                                }
+                            )
+                            return  # one error per node is enough
 
     def _check_missing_dataset_or_shape(self, warnings):
         """Warn if InputData node has no dataset and no manual shape."""
