@@ -618,24 +618,29 @@ class GraphValidator:
         for node in self.graph.nodes.values():
             if node.type not in ("neuron", "layer"):
                 continue
-            connected = []  # list of (port_id, shape, phases_set)
+
+            connected = []
             for port in node.inputs:
+                target_phases = set(port.activation_phases)
                 for link in self.graph.links:
                     if link.id_to == port.id:
                         src_port = self.graph.ports[link.id_from]
                         if src_port.shape and src_port.shape.shape:
-                            phases = set(src_port.activation_phases)
-                            connected.append((port.id, src_port.shape, phases))
+                            src_phases = set(src_port.activation_phases)
+                            effective_phases = target_phases & src_phases
+                            if effective_phases:
+                                connected.append(
+                                    (port.id, src_port.shape, effective_phases)
+                                )
 
             if len(connected) < 2:
                 continue
 
-            # Compare every pair that shares at least one phase
             for i in range(len(connected)):
                 for j in range(i + 1, len(connected)):
                     pid1, shape1, phases1 = connected[i]
                     pid2, shape2, phases2 = connected[j]
-                    if phases1 & phases2:  # overlap = same phase active
+                    if phases1 & phases2:
                         if str(shape1.shape[0]) != str(shape2.shape[0]):
                             errors.append(
                                 {
@@ -648,7 +653,7 @@ class GraphValidator:
                                     "nodeId": node.id,
                                 }
                             )
-                            return  # one error per node is enough
+                            return
 
     def _check_missing_dataset_or_shape(self, warnings):
         """Warn if InputData node has no dataset and no manual shape."""
