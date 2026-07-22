@@ -5831,7 +5831,7 @@ class NeuronNode extends CircleNode {
     }
 
     drawLabel(ctx) {
-        ctx.fillText("N", this.x, this.y - 4);
+        ctx.fillText("N", this.x, this.y);
         this._drawCodeLabel(ctx);
     }
 
@@ -5909,7 +5909,7 @@ class LayerNode extends RectNode {
         return false;
     }
     drawLabel(ctx) {
-        ctx.fillText(this.numNeurons + "", this.x, this.y - 10);
+        ctx.fillText(this.numNeurons + "", this.x, this.y - 6);
         ctx.font = "11px Inter, sans-serif";
         ctx.fillText("Layer", this.x, this.y + 6);
         this._drawCodeLabel(ctx);
@@ -5966,7 +5966,7 @@ class InputDataNode extends RectNode {
         this.outputs[0].activationPhases = ["preprocessing"];
     }
     drawLabel(ctx) {
-        ctx.fillText("Input", this.x, this.y - 4);
+        ctx.fillText("Input", this.x, this.y - 2);
         this._drawCodeLabel(ctx);
     }
     computeOutputShapes() {
@@ -6147,7 +6147,7 @@ class OutputNode extends RectNode {
     }
 
     drawLabel(ctx) {
-        ctx.fillText("Output", this.x, this.y - 4);
+        ctx.fillText("Output", this.x, this.y - 2);
         this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
@@ -6286,7 +6286,7 @@ class ColumnSelectNode extends RectNode {
             this.selectedColumns.length > 0
                 ? this.selectedColumns.length + " cols"
                 : "Columns";
-        ctx.fillText(label, this.x, this.y - 4);
+        ctx.fillText(label, this.x, this.y);
         this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
@@ -6418,7 +6418,7 @@ class RowSelectNode extends RectNode {
 
     drawLabel(ctx) {
         const label = this.rowCount > 0 ? this.rowCount + " rows" : "Rows";
-        ctx.fillText(label, this.x, this.y - 4);
+        ctx.fillText(label, this.x, this.y);
         this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
@@ -6825,12 +6825,12 @@ class TrainTestSplitNode extends RectNode {
     }
 
     drawLabel(ctx) {
-        ctx.fillText("Train/Test", this.x, this.y - 10);
+        ctx.fillText("Train/Test", this.x, this.y - 6);
         ctx.font = "10px Inter, sans-serif";
         ctx.fillText(
             `${Math.round(this.trainRatio * 100)}/${Math.round(this.testRatio * 100)}`,
             this.x,
-            this.y + 6,
+            this.y + 8,
         );
         this._drawCodeLabel(ctx);
     }
@@ -7051,13 +7051,13 @@ class Conv2DNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillText(this.filters + "", this.x, this.y - 14);
+        ctx.fillText(this.filters + "", this.x, this.y - 12);
         ctx.font = "9px Inter, sans-serif";
         ctx.fillText("Conv2D", this.x, this.y);
         ctx.fillText(
             this.kernelSize + "×" + this.kernelSize,
             this.x,
-            this.y + 12,
+            this.y + 14,
         );
         this._drawCodeLabel(ctx);
     }
@@ -7173,7 +7173,7 @@ class FlattenNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillText("Flatten", this.x, this.y - 4);
+        ctx.fillText("Flatten", this.x, this.y);
         this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
@@ -7234,7 +7234,7 @@ class DropoutNode extends RectNode {
         ctx.font = "bold 12px Inter, sans-serif";
         ctx.fillText("Dropout", this.x, this.y - 8);
         ctx.font = "10px Inter, sans-serif";
-        ctx.fillText(Math.round(this.rate * 100) + "%", this.x, this.y + 8);
+        ctx.fillText(Math.round(this.rate * 100) + "%", this.x, this.y + 6);
         this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
@@ -7289,7 +7289,7 @@ class BatchNormNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 12px Inter, sans-serif";
-        ctx.fillText("BatchNorm", this.x, this.y - 4);
+        ctx.fillText("BatchNorm", this.x, this.y);
         this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
@@ -7456,7 +7456,7 @@ class DeOneHotNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 11px Inter, sans-serif";
-        ctx.fillText("DeOneHot", this.x, this.y - 4);
+        ctx.fillText("DeOneHot", this.x, this.y);
         this._drawCodeLabel(ctx);
     }
 
@@ -7520,7 +7520,7 @@ class PrintNode extends RectNode {
     }
 
     drawLabel(ctx) {
-        ctx.fillText("Print", this.x, this.y - 4);
+        ctx.fillText("Print", this.x, this.y);
         this._drawCodeLabel(ctx);
     }
 
@@ -7571,7 +7571,7 @@ class AccuracyNode extends RectNode {
     }
 
     drawLabel(ctx) {
-        ctx.fillText("Accuracy", this.x, this.y - 4);
+        ctx.fillText("Accuracy", this.x, this.y);
         this._drawCodeLabel(ctx);
     }
     computeOutputShapes() {
@@ -7749,7 +7749,7 @@ class AddNode extends RectNode {
 
     drawLabel(ctx) {
         ctx.font = "bold 14px Inter, sans-serif";
-        ctx.fillText("+", this.x, this.y - 4);
+        ctx.fillText("+", this.x, this.y);
         this._drawCodeLabel(ctx);
     }
     // validateConnections(incomingCount) {
@@ -7876,16 +7876,16 @@ class OptimizerNode extends RectNode {
         const lossLabel =
             this.lossOptions.find((o) => o.value === this.lossType)?.label ||
             "Loss";
-        ctx.fillText(lossLabel, this.x, this.y - 16);
+        ctx.fillText(lossLabel, this.x, this.y - 14);
         ctx.font = "9px Inter, sans-serif";
         const optLabel =
             this.optimizerOptions.find((o) => o.value === this.optimizerType)
                 ?.label || "Adam";
-        ctx.fillText(optLabel + " · " + this.epochs + "ep", this.x, this.y - 4);
+        ctx.fillText(optLabel + " · " + this.epochs + "ep", this.x, this.y - 2);
         ctx.fillText(
             "bs=" + this.batchSize + " lr=" + this.learningRate,
             this.x,
-            this.y + 8,
+            this.y + 10,
         );
         this._drawCodeLabel(ctx);
     }
