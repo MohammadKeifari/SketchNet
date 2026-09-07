@@ -4,7 +4,7 @@
     Learn – SketchNet
 {% endblock title %}
 {% block meta_description %}
-    Step-by-step guide to SketchNet: Quick Start, ports and information flow, how phases work, node reference, starter templates, and troubleshooting.
+    SketchNet Learn: Quick Start, ports and flow, datasets, export, SketchMod tools, nodes, loss and labels, templates, and troubleshooting.
 {% endblock meta_description %}
 {% block og_title %}
     Learn – SketchNet
@@ -16,7 +16,7 @@
     <style>
         /* ===== Container ===== */
         .learn-container {
-            max-width: 960px;
+            max-width: 1100px;
             margin: 0 auto;
             padding: 40px 20px 80px;
         }
@@ -54,33 +54,133 @@
             margin: 0 auto;
         }
 
-        /* ===== Tabs ===== */
+        /* ===== Tabs / sidebar ===== */
+        .learn-layout {
+            display: flex;
+            gap: 32px;
+            align-items: flex-start;
+        }
+        .learn-sidebar {
+            flex-shrink: 0;
+            width: 220px;
+            position: sticky;
+            top: 20px;
+            z-index: 20;
+        }
+        .learn-sidebar-inner {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+        }
+        .learn-sidebar-label {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-secondary);
+            padding: 8px 12px 10px;
+        }
+        .learn-content {
+            flex: 1;
+            min-width: 0;
+        }
         .learn-tabs {
             display: flex;
-            gap: 0;
-            border-bottom: 2px solid var(--border);
-            margin-bottom: 36px;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
+            flex-direction: column;
+            gap: 2px;
+            margin-bottom: 0;
+            border-bottom: none;
+            overflow: visible;
         }
         .learn-tab {
-            padding: 14px 26px;
+            padding: 11px 14px;
             background: none;
             border: none;
             color: var(--text-secondary);
-            font-size: 0.95rem;
+            font-size: 0.88rem;
             font-weight: 600;
             cursor: pointer;
             font-family: inherit;
-            border-bottom: 3px solid transparent;
-            margin-bottom: -2px;
+            border-radius: 10px;
+            border-left: 3px solid transparent;
+            margin-bottom: 0;
             white-space: nowrap;
-            transition: color 0.2s, border-color 0.2s;
+            text-align: left;
+            width: 100%;
+            transition: color 0.2s, background 0.2s, border-color 0.2s;
         }
-        .learn-tab:hover { color: var(--text-primary); }
+        .learn-tab:hover {
+            color: var(--text-primary);
+            background: rgba(0, 0, 0, 0.04);
+        }
         .learn-tab.active {
             color: var(--accent);
-            border-bottom-color: var(--accent);
+            background: rgba(99, 102, 241, 0.1);
+            border-left-color: var(--accent);
+            border-bottom-color: transparent;
+        }
+
+        /* Horizontal tab strip on narrow screens */
+        @media (max-width: 860px) {
+            .learn-layout {
+                flex-direction: column;
+                gap: 20px;
+            }
+            .learn-sidebar {
+                width: 100%;
+                position: sticky;
+                top: 0;
+                z-index: 30;
+                padding-top: 4px;
+                background: var(--bg-primary, var(--bg-secondary));
+                margin-left: -4px;
+                margin-right: -4px;
+                padding-left: 4px;
+                padding-right: 4px;
+            }
+            .learn-sidebar-inner {
+                border-radius: 12px;
+                padding: 8px;
+            }
+            .learn-sidebar-label {
+                display: none;
+            }
+            .learn-tabs {
+                flex-direction: row;
+                overflow-x: auto;
+                overflow-y: hidden;
+                gap: 6px;
+                padding-bottom: 2px;
+                scroll-snap-type: x proximity;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: thin;
+                scrollbar-color: var(--border) transparent;
+            }
+            .learn-tabs::-webkit-scrollbar {
+                display: block;
+                height: 5px;
+            }
+            .learn-tabs::-webkit-scrollbar-thumb {
+                background: var(--border);
+                border-radius: 999px;
+            }
+            .learn-tab {
+                width: auto;
+                flex-shrink: 0;
+                text-align: center;
+                border-left: none;
+                border-bottom: 3px solid transparent;
+                padding: 10px 16px;
+                scroll-snap-align: start;
+            }
+            .learn-tab.active {
+                border-left-color: transparent;
+                border-bottom-color: var(--accent);
+                background: rgba(99, 102, 241, 0.1);
+            }
         }
 
         /* ===== Panels ===== */
@@ -346,6 +446,81 @@
             font-weight: 700;
         }
 
+        .glossary-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+        .glossary-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 0;
+            font-size: 0.9rem;
+        }
+        .glossary-list li:last-child {
+            border-bottom: none;
+        }
+        .glossary-list code {
+            font-size: 0.82em;
+        }
+        .glossary-list strong {
+            color: var(--text-primary);
+        }
+
+        .loss-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            margin-bottom: 14px;
+        }
+        .loss-table th,
+        .loss-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        .loss-table th {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .code-block {
+            display: block;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+            font-family: "SF Mono", "Fira Code", monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 14px;
+            white-space: pre-wrap;
+        }
+
+        details.learn-card summary {
+            cursor: pointer;
+            list-style: none;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-size: 1.05rem;
+        }
+        details.learn-card summary::-webkit-details-marker {
+            display: none;
+        }
+        details.learn-card summary::before {
+            content: "▸ ";
+            color: var(--accent);
+        }
+        details.learn-card[open] summary::before {
+            content: "▾ ";
+        }
+        details.learn-card summary + * {
+            margin-top: 14px;
+        }
+
         /* Pattern links */
         .pattern-list li {
             margin-bottom: 10px;
@@ -423,13 +598,15 @@
             overflow: visible;
         }
 
-        /* Hide horizontal scrollbar on tabs */
-        .learn-tabs {
-            scrollbar-width: none;           /* Firefox */
-            -ms-overflow-style: none;        /* IE/Edge */
-        }
-        .learn-tabs::-webkit-scrollbar {
-            display: none;                   /* Chrome/Safari */
+        /* Hide horizontal scrollbar on tabs — desktop sidebar uses column layout */
+        @media (min-width: 861px) {
+            .learn-tabs {
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+            }
+            .learn-tabs::-webkit-scrollbar {
+                display: none;
+            }
         }
 
         /* Prevent body scroll on this page */
@@ -439,11 +616,12 @@
         }
         @media (max-width: 600px) {
             .learn-header h1 { font-size: 1.8rem; }
-            .learn-tab { padding: 12px 16px; font-size: 0.82rem; }
+            .learn-tab { padding: 10px 14px; font-size: 0.8rem; }
             .learn-cta h2 { font-size: 1.5rem; }
             .flow-strip { flex-direction: column; align-items: stretch; }
             .flow-arrow { align-self: center; transform: rotate(90deg); }
             .flow-node { white-space: normal; text-align: center; }
+            .loss-table { display: block; overflow-x: auto; }
         }
     </style>
 {% endblock extra_css %}
@@ -466,14 +644,23 @@
             <h1>Learn SketchNet</h1>
             <p class="learn-subtitle">A beginner-friendly guide to SketchNet and the SketchMod editor.</p>
         </div>
-        <div class="learn-tabs" id="learnTabs" role="tablist" aria-label="Learn sections">
-            <button class="learn-tab active" role="tab" aria-selected="true" aria-controls="panel-quickstart" data-tab="quickstart">Quick Start</button>
-            <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-portsflow" data-tab="portsflow">Ports &amp; Flow</button>
-            <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-howitworks" data-tab="howitworks">How It Works</button>
-            <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-nodes" data-tab="nodes">Nodes</button>
-            <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-templates" data-tab="templates">Starter Templates</button>
-            <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-help" data-tab="help">Help</button>
-        </div>
+        <div class="learn-layout">
+            <aside class="learn-sidebar" aria-label="Learn sections">
+                <div class="learn-sidebar-inner">
+                    <span class="learn-sidebar-label">Sections</span>
+                    <nav class="learn-tabs" id="learnTabs" role="tablist" aria-label="Learn sections">
+                        <button class="learn-tab active" role="tab" aria-selected="true" aria-controls="panel-quickstart" data-tab="quickstart">Quick Start</button>
+                        <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-portsflow" data-tab="portsflow">Ports &amp; Flow</button>
+                        <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-howitworks" data-tab="howitworks">How It Works</button>
+                        <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-nodes" data-tab="nodes">Nodes</button>
+                        <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-templates" data-tab="templates">Starter Templates</button>
+                        <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-dataexport" data-tab="dataexport">Data &amp; Export</button>
+                        <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-tools" data-tab="tools">SketchMod Tools</button>
+                        <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-help" data-tab="help">Help</button>
+                    </nav>
+                </div>
+            </aside>
+            <div class="learn-content">
         <!-- Panels -->
         <!-- Quick Start -->
         <div class="learn-panel active" id="panel-quickstart" role="tabpanel">
@@ -484,6 +671,7 @@
                 <p>
                     Upload a dataset under <strong>Data</strong>, or pick one when you configure an
                     <strong>Input Data</strong> node in SketchMod.
+                    See <button type="button" class="learn-tab-link" data-goto-tab="dataexport">Data &amp; Export</button> for upload formats, public vs private datasets, and attaching data.
                 </p>
             </div>
             <div class="learn-card">
@@ -498,7 +686,7 @@
                 <h3>3. Check the graph</h3>
                 <p>
                     Click <strong>Check</strong>. SketchNet validates connections, shapes, and phases before anything is exported.
-                    Fix any errors shown in the dialog.
+                    Fix any errors shown in the dialog. Use <button type="button" class="learn-tab-link" data-goto-tab="tools">SketchMod Tools</button> for Check, phase highlighting, and shortcuts.
                 </p>
             </div>
             <div class="learn-card">
@@ -661,6 +849,41 @@
                 </ul>
             </div>
             <div class="learn-card">
+                <h3>Loss &amp; labels</h3>
+                <p style="margin-bottom: 14px;">Pick the Optimizer loss to match how your labels are encoded. See Help for <code>label-loss-mismatch</code> and <code>optimizer-missing-labels</code>.</p>
+                <table class="loss-table">
+                    <thead>
+                        <tr>
+                            <th>Loss (Optimizer)</th>
+                            <th>Labels should be</th>
+                            <th>Typical use</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>CrossEntropyLoss</strong></td>
+                            <td>1-D integer class indices <code>(N,)</code></td>
+                            <td>Multi-class classification</td>
+                        </tr>
+                        <tr>
+                            <td><strong>BCEWithLogitsLoss</strong></td>
+                            <td>One-hot <code>(N, C)</code></td>
+                            <td>Binary / multi-label</td>
+                        </tr>
+                        <tr>
+                            <td><strong>MSELoss</strong></td>
+                            <td>Float targets <code>(N,)</code> or <code>(N, 1)</code></td>
+                            <td>Regression</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <ul>
+                    <li>Use <strong>Column Select</strong> for the label column; add <strong>OneHot</strong> only when your loss expects one-hot labels.</li>
+                    <li>CrossEntropy + OneHot on labels triggers a Check warning — use integer labels instead.</li>
+                    <li>On the <strong>Output</strong> node: connect <strong>loss</strong> and <strong>labels</strong> role ports to the Optimizer; use <strong>prediction</strong> / <strong>evaluation</strong> for Accuracy and Visualization.</li>
+                </ul>
+            </div>
+            <div class="learn-card">
                 <h3>Results</h3>
                 <ul>
                     <li><strong>Accuracy</strong> — classification score (optional confusion matrix).</li>
@@ -698,6 +921,96 @@
                 </li>
             </ul>
         </div>
+        <div class="learn-panel" id="panel-dataexport" role="tabpanel">
+            <h2>Data &amp; Export</h2>
+            <p>SketchNet separates <strong>data management</strong> (upload and share datasets) from <strong>export</strong> (turn your graph into a runnable PyTorch script).</p>
+
+            <h3 class="section-heading">Upload and attach data</h3>
+            <div class="learn-card">
+                <h3>Data dashboard</h3>
+                <p>
+                    Sign in and open <strong>Data</strong> from the navbar. Use the upload modal to add CSV, Excel, or other supported files.
+                    Choose <strong>Public</strong> so anyone can use the dataset, or mark it <strong>Private</strong> and grant access to specific users.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>Input Data node</h3>
+                <p>
+                    In SketchMod, add an <strong>Input Data</strong> node and select your uploaded dataset (or use synthetic data for testing).
+                    Tensor shapes appear on ports as the graph is wired. If shape stays unclear, Check may show <code>unclear-data-shape</code> — verify column selection and file format.
+                </p>
+            </div>
+
+            <h3 class="section-heading">Export formats</h3>
+            <p>Export is available from the SketchMod toolbar after your graph passes <strong>Check</strong>. Invalid graphs cannot be exported.</p>
+            <div class="learn-card">
+                <h3>PyTorch (.py)</h3>
+                <p>Downloads a single <code>model.py</code> script. You supply the dataset separately (same file you attached in Input Data).</p>
+            </div>
+            <div class="learn-card">
+                <h3>PyTorch (.zip)</h3>
+                <p>
+                    Downloads a zip containing <code>model.py</code>, your dataset file(s), and <code>requirements.txt</code>
+                    (includes scikit-learn when the generated code needs it).
+                </p>
+            </div>
+
+            <h3 class="section-heading">Run locally</h3>
+            <p>After exporting a zip, unzip and run from that folder:</p>
+            <code class="code-block">pip install -r requirements.txt
+python model.py</code>
+            <p>
+                The script is structured in four parts: <code>load_data()</code> (preprocessing), <code>Model</code> (network),
+                <code>train()</code>, and <code>evaluate()</code> — matching the three phases in
+                <button type="button" class="learn-tab-link" data-goto-tab="portsflow">Ports &amp; Flow</button>.
+                Choose loss and label encoding first in the <button type="button" class="learn-tab-link" data-goto-tab="nodes">Nodes</button> tab before picking CrossEntropy or MSE.
+            </p>
+        </div>
+        <div class="learn-panel" id="panel-tools" role="tabpanel">
+            <h2>SketchMod Tools</h2>
+            <p>Use these toolbar features while building a graph — especially when Check reports phase or connection errors.</p>
+
+            <div class="learn-card">
+                <h3>Check</h3>
+                <p>
+                    Click <strong>Check</strong> in the left toolbar. It runs the same validator as export.
+                    <strong>Errors</strong> block export and must be fixed. <strong>Warnings</strong> allow export but flag questionable design (e.g. label/loss mismatch).
+                    Read the message, then use Highlight Path to see which part of the graph is active.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>Highlight Path</h3>
+                <p>
+                    Open <strong>Highlight Path</strong> (eye icon) and pick a phase:
+                </p>
+                <ul>
+                    <li><strong>Preprocessing / Training / Evaluation</strong> — highlights nodes, links, and ports active in that phase.</li>
+                    <li><strong>Show All</strong> — overlays all phases at once (colored rings on ports).</li>
+                    <li><strong>Clear</strong> — removes the highlight overlay.</li>
+                </ul>
+                <p>
+                    Tip: if Check says the Optimizer is not in the training phase, open Highlight → Training and trace backward to the first link missing the Training checkbox.
+                </p>
+            </div>
+            <div class="learn-card">
+                <h3>Keyboard shortcuts</h3>
+                <p>Press <strong>?</strong> in SketchMod to open the shortcuts modal. Common keys:</p>
+                <ul>
+                    <li><strong>S</strong> — Select tool</li>
+                    <li><strong>H</strong> — Pan tool</li>
+                    <li><strong>D</strong> — Delete tool</li>
+                    <li><strong>Ctrl+Z / Ctrl+Y</strong> — Undo / Redo</li>
+                    <li><strong>Ctrl+C / Ctrl+V</strong> — Copy / Paste nodes</li>
+                </ul>
+            </div>
+            <div class="learn-card">
+                <h3>Save model</h3>
+                <p>
+                    Use <strong>Save</strong> to store your graph in the Models Library (name, description, optional cover image).
+                    You can reload it later or share view/fork access with other users.
+                </p>
+            </div>
+        </div>
         <div class="learn-panel" id="panel-help" role="tabpanel">
             <h2>Help</h2>
             <div class="learn-card">
@@ -730,8 +1043,47 @@
             </div>
             <div class="learn-card">
                 <h3>Model does not learn</h3>
-                <p>Check label column selection, learning rate, epochs, and that labels are 1-D integers for CrossEntropyLoss.</p>
+                <p>See <button type="button" class="learn-tab-link" data-goto-tab="nodes">Nodes → Loss &amp; labels</button>: check label column, loss type, learning rate, epochs, and that CrossEntropy expects 1-D integer labels.</p>
             </div>
+
+            <h3 class="section-heading">Check error glossary</h3>
+            <p>Messages from Check include a stable code. Errors block export; warnings do not.</p>
+
+            <details class="learn-card">
+                <summary>Errors (export blocked)</summary>
+                <ul class="glossary-list">
+                    <li><code>missing-input</code> — <strong>Fix:</strong> Add an Input Data node.</li>
+                    <li><code>missing-output</code> — <strong>Fix:</strong> Add an Output node; connect your last layer to it.</li>
+                    <li><code>data-flow-cycle</code> — <strong>Fix:</strong> Remove a data-path loop. See Ports &amp; Flow.</li>
+                    <li><code>param-cycle</code> — <strong>Fix:</strong> Remove a param-port loop (dashed links).</li>
+                    <li><code>optimizer-not-training</code> — <strong>Fix:</strong> Enable Training on every port/link from data to Optimizer. Use Highlight → Training.</li>
+                    <li><code>optimizer-missing-labels</code> — <strong>Fix:</strong> Connect Output labels role port to Optimizer.</li>
+                    <li><code>optimizer-missing-loss</code> — <strong>Fix:</strong> Connect Output loss role port to Optimizer.</li>
+                    <li><code>model-input-missing</code> — <strong>Fix:</strong> Mark Training on ports so data reaches model layers.</li>
+                    <li><code>missing-input-connection</code> — <strong>Fix:</strong> Connect all required inputs (Add, Concat, etc.).</li>
+                    <li><code>batch-size-mismatch</code> — <strong>Fix:</strong> Same batch size on all inputs to a layer in one phase.</li>
+                    <li><code>no-trainable-parameters</code> — <strong>Fix:</strong> Add Layer or Conv2D before Output.</li>
+                    <li><code>graph-too-large</code> — <strong>Fix:</strong> Reduce node/link count.</li>
+                    <li><code>unsafe-property</code> — <strong>Fix:</strong> Fix invalid slice expressions or dataset filename on Input Data / Select nodes.</li>
+                    <li><code>unknown-node-type</code> — <strong>Fix:</strong> Remove or replace unsupported node types.</li>
+                </ul>
+            </details>
+
+            <details class="learn-card">
+                <summary>Warnings (export allowed)</summary>
+                <ul class="glossary-list">
+                    <li><code>preprocessing-dead-end</code> — <strong>Fix:</strong> Mark Training or Evaluation on preprocessing outputs.</li>
+                    <li><code>evaluation-entry-mismatch</code> — <strong>Fix:</strong> Merge train and test at the same layer multi-input.</li>
+                    <li><code>label-loss-mismatch</code> — <strong>Fix:</strong> Match loss to label encoding. See Nodes → Loss &amp; labels.</li>
+                    <li><code>no-optimizer</code> — <strong>Fix:</strong> Add Optimizer if you want a training loop.</li>
+                    <li><code>multiple-optimizers</code> — <strong>Note:</strong> Only the first Optimizer is used.</li>
+                    <li><code>missing-dataset</code> — <strong>Fix:</strong> Attach a dataset to Input Data or use synthetic data.</li>
+                    <li><code>unclear-data-shape</code> — <strong>Fix:</strong> Check CSV columns; set shape on Input Data if needed.</li>
+                    <li><code>untrained-layer</code> — <strong>Note:</strong> Layer runs only in preprocessing/evaluation, not training.</li>
+                    <li><code>visualization-in-training</code> — <strong>Note:</strong> Plot runs every training epoch (may be slow).</li>
+                    <li><code>early-stopping-without-validation</code> — <strong>Fix:</strong> Enable validation on Optimizer or turn off early stopping.</li>
+                </ul>
+            </details>
         </div>
         <!-- CTA -->
         <div class="learn-cta">
@@ -757,6 +1109,8 @@
                 Open SketchMod
             </a>
         </div>
+            </div>
+        </div>
     </div>
 {% endblock content %}
 {% block extra_js %}
@@ -772,6 +1126,11 @@
             panels.forEach(p => p.classList.remove('active'));
             const panel = document.getElementById('panel-' + tabName);
             if (panel) panel.classList.add('active');
+
+            const activeTab = document.querySelector('.learn-tab[data-tab="' + tabName + '"]');
+            if (activeTab) {
+                activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }
         }
 
         document.querySelectorAll('.learn-tab').forEach(tab => {
