@@ -1,5 +1,8 @@
 from django.test import TestCase
-from accounts.forms import CustomSignupForm
+from django.contrib.auth import get_user_model
+from accounts.forms import CustomSignupForm, ProfileForm
+
+User = get_user_model()
 
 
 class CustomSignupFormTests(TestCase):
@@ -107,3 +110,21 @@ class CustomSignupFormTests(TestCase):
         self.assertEqual(user.username, "newuser")
         self.assertEqual(user.email, "new@example.com")
         self.assertTrue(user.check_password("StrongPass123"))
+
+
+class ProfileFormTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="formuser", email="form@example.com", password="pass12345"
+        )
+
+    def test_bio_saved(self):
+        form = ProfileForm(
+            data={"bio": "Hello from SketchNet."},
+            instance=self.user,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.bio, "Hello from SketchNet.")
+

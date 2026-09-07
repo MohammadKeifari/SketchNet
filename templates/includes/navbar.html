@@ -129,7 +129,7 @@
         {% if user.is_authenticated %}
             <a href="{% url "profile" %}"
                class="user-avatar"
-               title="{{ user.username }}">{{ user.username|slice:":1"|upper }}</a>
+               title="{{ user.username }}">{% include "includes/user_avatar.html" with profile_user=user %}</a>
         {% else %}
             <a href="{% url "account_login" %}" class="user-avatar" title="Login">?</a>
         {% endif %}

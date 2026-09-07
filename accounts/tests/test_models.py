@@ -43,3 +43,11 @@ class CustomUserModelTests(TestCase):
             username="testuser", email="test@example.com", password="testpass123"
         )
         self.assertEqual(str(user), "testuser")
+
+    def test_bio_and_avatar_default_empty(self):
+        """New users have no bio or avatar until they set one."""
+        user = User.objects.create_user(
+            username="testuser", email="test@example.com", password="testpass123"
+        )
+        self.assertEqual(user.bio, "")
+        self.assertFalse(user.avatar)

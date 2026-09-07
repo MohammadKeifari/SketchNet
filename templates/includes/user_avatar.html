@@ -1,0 +1,13 @@
+{% load static %}
+{% if profile_user.username == "SketchNet" %}
+    <img src="{% static 'images/logo.svg' %}"
+         alt=""
+         class="user-avatar-logo"
+         style="width:58%;height:58%;object-fit:contain;filter:brightness(0) invert(1);display:block;">
+{% elif profile_user.avatar %}
+    <img src="{{ profile_user.avatar.url }}"
+         alt=""
+         class="user-avatar-img">
+{% else %}
+    {{ profile_user.username|slice:":1"|upper }}
+{% endif %}

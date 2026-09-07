@@ -11,6 +11,7 @@ Usage:
   # Automatic headless testing (for CI)
   python test_models.py --mode auto
   python test_models.py --mode auto --models 1,2
+  python test_models.py --mode auto --models 54,55   # seed-starter catalog
 
   # Dump generated code to examples/ folder
   python test_models.py --mode auto --models 1 --dump-code
@@ -18,6 +19,10 @@ Usage:
   # clear-cache
 
 Place model JSON files in `examples/` and datasets in `examples/data/`.
+
+Models 54+ are the SketchNet seed-starter catalog (sklearn tables + wired
+graphs from `accounts.seed.catalog`). Their CSVs live in `examples/data/`
+as `{dataset_slug}.csv` and are refreshed from the catalog loaders if missing.
 
 The checks below are behavioural: they assert what the generated script does
 (which port feeds the loss, whether the model converges, which diagnostics the
@@ -41,9 +46,10 @@ while not (_project_root / "sketchmod").is_dir():
     _project_root = _project_root.parent
 sys.path.insert(0, str(_project_root))
 
+from accounts.seed.catalog import STARTER_MODEL_BASE
 from sketchmod.codegen.generator import CodeGenerator
-from sketchmod.codegen.phase_analyzer import analyze_phases
 from sketchmod.codegen.graph import parse_graph
+from sketchmod.codegen.phase_analyzer import analyze_phases
 
 EXAMPLES_DIR = Path(__file__).resolve().parent / "examples"
 DATA_DIR = EXAMPLES_DIR / "data"
@@ -72,6 +78,126 @@ def discover_model_json_files(indices: list[int] | None = None) -> list[Path]:
         else:
             print(f"Warning: model file for index {index} not found, skipping.")
     return files
+
+
+def starter_model_specs() -> list[tuple[int, dict]]:
+    from accounts.seed.catalog import MODELS
+
+    return [
+        (STARTER_MODEL_BASE + offset, spec) for offset, spec in enumerate(MODELS)
+    ]
+
+
+def starter_indices() -> set[int]:
+    return {index for index, _ in starter_model_specs()}
+
+
+def ensure_starter_datasets() -> dict:
+    """Write catalog CSVs into examples/data/ when a slug is missing."""
+    from accounts.seed.catalog import DATASETS, dataset_slug, write_starter_datasets
+
+    missing = [
+        spec["name"]
+        for spec in DATASETS
+        if not (DATA_DIR / f"{dataset_slug(spec['name'])}.csv").is_file()
+    ]
+    if missing:
+        write_starter_datasets(DATA_DIR)
+    return {
+        spec["name"]: DATA_DIR / f"{dataset_slug(spec['name'])}.csv"
+        for spec in DATASETS
+    }
+
+
+def load_starter_frames() -> dict:
+    import pandas as pd
+
+    from accounts.seed.catalog import DATASETS, dataset_slug
+
+    ensure_starter_datasets()
+    return {
+        spec["name"]: pd.read_csv(DATA_DIR / f"{dataset_slug(spec['name'])}.csv")
+        for spec in DATASETS
+    }
+
+
+def check_starter_datasets(frames: dict) -> bool:
+    """Every seed-starter table is present with the catalog shape and a target."""
+    from accounts.seed.catalog import (
+        DATASETS,
+        EXPECTED_DATASET_COUNT,
+        EXPECTED_DATASET_SHAPES,
+    )
+
+    print("\n=== Testing starter datasets ===")
+    ok = check(
+        "Catalog dataset count",
+        len(frames) == EXPECTED_DATASET_COUNT == len(DATASETS),
+        str(len(frames)),
+    )
+    for spec in DATASETS:
+        name = spec["name"]
+        frame = frames.get(name)
+        expected = EXPECTED_DATASET_SHAPES[name]
+        ok = check(f"{name} is present", frame is not None) and ok
+        ok = (
+            check(
+                f"{name} shape {expected}",
+                frame is not None and tuple(frame.shape) == expected,
+                str(tuple(frame.shape) if frame is not None else None),
+            )
+            and ok
+        )
+        ok = (
+            check(f"{name} has target", frame is not None and "target" in frame.columns)
+            and ok
+        )
+    return ok
+
+
+def collect_jobs(indices: list[int] | None) -> list[dict]:
+    """JSON fixtures plus the seed-starter catalog graphs."""
+    catalog = starter_indices()
+    file_indices = (
+        None if indices is None else [index for index in indices if index not in catalog]
+    )
+    jobs = []
+    for path in discover_model_json_files(file_indices):
+        match = MODEL_JSON_RE.match(path.name)
+        index = int(match.group(1))
+        if index in catalog:
+            continue
+        jobs.append(
+            {
+                "index": index,
+                "path": path,
+                "graph": None,
+                "title": path.name,
+            }
+        )
+
+    want_starters = indices is None or any(index in catalog for index in indices)
+    if want_starters:
+        from accounts.seed.catalog import build_catalog_graph
+
+        frames = load_starter_frames()
+        for index, spec in starter_model_specs():
+            if indices is not None and index not in indices:
+                continue
+            jobs.append(
+                {
+                    "index": index,
+                    "path": EXAMPLES_DIR / f"model{index}.JSON",
+                    "graph": build_catalog_graph(
+                        spec["name"], spec["dataset"], frames[spec["dataset"]]
+                    ),
+                    "title": f"model{index}.JSON ({spec['name']})",
+                    "frames": frames,
+                }
+            )
+
+    jobs.sort(key=lambda job: job["index"])
+    return jobs
 
 
 # ----------------------------------------------------------------------
@@ -1023,6 +1149,140 @@ def check_model53(proc, code, graph):
     )
 
 
+def check_model54(proc, code, graph):
+    """Seed-starter Linear Regression on Diabetes."""
+    return all(
+        [
+            check("Graph is valid", diagnostics(graph)["isValid"]),
+            check("Loads diabetes CSV", "data/diabetes.csv" in code),
+            check("MSELoss configured", "nn.MSELoss()" in code),
+            check(
+                "Single 10→1 layer",
+                linear_layers(code) == [(10, 1)],
+                str(linear_layers(code)),
+            ),
+            check("Training completed", "Training complete." in proc.stdout),
+            check("Loss decreased", loss_decreased(proc), loss_trend(proc)),
+        ]
+    )
+
+
+def check_model55(proc, code, graph):
+    """Seed-starter Binary Classifier on Breast Cancer."""
+    roles = output_roles(code)
+    return all(
+        [
+            check("Graph is valid", diagnostics(graph)["isValid"]),
+            check("Loads breast_cancer CSV", "data/breast_cancer.csv" in code),
+            check("CrossEntropyLoss configured", "nn.CrossEntropyLoss()" in code),
+            check(
+                "2-class linear head",
+                (30, 2) in linear_layers(code),
+                str(linear_layers(code)),
+            ),
+            check(
+                "Prediction port applies softmax",
+                roles.get("prediction", "").startswith("torch.softmax("),
+            ),
+            check("Accuracy above 0.8", accurate_to(proc, 0.8), str(final_accuracy(proc))),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model56(proc, code, graph):
+    """Seed-starter Iris MLP."""
+    layers = linear_layers(code)
+    return all(
+        [
+            check("Graph is valid", diagnostics(graph)["isValid"]),
+            check("Loads iris CSV", "data/iris.csv" in code),
+            check(
+                "Hidden ReLU then 3-class head",
+                (4, 16) in layers and (16, 3) in layers,
+                str(layers),
+            ),
+            check("ReLU used", "relu" in code),
+            check("Accuracy above 0.8", accurate_to(proc, 0.8), str(final_accuracy(proc))),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model57(proc, code, graph):
+    """Seed-starter Digits CNN."""
+    return all(
+        [
+            check("Graph is valid", diagnostics(graph)["isValid"]),
+            check("Loads digits CSV", "data/digits.csv" in code),
+            check("Conv2D present", "nn.Conv2d" in code),
+            check("Reshape to 1×8×8", ".reshape(-1, 1, 8, 8)" in code or "1, 8, 8" in code),
+            check(
+                "10-class head",
+                any(out == 10 for _, out in linear_layers(code)),
+                str(linear_layers(code)),
+            ),
+            check("Accuracy above 0.7", accurate_to(proc, 0.7), str(final_accuracy(proc))),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model58(proc, code, graph):
+    """Seed-starter Skip Connection on Wine."""
+    return all(
+        [
+            check("Graph is valid", diagnostics(graph)["isValid"]),
+            check("Loads wine CSV", "data/wine.csv" in code),
+            check("Add merge present", re.search(r"= \w+ \+ \w+$", code, re.M)),
+            check(
+                "3-class head",
+                any(out == 3 for _, out in linear_layers(code)),
+                str(linear_layers(code)),
+            ),
+            check("Accuracy above 0.6", accurate_to(proc, 0.6), str(final_accuracy(proc))),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model59(proc, code, graph):
+    """Seed-starter Two-class Linear."""
+    return all(
+        [
+            check("Graph is valid", diagnostics(graph)["isValid"]),
+            check("Loads two_class CSV", "data/two_class.csv" in code),
+            check(
+                "8→2 linear head",
+                (8, 2) in linear_layers(code),
+                str(linear_layers(code)),
+            ),
+            check("Accuracy above 0.6", accurate_to(proc, 0.6), str(final_accuracy(proc))),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model60(proc, code, graph):
+    """Seed-starter Friedman MLP."""
+    layers = linear_layers(code)
+    return all(
+        [
+            check("Graph is valid", diagnostics(graph)["isValid"]),
+            check("Loads friedman_1 CSV", "data/friedman_1.csv" in code),
+            check("MSELoss configured", "nn.MSELoss()" in code),
+            check(
+                "Hidden then scalar head",
+                (10, 32) in layers and (32, 1) in layers,
+                str(layers),
+            ),
+            check("ReLU used", "relu" in code),
+            check("Training completed", "Training complete." in proc.stdout),
+            check("Loss decreased", loss_decreased(proc), loss_trend(proc)),
+        ]
+    )
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
 VALIDATION_ONLY_MODELS = {13, 14, 15, 16, 17, 27, 31, 32, 44, 45, 48, 51}
 
@@ -1080,6 +1340,13 @@ MODEL_CHECKS = {
     51: check_model51,
     52: check_model52,
     53: check_model53,
+    54: check_model54,
+    55: check_model55,
+    56: check_model56,
+    57: check_model57,
+    58: check_model58,
+    59: check_model59,
+    60: check_model60,
 }
 
 
@@ -1088,12 +1355,19 @@ MODEL_CHECKS = {
 # ----------------------------------------------------------------------
 
 
-def test_model(model_file: Path, interactive: bool, dump_code: bool = False) -> bool:
+def test_model(
+    model_file: Path,
+    interactive: bool,
+    dump_code: bool = False,
+    graph: dict | None = None,
+    title: str | None = None,
+) -> bool:
     """Verify model."""
-    print(f"\n=== Testing {model_file.name} ===")
+    print(f"\n=== Testing {title or model_file.name} ===")
 
-    with open(model_file) as f:
-        graph = json.load(f)
+    if graph is None:
+        with open(model_file) as f:
+            graph = json.load(f)
 
     code = generate_code(graph)
 
@@ -1125,7 +1399,8 @@ def test_model(model_file: Path, interactive: bool, dump_code: bool = False) -> 
             print("✅ All checks passed.")
         return ok
 
-    proc = run_generated_code(code, timeout=120, interactive=interactive)
+    timeout = 180 if model_idx is not None and model_idx >= STARTER_MODEL_BASE else 120
+    proc = run_generated_code(code, timeout=timeout, interactive=interactive)
 
     # Show errors even in interactive mode
     if proc.returncode != 0:
@@ -1196,18 +1471,30 @@ def main():
 
     if args.models:
         indices = [int(x.strip()) for x in args.models.split(",")]
-        json_files = discover_model_json_files(indices)
+        jobs = collect_jobs(indices)
     else:
-        json_files = discover_model_json_files()
+        jobs = collect_jobs(None)
 
-    if not json_files:
+    if not jobs:
         print("No model JSON files found.")
         sys.exit(1)
 
     failed = []
-    for f in json_files:
-        if not test_model(f, interactive, args.dump_code):
-            failed.append(f.name)
+    dataset_checked = False
+    for job in jobs:
+        if job["graph"] is not None and not dataset_checked:
+            frames = job.get("frames") or load_starter_frames()
+            if not check_starter_datasets(frames):
+                failed.append("starter-datasets")
+            dataset_checked = True
+        if not test_model(
+            job["path"],
+            interactive,
+            args.dump_code,
+            graph=job["graph"],
+            title=job["title"],
+        ):
+            failed.append(job["title"])
 
     if failed:
         print(f"\n❌ {len(failed)} test(s) FAILED: {failed}")

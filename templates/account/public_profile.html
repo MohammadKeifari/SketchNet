@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}
     {{ profile_user.username }} - SketchNet
 {% endblock title %}
@@ -6,83 +7,29 @@
     account
 {% endblock current_page %}
 {% block extra_css %}
-    <style>
-    .profile-container {
-        max-width: 900px;
-        margin: 40px auto;
-        padding: 0 20px;
-    }
-    .profile-header h1 {
-        font-size: 1.75rem;
-        margin-bottom: 8px;
-    }
-    .profile-meta {
-        color: var(--text-secondary);
-        margin-bottom: 24px;
-    }
-    .profile-section {
-        margin-top: 32px;
-    }
-    .profile-section h2 {
-        font-size: 1.1rem;
-        margin-bottom: 16px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid var(--border);
-    }
-    .profile-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 16px;
-    }
-    .profile-card {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 16px;
-        text-decoration: none;
-        color: inherit;
-        transition: var(--transition);
-    }
-    .profile-card:hover {
-        border-color: var(--accent);
-        box-shadow: 0 4px 12px var(--accent-glow);
-    }
-    .profile-card h3 {
-        font-size: 1rem;
-        margin-bottom: 6px;
-    }
-    .profile-card p {
-        font-size: 0.85rem;
-        color: var(--text-secondary);
-        font-family: monospace;
-    }
-    .profile-empty {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-    }
-    .profile-private-note {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 12px 16px;
-        font-size: 0.9rem;
-        color: var(--text-secondary);
-        margin-bottom: 16px;
-    }
-    </style>
+    <link rel="stylesheet" href="{% static 'css/profile.css' %}">
 {% endblock extra_css %}
 {% block content %}
-    <div class="profile-container">
-        <div class="profile-header">
-            <h1>{{ profile_user.username }}</h1>
-            <p class="profile-meta">Public profile on SketchNet</p>
-            {% if is_owner and not profile_is_public %}
-                <p class="profile-private-note">
-                    Your profile is private. Enable <strong>Public profile</strong> in
-                    <a href="{% url 'setting:settings' %}">Settings</a> to share this page.
-                </p>
-            {% endif %}
+    <div class="profile-container profile-container-public">
+        <div class="profile-header profile-identity">
+            <div class="profile-avatar-preview user-avatar public-avatar"
+                 aria-hidden="true">
+                {% include "includes/user_avatar.html" %}
+            </div>
+            <div>
+                <h1>{{ profile_user.username }}</h1>
+                {% if profile_user.bio %}
+                    <p class="profile-bio">{{ profile_user.bio }}</p>
+                {% endif %}
+                <p class="profile-meta">Public profile on SketchNet</p>
+            </div>
         </div>
+        {% if is_owner and not profile_is_public %}
+            <p class="profile-private-note">
+                Your profile is private. Enable <strong>Public profile</strong> in
+                <a href="{% url 'setting:settings' %}">Settings</a> to share this page.
+            </p>
+        {% endif %}
         <section class="profile-section">
             <h2>Public models</h2>
             {% if public_models %}

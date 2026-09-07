@@ -1,17 +1,29 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
+from django.contrib import messages
 from django.http import Http404
 from models_library.models import SketchModel
 from data_manager.models import Dataset
+from accounts.forms import ProfileForm
 
 User = get_user_model()
 
 
 @login_required
 def profile(request):
-    """Render the authenticated user's profile page."""
-    return render(request, "account/profile.html")
+    """Render and update the authenticated user's profile page."""
+    if request.method == "POST":
+        form = ProfileForm(
+            request.POST, request.FILES, instance=request.user
+        )
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Profile updated.")
+            return redirect("profile")
+    else:
+        form = ProfileForm(instance=request.user)
+    return render(request, "account/profile.html", {"form": form})
 
 
 def public_profile(request, username):

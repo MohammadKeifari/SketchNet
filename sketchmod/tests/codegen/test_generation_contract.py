@@ -26,6 +26,10 @@ TEMPLATES_DIR = (
     Path(__file__).resolve().parents[2] / "static" / "sketchmod" / "templates"
 )
 TEMPLATE_WARNING_ALLOWLIST = {"missing-dataset"}
+CATALOG_WARNING_ALLOWLIST = TEMPLATE_WARNING_ALLOWLIST | {
+    "accuracy-label-reshape",
+    "label-shape-squeezed",
+}
 PHASES = ("preprocessing", "training", "evaluation")
 
 
@@ -148,6 +152,62 @@ class StarterTemplateTests(unittest.TestCase):
                 )
                 code = CodeGenerator(graph).generate()
                 compile(code, f"<{path.stem}>", "exec")
+
+
+class CatalogStarterTests(unittest.TestCase):
+    """Seed-starter catalog graphs must be valid and generate compiling code."""
+
+    def test_datasets_match_expected_shapes(self):
+        from accounts.seed.catalog import (
+            DATASETS,
+            EXPECTED_DATASET_COUNT,
+            EXPECTED_DATASET_SHAPES,
+        )
+
+        self.assertEqual(len(DATASETS), EXPECTED_DATASET_COUNT)
+        self.assertEqual(set(EXPECTED_DATASET_SHAPES), {spec["name"] for spec in DATASETS})
+        for spec in DATASETS:
+            with self.subTest(dataset=spec["name"]):
+                frame = spec["loader"]()
+                self.assertEqual(tuple(frame.shape), EXPECTED_DATASET_SHAPES[spec["name"]])
+                self.assertIn("target", frame.columns)
+
+    def test_models_are_valid_and_compile(self):
+        from accounts.seed.catalog import (
+            DATASETS,
+            EXPECTED_MODEL_COUNT,
+            MODELS,
+            build_catalog_graph,
+        )
+
+        self.assertEqual(len(MODELS), EXPECTED_MODEL_COUNT)
+        frames = {spec["name"]: spec["loader"]() for spec in DATASETS}
+        for spec in MODELS:
+            with self.subTest(model=spec["name"]):
+                graph = build_catalog_graph(
+                    spec["name"], spec["dataset"], frames[spec["dataset"]]
+                )
+                report = GraphValidator(graph).validate()
+                self.assertTrue(
+                    report["isValid"],
+                    f"{spec['name']} was rejected: {report['errors']}",
+                )
+                self.assertEqual(report["errors"], [])
+                extra = {
+                    item["code"]
+                    for item in report["warnings"]
+                    if item["code"] not in CATALOG_WARNING_ALLOWLIST
+                }
+                self.assertEqual(
+                    extra,
+                    set(),
+                    f"{spec['name']} raised unexpected warnings: {extra}",
+                )
+                node = next(n for n in graph["nodes"] if n["type"] == "input-data")
+                self.assertTrue(node.get("datasetFile"))
+                self.assertEqual(node.get("datasetFormat"), "csv")
+                code = CodeGenerator(graph).generate()
+                compile(code, f"<{spec['name']}>", "exec")
 
 
 if __name__ == "__main__":

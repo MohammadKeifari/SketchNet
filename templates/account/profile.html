@@ -15,6 +15,11 @@
             <h1>My Profile</h1>
             <p>Manage your account</p>
         </div>
+        {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+            </ul>
+        {% endif %}
         <!-- Account Info -->
         <div class="profile-card">
             <h2>Account Information</h2>
@@ -31,6 +36,63 @@
                 <span class="info-value">{{ user.date_joined|date:"F j, Y" }}</span>
             </div>
         </div>
+        <!-- Public profile -->
+        <div class="profile-card">
+            <h2>Public profile</h2>
+            <form method="post"
+                  action="{% url 'profile' %}"
+                  enctype="multipart/form-data">
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                    <ul class="errorlist">
+                        {% for error in form.non_field_errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+                <div class="profile-avatar-editor">
+                    <div class="profile-avatar-preview user-avatar" aria-hidden="true">
+                        {% include "includes/user_avatar.html" with profile_user=user %}
+                    </div>
+                    <div class="profile-avatar-fields">
+                        <span class="info-label" id="avatar-field-label">Photo</span>
+                        <div class="profile-file-picker">
+                            <label class="btn btn-outline"
+                                   for="{{ form.avatar.id_for_label }}">Choose photo</label>
+                            {{ form.avatar }}
+                            <span class="profile-file-name" id="avatarFileName">No file chosen</span>
+                        </div>
+                        {% if form.avatar.errors %}
+                            <ul class="errorlist">
+                                {% for error in form.avatar.errors %}
+                                    <li>{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                        <p class="form-help">JPEG, PNG, or WebP. 2 MB max.</p>
+                        {% if user.avatar %}
+                            <label class="remove-avatar">
+                                {{ form.remove_avatar }}
+                                Remove photo
+                            </label>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="profile-bio-field">
+                    <label class="info-label" for="{{ form.bio.id_for_label }}">Bio</label>
+                    {{ form.bio }}
+                    {% if form.bio.errors %}
+                        <ul class="errorlist">
+                            {% for error in form.bio.errors %}
+                                <li>{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                    <p class="form-help">Up to 280 characters. Shown on your public profile.</p>
+                </div>
+                <button type="submit" class="btn btn-primary">Save profile</button>
+            </form>
+        </div>
         <!-- Actions -->
         <div class="profile-card">
             <h2>Account Actions</h2>
@@ -42,3 +104,18 @@
         </div>
     </div>
 {% endblock content %}
+{% block extra_js %}
+    <script>
+        (function () {
+            const input = document.getElementById("{{ form.avatar.id_for_label }}");
+            const name = document.getElementById("avatarFileName");
+            if (!input || !name) return;
+            input.addEventListener("change", function () {
+                name.textContent =
+                    input.files && input.files[0]
+                        ? input.files[0].name
+                        : "No file chosen";
+            });
+        })();
+    </script>
+{% endblock extra_js %}
