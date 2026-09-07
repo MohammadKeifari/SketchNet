@@ -4,7 +4,7 @@
     Learn – SketchNet
 {% endblock title %}
 {% block meta_description %}
-    Step-by-step guide to building neural networks in SketchNet: Quick Start, how phases work, node reference, starter templates, and troubleshooting.
+    Step-by-step guide to SketchNet: Quick Start, ports and information flow, how phases work, node reference, starter templates, and troubleshooting.
 {% endblock meta_description %}
 {% block og_title %}
     Learn – SketchNet
@@ -181,6 +181,171 @@
         .phase-icon-training { background: #3b82f6; }
         .phase-icon-evaluation { background: #eab308; }
 
+        .pattern-list a:hover {
+            text-decoration: underline;
+        }
+
+        /* ===== Ports & Flow ===== */
+        .port-legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        .port-legend-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+        .port-icon {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            margin-top: 2px;
+        }
+        .port-icon-data {
+            border-radius: 50%;
+            background: #60a5fa;
+            border: 2px solid #1a1d2e;
+        }
+        .port-icon-multi {
+            border-radius: 50%;
+            background: #a78bfa;
+            border: 2px solid #1a1d2e;
+        }
+        .port-icon-role {
+            background: #ef4444;
+            border: 2px solid #1a1d2e;
+            transform: rotate(45deg) scale(0.85);
+        }
+        .port-icon-param {
+            width: 28px;
+            height: 0;
+            margin-top: 12px;
+            border-top: 3px dashed #fbbf24;
+        }
+        .port-legend-item strong {
+            display: block;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            margin-bottom: 4px;
+        }
+        .port-legend-item span {
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            line-height: 1.55;
+        }
+
+        .rule-list {
+            counter-reset: flow-rule;
+            list-style: none;
+            padding-left: 0;
+            margin-bottom: 24px;
+        }
+        .rule-list li {
+            counter-increment: flow-rule;
+            position: relative;
+            padding-left: 2.4rem;
+            margin-bottom: 16px;
+        }
+        .rule-list li::before {
+            content: counter(flow-rule);
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 1.6rem;
+            height: 1.6rem;
+            border-radius: 50%;
+            background: rgba(var(--accent-rgb, 99, 102, 241), 0.15);
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .rule-list li strong {
+            color: var(--text-primary);
+        }
+
+        .flow-strip {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 6px;
+            padding: 20px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            margin-bottom: 16px;
+        }
+        .flow-node {
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: var(--bg-primary, var(--bg-secondary));
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            font-size: 0.82rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .flow-node-multi {
+            border-color: #a78bfa;
+            box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.35);
+        }
+        .flow-arrow {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            user-select: none;
+        }
+        .flow-note {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 18px;
+        }
+        .flow-branches {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .flow-branch {
+            padding: 14px 16px;
+            border-radius: 10px;
+            border: 1px dashed var(--border);
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+        .flow-branch strong {
+            color: var(--text-primary);
+        }
+
+        .learn-tab-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            font: inherit;
+        }
+        .learn-tab-link:hover {
+            text-decoration: underline;
+        }
+
+        .learn-panel h3.section-heading {
+            font-size: 1.15rem;
+            color: var(--text-primary);
+            margin: 28px 0 14px;
+            font-weight: 700;
+        }
+
         /* Pattern links */
         .pattern-list li {
             margin-bottom: 10px;
@@ -276,6 +441,9 @@
             .learn-header h1 { font-size: 1.8rem; }
             .learn-tab { padding: 12px 16px; font-size: 0.82rem; }
             .learn-cta h2 { font-size: 1.5rem; }
+            .flow-strip { flex-direction: column; align-items: stretch; }
+            .flow-arrow { align-self: center; transform: rotate(90deg); }
+            .flow-node { white-space: normal; text-align: center; }
         }
     </style>
 {% endblock extra_css %}
@@ -300,6 +468,7 @@
         </div>
         <div class="learn-tabs" id="learnTabs" role="tablist" aria-label="Learn sections">
             <button class="learn-tab active" role="tab" aria-selected="true" aria-controls="panel-quickstart" data-tab="quickstart">Quick Start</button>
+            <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-portsflow" data-tab="portsflow">Ports &amp; Flow</button>
             <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-howitworks" data-tab="howitworks">How It Works</button>
             <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-nodes" data-tab="nodes">Nodes</button>
             <button class="learn-tab" role="tab" aria-selected="false" aria-controls="panel-templates" data-tab="templates">Starter Templates</button>
@@ -322,6 +491,7 @@
                 <p>
                     Open <strong>SketchMod</strong>, place nodes from the left toolbar, and connect output ports (right) to input ports (left).
                     Every trainable model needs <strong>Input Data</strong>, at least one layer, an <strong>Output</strong>, and an <strong>Optimizer</strong>.
+                    See <button type="button" class="learn-tab-link" data-goto-tab="portsflow">Ports &amp; Flow</button> for how connections and phase checkboxes work.
                 </p>
             </div>
             <div class="learn-card">
@@ -339,10 +509,95 @@
                 </p>
             </div>
         </div>
+        <div class="learn-panel" id="panel-portsflow" role="tabpanel">
+            <h2>Ports &amp; Flow</h2>
+            <p>
+                A SketchNet graph is a diagram of <strong>nodes</strong> (operations) connected by <strong>links</strong>.
+                Each link runs from an output port on the right of one node to an input port on the left of another.
+                Information flows <strong>forward only</strong> — data-path loops are invalid (see Help for cycle errors).
+            </p>
+
+            <h3 class="section-heading">Port types</h3>
+            <p>Select a port in SketchMod to see its shape and phase checkboxes in the right sidebar (param ports have no phase boxes).</p>
+            <div class="port-legend">
+                <div class="port-legend-item">
+                    <div class="port-icon port-icon-data" aria-hidden="true"></div>
+                    <div>
+                        <strong>Data port</strong>
+                        <span>Colored circle. Carries tensors (features, labels, layer activations). You choose Preprocessing, Training, and/or Evaluation with the checkboxes.</span>
+                    </div>
+                </div>
+                <div class="port-legend-item">
+                    <div class="port-icon port-icon-multi" aria-hidden="true"></div>
+                    <div>
+                        <strong>Multi port</strong>
+                        <span>Purple circle; shows a count when several links attach. Same-phase sources are concatenated. Use this to merge train and test into one layer input.</span>
+                    </div>
+                </div>
+                <div class="port-legend-item">
+                    <div class="port-icon port-icon-role" aria-hidden="true"></div>
+                    <div>
+                        <strong>Role port</strong>
+                        <span>Diamond on the <strong>Output</strong> node: loss, labels, prediction, evaluation. Defaults: loss and labels → Training; prediction and evaluation → Evaluation.</span>
+                    </div>
+                </div>
+                <div class="port-legend-item">
+                    <div class="port-icon port-icon-param" aria-hidden="true"></div>
+                    <div>
+                        <strong>Param port</strong>
+                        <span>Dashed amber/sky link. Shares metadata (normalization stats, category lists) — not the main tensor path. Example: connect Normalize (train) → param → Normalize (test) so test uses train statistics.</span>
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="section-heading">How information flows</h3>
+            <ol class="rule-list">
+                <li><strong>Phase gate on every link</strong> — data crosses a link in a phase only when <em>both</em> ports on that link have that phase checked.</li>
+                <li><strong>Activation spreads downstream</strong> — when a node is active in a phase, connected nodes downstream can activate once their inputs are satisfied.</li>
+                <li><strong>Two input styles</strong> — most nodes need at least one satisfied data input; <strong>Optimizer</strong>, <strong>Add</strong>, <strong>Accuracy</strong>, and <strong>Visualization</strong> need <em>all</em> connected data inputs satisfied in that phase.</li>
+                <li><strong>Param links are side channels</strong> — they share configuration between nodes; they do not replace marking data ports with the correct phases.</li>
+                <li><strong>Shapes propagate automatically</strong> — each port displays a tensor shape as you build. <strong>Check</strong> catches mismatches before export; you do not need to compute shapes by hand.</li>
+            </ol>
+
+            <h3 class="section-heading">Worked example: binary classification</h3>
+            <p class="flow-note">Main path from raw data to loss. Side paths show labels, optimizer, and the test branch merging at the layer.</p>
+            <div class="flow-strip">
+                <span class="flow-node">Input Data</span>
+                <span class="flow-arrow" aria-hidden="true">→</span>
+                <span class="flow-node">Column Select</span>
+                <span class="flow-arrow" aria-hidden="true">→</span>
+                <span class="flow-node">Train / Test Split</span>
+                <span class="flow-arrow" aria-hidden="true">→</span>
+                <span class="flow-node">Normalize</span>
+                <span class="flow-arrow" aria-hidden="true">→</span>
+                <span class="flow-node flow-node-multi">Layer (multi-input)</span>
+                <span class="flow-arrow" aria-hidden="true">→</span>
+                <span class="flow-node">Output</span>
+            </div>
+            <div class="flow-branches">
+                <div class="flow-branch">
+                    <strong>Preprocessing</strong> — mark split and normalize outputs with Preprocessing (and Training/Evaluation where data should continue).
+                </div>
+                <div class="flow-branch">
+                    <strong>Training</strong> — train branch → purple layer input; labels → Output (loss); Output loss → Optimizer. Check Training on those ports and links.
+                </div>
+                <div class="flow-branch">
+                    <strong>Evaluation</strong> — test branch → same purple layer input; connect prediction/evaluation ports to Accuracy or Visualization. Check Evaluation on the test path.
+                </div>
+            </div>
+
+            <div class="learn-card" style="margin-top: 24px;">
+                <h3>Next: runtime phases</h3>
+                <p>
+                    Those three phase checkboxes control where each port runs in the exported script.
+                    Open <button type="button" class="learn-tab-link" data-goto-tab="howitworks">How It Works</button> to see what Preprocessing, Training, and Evaluation do at export time.
+                </p>
+            </div>
+        </div>
         <div class="learn-panel" id="panel-howitworks" role="tabpanel">
             <h2>How It Works</h2>
             <p>
-                SketchNet runs your graph in three stages. You control which stage each port belongs to using the phase checkboxes in the properties panel.
+                Each port's phase checkboxes decide which stage it belongs to. SketchNet runs your graph in three stages at export time.
             </p>
             <div class="learn-card">
                 <h3>
@@ -417,7 +672,7 @@
                 <h3>Advanced</h3>
                 <ul>
                     <li><strong>Dim Select</strong> — slice along extra dimensions.</li>
-                    <li><strong>Param ports</strong> (dashed links) — share normalization or category lists between nodes.</li>
+                    <li><strong>Param ports</strong> — see <button type="button" class="learn-tab-link" data-goto-tab="portsflow">Ports &amp; Flow</button> for dashed param links and metadata sharing.</li>
                 </ul>
             </details>
         </div>
@@ -455,7 +710,7 @@
             </div>
             <div class="learn-card">
                 <h3>Optimizer not in training phase</h3>
-                <p>The Optimizer must be reachable in the <strong>Training</strong> phase. Check phase boxes on its ports and upstream links.</p>
+                <p>See <button type="button" class="learn-tab-link" data-goto-tab="portsflow">Ports &amp; Flow</button>: the Optimizer must be reachable in the <strong>Training</strong> phase, with phase boxes checked on every link in that path.</p>
             </div>
             <div class="learn-card">
                 <h3>No optimizer / no training loop</h3>
@@ -467,11 +722,11 @@
             </div>
             <div class="learn-card">
                 <h3>Evaluation cannot reuse the trained model</h3>
-                <p>Connect train and test data to the <strong>same</strong> model input port (purple multi-input).</p>
+                <p>See <button type="button" class="learn-tab-link" data-goto-tab="portsflow">Ports &amp; Flow</button>: connect train and test data to the <strong>same</strong> model input port (purple multi-input).</p>
             </div>
             <div class="learn-card">
                 <h3>Data-flow or param-port cycle</h3>
-                <p>Remove a link that creates a loop. Param links (dashed) must not circle back.</p>
+                <p>See <button type="button" class="learn-tab-link" data-goto-tab="portsflow">Ports &amp; Flow</button>: remove a link that creates a loop. Data flows forward only; param links (dashed) must not circle back.</p>
             </div>
             <div class="learn-card">
                 <h3>Model does not learn</h3>
@@ -506,20 +761,25 @@
 {% endblock content %}
 {% block extra_js %}
     <script>
-        // Simple tab switcher
-        const tabs = document.querySelectorAll('.learn-tab');
-        const panels = document.querySelectorAll('.learn-panel');
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                tabs.forEach(t => {
-                    t.classList.remove('active');
-                    t.setAttribute('aria-selected', 'false');
-                });
-                panels.forEach(p => p.classList.remove('active'));
-                tab.classList.add('active');
-                tab.setAttribute('aria-selected', 'true');
-                document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+        function activateLearnTab(tabName) {
+            const tabs = document.querySelectorAll('.learn-tab');
+            const panels = document.querySelectorAll('.learn-panel');
+            tabs.forEach(t => {
+                const isActive = t.dataset.tab === tabName;
+                t.classList.toggle('active', isActive);
+                t.setAttribute('aria-selected', isActive ? 'true' : 'false');
             });
+            panels.forEach(p => p.classList.remove('active'));
+            const panel = document.getElementById('panel-' + tabName);
+            if (panel) panel.classList.add('active');
+        }
+
+        document.querySelectorAll('.learn-tab').forEach(tab => {
+            tab.addEventListener('click', () => activateLearnTab(tab.dataset.tab));
+        });
+
+        document.querySelectorAll('[data-goto-tab]').forEach(link => {
+            link.addEventListener('click', () => activateLearnTab(link.dataset.gotoTab));
         });
     </script>
 {% endblock extra_js %}
