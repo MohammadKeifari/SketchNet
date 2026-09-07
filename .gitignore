@@ -13,4 +13,5 @@ todo.txt
 # Ignore generated dumps only, not fixture scripts.
 sketchmod/tests/codegen/examples/*_generated.py
 sketchmod/tests/codegen/examples/model.py
+sketchmod/tests/codegen/examples/data_generator.py
 .cursor/
