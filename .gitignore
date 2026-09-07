@@ -11,3 +11,4 @@ media/
 todo.txt
 sketchmod/tests/codegen/examples/*.py
 # sketchmod/tests/codegen/examples/data
+.cursor/
