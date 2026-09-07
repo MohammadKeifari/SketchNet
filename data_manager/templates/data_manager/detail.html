@@ -63,7 +63,7 @@
                    onclick="copyToClipboard('{{ dataset.dataset_id }}')"
                    title="Click to copy">ID: {{ dataset.dataset_id }}</p>
                 <p class="detail-meta">
-                    Uploaded by <strong>{{ dataset.owner.username }}</strong>
+                    Uploaded by {% include "includes/profile_link.html" with profile_user=dataset.owner emphasized=True %}
                     · {{ dataset.get_format_display }}
                     · {{ dataset.created_at|date:"F j, Y" }}
                 </p>

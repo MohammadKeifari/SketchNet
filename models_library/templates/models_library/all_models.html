@@ -83,7 +83,7 @@
                                       onclick="copyToClipboard('{{ model.model_id }}')"
                                       title="Click to copy">{{ model.model_id }}</span>
                             </td>
-                            <td>{{ model.owner.username }}</td>
+                            <td>{% include "includes/profile_link.html" with profile_user=model.owner %}</td>
                             <td class="td-stats">
                                 <svg width="13"
                                      height="13"

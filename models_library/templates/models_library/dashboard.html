@@ -223,7 +223,7 @@
                             <h3 class="card-title">
                                 <a href="{% url 'models:view' model.model_id %}">{{ model.name }}</a>
                             </h3>
-                            <p class="card-id">{{ model.owner.username }}</p>
+                            <p class="card-id">{% include "includes/profile_link.html" with profile_user=model.owner %}</p>
                             <div class="card-actions">
                                 <a href="{% url 'models:view' model.model_id %}"
                                    class="icon-btn"
@@ -395,7 +395,7 @@
                                           onclick="copyToClipboard('{{ model.model_id }}')"
                                           title="Click to copy">{{ model.model_id }}</span>
                                 </td>
-                                <td>{{ model.owner.username }}</td>
+                                <td>{% include "includes/profile_link.html" with profile_user=model.owner %}</td>
                                 <td class="td-stats">
                                     <svg width="13"
                                          height="13"

@@ -235,7 +235,7 @@
                    onclick="copyToClipboard('{{ model.model_id }}')"
                    title="Click to copy">{{ model.model_id }}</p>
                 <p class="model-meta">
-                    By <strong>{{ model.owner.username }}</strong> · {{ model.created_at|date:"F j, Y" }}
+                    By {% include "includes/profile_link.html" with profile_user=model.owner emphasized=True %} · {{ model.created_at|date:"F j, Y" }}
                 </p>
                 <div class="model-stats">
                     <svg width="14"

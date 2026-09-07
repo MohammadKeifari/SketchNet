@@ -1,0 +1,6 @@
+{% if profile_user.settings.public_profile or user.is_authenticated and user == profile_user %}
+    <a href="{% url 'public_profile' profile_user.username %}"
+       class="profile-link{% if emphasized %} profile-link-emphasis{% endif %}{% if monospace %} profile-link-mono{% endif %}">{{ profile_user.username }}</a>
+{% else %}
+    <span class="profile-username{% if emphasized %} profile-link-emphasis{% endif %}">{{ profile_user.username }}</span>
+{% endif %}

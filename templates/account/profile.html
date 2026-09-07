@@ -20,7 +20,7 @@
             <h2>Account Information</h2>
             <div class="info-row">
                 <span class="info-label">Username</span>
-                <span class="info-value">{{ user.username }}</span>
+                <span class="info-value">{% include "includes/profile_link.html" with profile_user=user %}</span>
             </div>
             <div class="info-row">
                 <span class="info-label">Email</span>

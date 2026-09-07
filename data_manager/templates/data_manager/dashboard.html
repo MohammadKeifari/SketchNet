@@ -150,7 +150,7 @@
                                           onclick="copyToClipboard('{{ dataset.dataset_id }}')"
                                           title="Click to copy">{{ dataset.dataset_id }}</span>
                                 </td>
-                                <td>{{ dataset.owner.username }}</td>
+                                <td>{% include "includes/profile_link.html" with profile_user=dataset.owner %}</td>
                                 <td>
                                     <span class="format-badge">{{ dataset.get_format_display }}</span>
                                 </td>

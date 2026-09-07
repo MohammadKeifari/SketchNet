@@ -233,6 +233,11 @@
     color: var(--text-secondary);
 }
 
+.setting-desc .profile-link-path {
+    margin-left: 2px;
+    vertical-align: baseline;
+}
+
 .toggle-switch {
     position: relative;
     display: inline-block;

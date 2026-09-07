@@ -290,7 +290,8 @@
                         <span class="setting-label">Public profile</span>
                         <span class="setting-desc">
                             Show your public models and datasets at
-                            <a href="{% url 'public_profile' user.username %}">/accounts/u/{{ user.username }}/</a>
+                            <a href="{% url 'public_profile' user.username %}"
+                               class="profile-link profile-link-path">/accounts/u/{{ user.username }}/</a>
                         </span>
                     </div>
                     <label class="toggle-switch">
