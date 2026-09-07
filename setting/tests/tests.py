@@ -151,7 +151,8 @@ class SettingsViewTests(TestCase):
         """Verify change theme to dark."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.post(self.settings_url, {"theme": "dark"})
-        self.assertRedirects(response, self.settings_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Settings saved.")
         self.user.settings.refresh_from_db()
         self.assertEqual(self.user.settings.theme, "dark")
 
@@ -159,7 +160,8 @@ class SettingsViewTests(TestCase):
         """Verify change theme to rose."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.post(self.settings_url, {"theme": "rose"})
-        self.assertRedirects(response, self.settings_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Settings saved.")
         self.user.settings.refresh_from_db()
         self.assertEqual(self.user.settings.theme, "rose")
 

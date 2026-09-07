@@ -198,7 +198,7 @@ def output_roles(code: str) -> dict:
 
 
 def figure_titles(code: str) -> list:
-    return re.findall(r"plt\.title\('([^']*)'\)", code)
+    return re.findall(r"""plt\.title\(['"]([^'"]*)['"]\)""", code)
 
 
 def mentions(code: str, identifier: str) -> bool:

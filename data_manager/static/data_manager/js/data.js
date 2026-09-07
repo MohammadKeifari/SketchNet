@@ -382,8 +382,8 @@ const toggleText = document.getElementById("toggleText");
 if (isPrivateCheckbox && toggleText) {
     isPrivateCheckbox.addEventListener("change", () => {
         toggleText.textContent = isPrivateCheckbox.checked
-            ? "Private Dataset"
-            : "Public Dataset";
+            ? "Private"
+            : "Public";
     });
 }
 

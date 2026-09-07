@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from data_manager.models import Dataset
+from data_manager.services import infer_dataset_shape
 
 User = get_user_model()
 
@@ -30,6 +31,11 @@ class DataViewTests(TestCase):
             file=self.file,
             owner=self.user,
         )
+        shape, known = infer_dataset_shape(self.dataset)
+        if shape:
+            self.dataset.inferred_shape = shape
+            self.dataset.shape_known = known
+            self.dataset.save()
 
     def _login(self):
         """Log in the test user."""
