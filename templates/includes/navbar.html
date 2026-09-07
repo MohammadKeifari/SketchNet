@@ -105,6 +105,7 @@
                 {% endif %}
             </li>
             <!-- 6. Settings -->
+            {% if user.is_authenticated %}
             <li class="nav-item">
                 <a href="{% url "setting:settings" %}"
                    class="nav-link"
@@ -120,6 +121,7 @@
                     <span>Settings</span>
                 </a>
             </li>
+            {% endif %}
         </ul>
     </div>
     <!-- Right: User Avatar -->
