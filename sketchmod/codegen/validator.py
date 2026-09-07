@@ -21,6 +21,10 @@ from .analysis import Analysis, MODEL_TYPES, PARAMETRIC_TYPES
 from .graph import parse_graph
 from .nodes import SUPPORTED_TYPES
 from .phase_analyzer import analyze_phases
+from .sanitize import safe_dim_slice, safe_filename, safe_slice_expr
+
+MAX_GRAPH_NODES = 500
+MAX_GRAPH_LINKS = 2000
 
 #: Minimum number of data inputs each node type needs to mean anything.
 #: A node below its minimum has nothing to compute from, so the graph cannot
@@ -61,6 +65,7 @@ class GraphValidator:
         self.warnings = []
 
         for check in (
+            self._graph_size_limits,
             self._required_nodes,
             self._known_node_types,
             self._data_flow_cycles,
@@ -84,6 +89,7 @@ class GraphValidator:
             self._reshape_feasibility,
             self._early_stopping_without_validation,
             self._input_data_source,
+            self._unsafe_properties,
         ):
             check()
 
@@ -138,6 +144,59 @@ class GraphValidator:
     # ==================================================================
     #  Errors: the graph cannot be translated
     # ==================================================================
+    def _graph_size_limits(self):
+        node_count = len(self.graph.nodes)
+        link_count = len(self.graph.links)
+        if node_count > MAX_GRAPH_NODES:
+            self._error(
+                "graph-too-large",
+                f"The graph has {node_count} nodes; the limit is {MAX_GRAPH_NODES}.",
+                nodeId=None,
+            )
+        if link_count > MAX_GRAPH_LINKS:
+            self._error(
+                "graph-too-large",
+                f"The graph has {link_count} links; the limit is {MAX_GRAPH_LINKS}.",
+                nodeId=None,
+            )
+
+    def _unsafe_properties(self):
+        for node in self.graph.nodes.values():
+            props = node.properties or {}
+            if node.type == "input-data":
+                filename = props.get("datasetFile")
+                if filename and safe_filename(filename) is None:
+                    self._error(
+                        "unsafe-property",
+                        f"Input Data node '{node.id}' has an unsafe dataset filename.",
+                        nodeId=node.id,
+                    )
+            if node.type == "column-select":
+                text = str(props.get("columnInput") or "").strip()
+                if text and ":" in text and safe_slice_expr(text) is None:
+                    self._error(
+                        "unsafe-property",
+                        f"Column Select '{node.id}' has an invalid slice expression.",
+                        nodeId=node.id,
+                    )
+            if node.type == "row-select" and props.get("method") == "slice":
+                text = str(props.get("value") or "").strip()
+                if text and safe_slice_expr(text) is None:
+                    self._error(
+                        "unsafe-property",
+                        f"Row Select '{node.id}' has an invalid slice expression.",
+                        nodeId=node.id,
+                    )
+            if node.type == "dim-select":
+                for index, selection in enumerate(props.get("dimSelections") or []):
+                    token = str(selection).strip()
+                    if token and token != ":" and safe_dim_slice(token) is None:
+                        self._error(
+                            "unsafe-property",
+                            f"Dim Select '{node.id}' has an invalid slice at dimension {index}.",
+                            nodeId=node.id,
+                        )
+
     def _required_nodes(self):
         if not self._nodes_of("input-data"):
             self._error(

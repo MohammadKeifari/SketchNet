@@ -5,12 +5,39 @@ import os
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from data_manager.models import Dataset
 from .codegen.generator import CodeGenerator
 from .codegen.validator import GraphValidator
 from .codegen.phase_analyzer import highlight_path
+
+MAX_GRAPH_BODY_BYTES = 2 * 1024 * 1024
+
+
+def _parse_graph_request(request):
+    if len(request.body) > MAX_GRAPH_BODY_BYTES:
+        return None, None, JsonResponse(
+            {"success": False, "error": "Graph payload too large."}, status=413
+        )
+    data = json.loads(request.body)
+    graph_json = data.get("graph", "{}")
+    if isinstance(graph_json, str):
+        graph = json.loads(graph_json)
+    else:
+        graph = graph_json
+    return graph, data, None
+
+
+def _zip_requirements(code: str) -> str:
+    lines = [
+        "torch>=2.0.0",
+        "numpy>=1.24.0",
+        "matplotlib>=3.7.0",
+        "pandas>=2.0.0",
+    ]
+    if "sklearn" in code:
+        lines.append("scikit-learn>=1.3.0")
+    return "\n".join(lines) + "\n"
 
 
 @login_required
@@ -60,27 +87,36 @@ def api_dataset_columns(request, dataset_id):
 
 
 @login_required
-@csrf_exempt
 def export_api(request):
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "POST required"}, status=405)
     try:
-        data = json.loads(request.body)
-        graph_json = data.get("graph", "{}")
+        graph, data, error = _parse_graph_request(request)
+        if error:
+            return error
+
         export_format = data.get("format", "pytorch-py")
 
-        if isinstance(graph_json, str):
-            graph = json.loads(graph_json)
-        else:
-            graph = graph_json
+        validation = GraphValidator(graph).validate()
+        if not validation["isValid"]:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": "Graph validation failed.",
+                    "errors": validation["errors"],
+                    "warnings": validation["warnings"],
+                },
+                status=400,
+            )
 
-        generator = CodeGenerator(graph)
-        code = generator.generate()
+        code = CodeGenerator(graph).generate()
 
         if export_format == "pytorch-zip":
             return _export_zip(graph, code, request)
 
         return JsonResponse({"success": True, "code": code, "filename": "model.py"})
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
@@ -89,10 +125,8 @@ def _export_zip(graph, code, request):
     """Create a zip file containing model.py and dataset files."""
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Add the generated model.py
         zf.writestr("model.py", code)
 
-        # Find InputDataNode and add dataset if available
         input_node = next(
             (n for n in graph.get("nodes", []) if n["type"] == "input-data"),
             None,
@@ -101,7 +135,13 @@ def _export_zip(graph, code, request):
             dataset_id = input_node["datasetId"]
             try:
                 dataset = Dataset.objects.get(dataset_id=dataset_id)
-                if dataset.file and dataset.file.name:
+                if not dataset.is_visible_to(request.user):
+                    zf.writestr(
+                        "data/README.txt",
+                        "You do not have access to the selected dataset.\n"
+                        "Add your own data to the data/ folder and update load_data().\n",
+                    )
+                elif dataset.file and dataset.file.name:
                     file_path = os.path.join(settings.MEDIA_ROOT, dataset.file.name)
                     if os.path.exists(file_path):
                         filename = os.path.basename(dataset.file.name)
@@ -154,11 +194,7 @@ def _export_zip(graph, code, request):
                 "Add your dataset to the 'data/' folder and update load_data() in model.py\n",
             )
 
-        # Add requirements.txt
-        zf.writestr(
-            "requirements.txt",
-            "torch>=2.0.0\nnumpy>=1.24.0\nmatplotlib>=3.7.0\npandas>=2.0.0\n",
-        )
+        zf.writestr("requirements.txt", _zip_requirements(code))
 
     zip_buffer.seek(0)
     response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")
@@ -167,41 +203,34 @@ def _export_zip(graph, code, request):
 
 
 @login_required
-@csrf_exempt
 def validate_api(request):
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "POST required"}, status=405)
     try:
-        data = json.loads(request.body)
-        graph_json = data.get("graph", "{}")
-        if isinstance(graph_json, str):
-            graph = json.loads(graph_json)
-        else:
-            graph = graph_json
-
-        validator = GraphValidator(graph)
-        result = validator.validate()
+        graph, _, error = _parse_graph_request(request)
+        if error:
+            return error
+        result = GraphValidator(graph).validate()
         return JsonResponse({"success": True, **result})
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
 @login_required
-@csrf_exempt
 def highlight_path_api(request):
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "POST required"}, status=405)
     try:
-        data = json.loads(request.body)
-        graph_json = data.get("graph", "{}")
+        graph, data, error = _parse_graph_request(request)
+        if error:
+            return error
         phase = data.get("phase", "")
-        if isinstance(graph_json, str):
-            graph = json.loads(graph_json)
-        else:
-            graph = graph_json
-
         result = highlight_path(graph, phase)
         return JsonResponse({"success": True, **result})
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 

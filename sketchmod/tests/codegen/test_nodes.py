@@ -417,7 +417,7 @@ class PrintTest(EmitterTest):
         node = self.node("p", "print", {"label": "loss"}, outputs=0)
         self.assertEqual(
             self.emit(node, ["out.loss"])["statements"],
-            ['print("loss[0]:", out.loss.shape, out.loss)'],
+            ['print("loss" + f\'[0]:\', out.loss.shape, out.loss)'],
         )
 
 
@@ -473,7 +473,7 @@ class VisualizationTest(EmitterTest):
             "cmap=viz_cmap, alpha=0.5)",
             joined,
         )
-        self.assertIn("plt.title('clusters')", joined)
+        self.assertIn('plt.title("clusters")', joined)
 
     def test_single_coordinate_draws_a_histogram(self):
         node = Node(

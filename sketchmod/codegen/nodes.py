@@ -11,6 +11,7 @@ serve every phase, instead of the old ``placement="data"`` /
 
 from .analysis import Analysis
 from .naming import snake
+from .sanitize import py_string_literal, safe_dim_slice, safe_filename, safe_slice_expr
 
 # Activations that only exist under torch.nn.functional.
 _FUNCTIONAL_ACTIVATIONS = frozenset(
@@ -214,8 +215,11 @@ class InputDataEmitter(NodeEmitter):
         filename = n.props.get("datasetFile")
         if not (n.props.get("datasetId") and filename):
             return None, None
-        fmt = n.props.get("datasetFormat") or filename.rsplit(".", 1)[-1]
-        return _READERS.get(str(fmt).lower()), filename
+        safe_name = safe_filename(filename)
+        if safe_name is None:
+            return None, None
+        fmt = n.props.get("datasetFormat") or safe_name.rsplit(".", 1)[-1]
+        return _READERS.get(str(fmt).lower()), safe_name
 
     def prelude(self, n):
         reader, filename = self._reader(n)
@@ -252,7 +256,10 @@ class ColumnSelectEmitter(NodeEmitter):
         if not text:
             return [source]
         if ":" in text:
-            start, _, end = text.partition(":")
+            slice_expr = safe_slice_expr(text)
+            if slice_expr is None:
+                return [source]
+            start, _, end = slice_expr.partition(":")
             return [f"{source}[:, {start.strip() or '0'}:{end.strip()}]"]
         indices = [_int_or_none(p) for p in text.split(",")]
         indices = [i for i in indices if i is not None]
@@ -281,7 +288,10 @@ class RowSelectEmitter(NodeEmitter):
         if method == "random":
             return [f"{source}[{n.temp('perm')}[:{self._count(n)}]]"]
         if method == "slice":
-            start, _, end = value.partition(":")
+            slice_expr = safe_slice_expr(value)
+            if slice_expr is None:
+                return [source]
+            start, _, end = slice_expr.partition(":")
             return [f"{source}[{start.strip() or '0'}:{end.strip()}]"]
         if method == "indices":
             indices = [_int_or_none(p) for p in value.split(",")]
@@ -294,10 +304,12 @@ class DimSelectEmitter(NodeEmitter):
     def expressions(self, n):
         source = n.input(0)
         selections = n.props.get("dimSelections") or []
-        parts = [
-            ":" if not str(s).strip() or str(s).strip() == ":" else str(s).strip()
-            for s in selections
-        ]
+        parts = []
+        for selection in selections:
+            token = safe_dim_slice(selection)
+            if token is None:
+                return [source]
+            parts.append(token)
         if not parts or all(p == ":" for p in parts):
             return [source]
         return [f"{source}[:, {', '.join(parts)}]"]
@@ -559,9 +571,9 @@ class OutputEmitter(NodeEmitter):
 # ======================================================================
 class PrintEmitter(NodeEmitter):
     def statements(self, n):
-        label = n.props.get("label") or n.node.id
+        label = py_string_literal(n.props.get("label") or n.node.id)
         return [
-            f'print("{label}[{i}]:", {expr}.shape, {expr})'
+            f"print({label} + f'[{i}]:', {expr}.shape, {expr})"
             for i, expr in enumerate(n.sources)
         ]
 
@@ -653,7 +665,7 @@ class VisualizationEmitter(NodeEmitter):
             lines.append(f"ax.scatter({flat}, {style})")
 
         lines += [
-            f"plt.title('{n.props.get('label') or n.node.id}')",
+            f"plt.title({py_string_literal(n.props.get('label') or n.node.id)})",
             "plt.grid(True)",
             "plt.show()",
         ]

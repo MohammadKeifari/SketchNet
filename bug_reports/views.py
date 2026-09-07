@@ -2,9 +2,19 @@ import json
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import get_object_or_404, render
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from django.core.cache import cache
 from .models import BugReport
+
+RATE_LIMIT = 5
+RATE_WINDOW_SECONDS = 3600
+
+
+def _client_ip(request):
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "unknown")
 
 
 @staff_member_required
@@ -20,7 +30,6 @@ def admin_canvas(request, pk):
 
 
 @require_POST
-@csrf_exempt
 def submit_report(request):
     """API endpoint for submitting a bug report."""
     try:
@@ -28,17 +37,29 @@ def submit_report(request):
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
 
+    if data.get("_contact_url"):
+        return JsonResponse({"success": True, "report_id": None})
+
+    ip = _client_ip(request)
+    cache_key = f"bug-report:{ip}"
+    count = cache.get(cache_key, 0)
+    if count >= RATE_LIMIT:
+        return JsonResponse(
+            {"success": False, "error": "Too many reports. Try again later."},
+            status=429,
+        )
+    cache.set(cache_key, count + 1, RATE_WINDOW_SECONDS)
+
     report = BugReport.objects.create(
         user=request.user if request.user.is_authenticated else None,
         issue_type=data.get("issue_type", "other"),
-        title=data.get("title", "Untitled Report"),
-        description=data.get("description", ""),
-        expected_behavior=data.get("expected_behavior", ""),
+        title=data.get("title", "Untitled Report")[:200],
+        description=data.get("description", "")[:5000],
+        expected_behavior=data.get("expected_behavior", "")[:5000],
         graph_json=data.get("graph_json"),
-        error_message=data.get("error_message", ""),
+        error_message=data.get("error_message", "")[:2000],
     )
 
-    # Optional: send email notification
     from django.core.mail import mail_admins
 
     mail_admins(
@@ -48,7 +69,7 @@ def submit_report(request):
         f"User: {report.user or 'Anonymous'}\n"
         f"Status: {report.get_status_display()}\n\n"
         f"Description:\n{report.description}\n\n"
-        f"View in admin: http://127.0.0.1:8000/admin/bug_reports/bugreport/{report.pk}/",
+        f"View in admin: /admin/bug_reports/bugreport/{report.pk}/",
         fail_silently=True,
     )
 
