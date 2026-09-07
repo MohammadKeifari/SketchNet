@@ -485,13 +485,10 @@ class GraphValidator:
         if loss_type not in ("cross_entropy", "nll"):
             return
         shape = source.shape
+        # Unknown label shape is already covered by missing-dataset /
+        # unclear-data-shape on Input Data. Only warn when we *have* a
+        # shape that is incompatible with class-index losses.
         if shape is None or not shape.shape:
-            self._warn(
-                "label-shape-unknown",
-                f"Optimizer '{optimizer.id}' uses {loss_type} loss, but the label "
-                "shape cannot be determined. Model might not work.",
-                nodeId=optimizer.id,
-            )
             return
         if len(shape.shape) == 2 and Analysis.dim(source, -1) == 1:
             self._warn(

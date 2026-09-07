@@ -1083,6 +1083,20 @@ class ValidatorTest(unittest.TestCase):
         self.assertEqual(len(r["errors"]), 0, msg=f"Unexpected errors: {r['errors']}")
         self.assertTrue(r["isValid"])
 
+    def test_cross_entropy_without_input_shape_does_not_warn_label_unknown(self):
+        """Missing Input Data shape already warns; do not duplicate on Optimizer."""
+        g = deepcopy(self._base())
+        for node in g["nodes"]:
+            if node["type"] == "input-data":
+                node["dataShape"] = None
+                node["datasetId"] = None
+            if node["type"] == "optimizer":
+                node["lossType"] = "cross_entropy"
+        r = GraphValidator(g).validate()
+        self._assert_has_code(r["warnings"], "missing-dataset")
+        codes = {w.get("code") for w in r["warnings"]}
+        self.assertNotIn("label-shape-unknown", codes)
+
     def test_reshape_infeasible_warning(self):
         g = deepcopy(self._base())
         reshape = {
