@@ -261,3 +261,17 @@ class DatasetModelTests(TestCase):
             owner=self.user,
         )
         self.assertEqual(dataset.views, 0)
+
+    def test_upload_path_strips_traversal(self):
+        """Stored dataset paths stay under datasets/{id}/."""
+        from data_manager.models import dataset_upload_path
+
+        dataset = Dataset.objects.create(
+            name="Path",
+            format="csv",
+            file=self.file,
+            owner=self.user,
+        )
+        path = dataset_upload_path(dataset, "../../etc/passwd.csv")
+        self.assertEqual(path, f"datasets/{dataset.dataset_id}/{dataset.dataset_id}.csv")
+        self.assertNotIn("..", path)

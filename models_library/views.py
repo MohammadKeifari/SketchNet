@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.db.models import Q, Count
 from django.contrib.auth import get_user_model
+from django.views.decorators.http import require_POST
 from .models import SketchModel, ModelAccess
 from django.db.models import F
 import json
@@ -143,6 +144,7 @@ def view_model(request, model_id):
 
 # ===== FORK =====
 @login_required
+@require_POST
 def fork_model(request, model_id):
     """Create a copy of a model owned by the current user."""
     original = get_object_or_404(SketchModel, model_id=model_id)
@@ -208,6 +210,7 @@ def download_model(request, model_id):
 
 # ===== LIKE =====
 @login_required
+@require_POST
 def toggle_like(request, model_id):
     """Toggle the current user's like on a model."""
     model = get_object_or_404(SketchModel, model_id=model_id)

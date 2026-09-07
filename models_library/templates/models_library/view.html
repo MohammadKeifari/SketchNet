@@ -331,9 +331,11 @@
                     </a>
                     {% if model.fork_access == "public" or user == model.owner %}
                         {% if user.is_authenticated %}
-                        <a href="{% url 'models:fork' model.model_id %}" class="btn btn-ghost">
+                        <form method="post" action="{% url 'models:fork' model.model_id %}" style="display:contents">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-ghost">
                         {% else %}
-                        <a href="{% url 'account_login' %}?next={% url 'models:fork' model.model_id %}" class="btn btn-ghost">
+                        <a href="{% url 'account_login' %}?next={% url 'models:view' model.model_id %}" class="btn btn-ghost">
                         {% endif %}
                             <svg width="16"
                                  height="16"
@@ -347,7 +349,12 @@
                                 <path d="M18 9a9 9 0 0 1-9 9" />
                             </svg>
                             Fork
+                        {% if user.is_authenticated %}
+                            </button>
+                        </form>
+                        {% else %}
                         </a>
+                        {% endif %}
                     {% endif %}
                     {% if user.is_authenticated %}
                         <button class="btn btn-ghost like-btn"

@@ -209,7 +209,7 @@ class ModelViewTests(TestCase):
     # ===== FORK =====
     def test_fork_requires_login(self):
         """Verify fork requires login."""
-        response = self.client.get(
+        response = self.client.post(
             reverse("models:fork", kwargs={"model_id": self.model.model_id})
         )
         self.assertEqual(response.status_code, 302)
@@ -224,7 +224,7 @@ class ModelViewTests(TestCase):
 
         self.assertEqual(SketchModel.objects.count(), 1)  # Only original exists
 
-        response = self.client.get(
+        response = self.client.post(
             reverse("models:fork", kwargs={"model_id": self.model.model_id})
         )
 
@@ -246,7 +246,7 @@ class ModelViewTests(TestCase):
         self._login(self.other)
         self.model.fork_access = "private"
         self.model.save()
-        response = self.client.get(
+        response = self.client.post(
             reverse("models:fork", kwargs={"model_id": self.model.model_id})
         )
         self.assertRedirects(
@@ -325,6 +325,14 @@ class ModelViewTests(TestCase):
             reverse("models:like", kwargs={"model_id": self.model.model_id})
         )
         self.assertEqual(response.status_code, 302)
+
+    def test_like_rejects_get(self):
+        """Like cannot be toggled with a GET request."""
+        self._login()
+        response = self.client.get(
+            reverse("models:like", kwargs={"model_id": self.model.model_id})
+        )
+        self.assertEqual(response.status_code, 405)
 
     def test_like_toggles_on(self):
         """Verify like toggles on."""

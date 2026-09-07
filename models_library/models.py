@@ -40,7 +40,9 @@ def cover_upload_path(instance, filename):
     Returns:
         str: The relative path where the file should be stored.
     """
-    ext = filename.split(".")[-1]
+    ext = "".join(
+        c for c in (filename or "").rsplit(".", 1)[-1].lower() if c.isalnum()
+    )[:8] or "png"
     return f"models/covers/{instance.model_id}.{ext}"
 
 

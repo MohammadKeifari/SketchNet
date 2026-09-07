@@ -215,7 +215,12 @@ function addUser(datasetId, userId, username) {
 
     if (allowedUserIds.includes(userId)) return;
 
-    fetch(`/data/${datasetId}/add-user/${userId}/`)
+    fetch(`/data/${encodeURIComponent(datasetId)}/add-user/${userId}/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCookie("csrftoken"),
+        },
+    })
         .then((res) => res.json())
         .then((data) => {
             if (data.success) {
@@ -262,7 +267,12 @@ function removeUser(datasetId, userId) {
         return;
     }
 
-    fetch(`/data/${datasetId}/remove-user/${userId}/`)
+    fetch(`/data/${encodeURIComponent(datasetId)}/remove-user/${userId}/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCookie("csrftoken"),
+        },
+    })
         .then((res) => res.json())
         .then((data) => {
             if (data.success) {
@@ -501,7 +511,7 @@ function updateCreateParams() {
 
     if (type === "classification") {
         html = `
-            <div class="form-group"><label>Samples</label><input type="number" name="n_samples" class="form-input" value="100" min="10"></div>
+            <div class="form-group"><label>Samples</label><input type="number" name="n_samples" class="form-input" value="100" min="10" max="10000"></div>
             <div class="form-group"><label>Features</label><input type="number" name="n_features" class="form-input" value="2" min="1"></div>
             <div class="form-group"><label>Classes</label><input type="number" name="n_classes" class="form-input" value="2" min="2"></div>
             <div class="form-group"><label>Informative Features</label><input type="number" name="n_informative" class="form-input" value="2" min="1"></div>
@@ -512,7 +522,7 @@ function updateCreateParams() {
         `;
     } else if (type === "regression") {
         html = `
-            <div class="form-group"><label>Samples</label><input type="number" name="n_samples" class="form-input" value="100" min="10"></div>
+            <div class="form-group"><label>Samples</label><input type="number" name="n_samples" class="form-input" value="100" min="10" max="10000"></div>
             <div class="form-group"><label>Features</label><input type="number" name="n_features" class="form-input" value="1" min="1"></div>
             <div class="form-group"><label>Informative Features</label><input type="number" name="n_informative" class="form-input" value="1" min="1"></div>
             <div class="form-group"><label>Noise</label><input type="number" name="noise" class="form-input" value="0.1" step="0.01" min="0"></div>
@@ -521,7 +531,7 @@ function updateCreateParams() {
         `;
     } else if (type === "clustering") {
         html = `
-            <div class="form-group"><label>Samples</label><input type="number" name="n_samples" class="form-input" value="100" min="10"></div>
+            <div class="form-group"><label>Samples</label><input type="number" name="n_samples" class="form-input" value="100" min="10" max="10000"></div>
             <div class="form-group"><label>Features</label><input type="number" name="n_features" class="form-input" value="2" min="1"></div>
             <div class="form-group"><label>Centers (clusters)</label><input type="number" name="centers" class="form-input" value="3" min="1"></div>
             <div class="form-group"><label>Cluster Std Dev</label><input type="number" name="cluster_std" class="form-input" value="1.0" step="0.1" min="0.1"></div>

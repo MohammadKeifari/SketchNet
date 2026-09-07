@@ -180,7 +180,7 @@ class SketchModelTests(TestCase):
         self.assertTrue(logged_in, "Login failed")
 
         url = reverse("models:fork", kwargs={"model_id": original.model_id})
-        response = self.client.get(url)
+        response = self.client.post(url)
         self.assertEqual(response.status_code, 302)
 
         original.refresh_from_db()

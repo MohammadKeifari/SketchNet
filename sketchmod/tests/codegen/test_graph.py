@@ -509,5 +509,19 @@ class GraphParsingTest(unittest.TestCase):
         self.assertEqual(int(out_shape.shape[1]), 3 * 32 * 32)
 
 
+class GraphParseErrorTests(unittest.TestCase):
+    def test_nodes_must_be_a_list(self):
+        from sketchmod.codegen.graph import GraphParseError, parse_graph
+
+        with self.assertRaises(GraphParseError):
+            parse_graph({"nodes": "not-a-list"})
+
+    def test_node_must_be_object(self):
+        from sketchmod.codegen.graph import GraphParseError, parse_graph
+
+        with self.assertRaises(GraphParseError):
+            parse_graph({"nodes": ["layer"], "links": []})
+
+
 if __name__ == "__main__":
     unittest.main()

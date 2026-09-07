@@ -199,10 +199,32 @@ class Graph:
 # ---------------------------------------------------------------------------
 #  JSON → Graph
 # ---------------------------------------------------------------------------
+class GraphParseError(ValueError):
+    """Raised when canvas JSON cannot be turned into a Graph."""
+
+
+def _as_dict(value, label):
+    if not isinstance(value, dict):
+        raise GraphParseError(f"{label} must be an object.")
+    return value
+
+
+def _as_list(value, label):
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise GraphParseError(f"{label} must be a list.")
+    return value
+
+
 def parse_graph(json_data: dict) -> Graph:
     graph = Graph()
+    data = _as_dict(json_data, "Graph")
 
-    for n in json_data.get("nodes", []):
+    for n in _as_list(data.get("nodes"), "Graph nodes"):
+        n = _as_dict(n, "Node")
+        if "id" not in n or "type" not in n:
+            raise GraphParseError("Each node needs id and type.")
         node = Node(
             id=n["id"],
             type=n["type"],
@@ -212,13 +234,16 @@ def parse_graph(json_data: dict) -> Graph:
         )
 
         def make_port(p: dict, port_type: str, kind: str, idx: int) -> Port:
+            p = _as_dict(p, "Port")
+            if "id" not in p:
+                raise GraphParseError("Each port needs an id.")
             return Port(
                 id=p["id"],
                 node_id=n["id"],
                 type=port_type,
                 index=idx,
                 sub_type=p.get("subType"),
-                port_kind=kind,
+                port_kind="param" if kind == "param" else p.get("portKind", kind),
                 role=p.get("role"),
                 activation_phases=p.get("activationPhases", []),
                 bias=p.get("bias", 0.0),
@@ -226,32 +251,35 @@ def parse_graph(json_data: dict) -> Graph:
             )
 
         # data inputs
-        for i, p in enumerate(n.get("inputPorts", [])):
-            port = make_port(p, "input", p.get("portKind", "data"), i)
+        for i, p in enumerate(_as_list(n.get("inputPorts"), "inputPorts")):
+            port = make_port(p, "input", "data", i)
             node.inputs.append(port)
             graph.ports[port.id] = port
 
         # data outputs
-        for i, p in enumerate(n.get("outputPorts", [])):
-            port = make_port(p, "output", p.get("portKind", "data"), i)
+        for i, p in enumerate(_as_list(n.get("outputPorts"), "outputPorts")):
+            port = make_port(p, "output", "data", i)
             node.outputs.append(port)
             graph.ports[port.id] = port
 
         # param inputs
-        for i, p in enumerate(n.get("paramInputs", [])):
+        for i, p in enumerate(_as_list(n.get("paramInputs"), "paramInputs")):
             port = make_port(p, "input", "param", i)
             node.paramInputs.append(port)
             graph.ports[port.id] = port
 
         # param outputs
-        for i, p in enumerate(n.get("paramOutputs", [])):
+        for i, p in enumerate(_as_list(n.get("paramOutputs"), "paramOutputs")):
             port = make_port(p, "output", "param", i)
             node.paramOutputs.append(port)
             graph.ports[port.id] = port
 
         graph.nodes[node.id] = node
 
-    for l in json_data.get("links", []):
+    for l in _as_list(data.get("links"), "Graph links"):
+        l = _as_dict(l, "Link")
+        if "from" not in l or "to" not in l:
+            raise GraphParseError("Each link needs from and to.")
         link = Link(
             id_from=l["from"],
             id_to=l["to"],

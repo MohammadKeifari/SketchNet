@@ -24,15 +24,24 @@ def default_cover_svg():
     )
 
 
+def _safe_ext(filename, fallback="bin"):
+    """Return a short alphanumeric extension from an uploaded filename."""
+    name = (filename or "").replace("\\", "/").split("/")[-1]
+    if "." not in name:
+        return fallback
+    ext = "".join(c for c in name.rsplit(".", 1)[-1].lower() if c.isalnum())[:8]
+    return ext or fallback
+
+
 def dataset_upload_path(instance, filename):
     """Upload to datasets/{dataset_id}/{filename}"""
-    ext = filename.split(".")[-1]
+    ext = _safe_ext(filename, "bin")
     return f"datasets/{instance.dataset_id}/{instance.dataset_id}.{ext}"
 
 
 def cover_upload_path(instance, filename):
     """Upload to datasets/covers/{dataset_id}.{ext}"""
-    ext = filename.split(".")[-1]
+    ext = _safe_ext(filename, "png")
     return f"datasets/covers/{instance.dataset_id}.{ext}"
 
 

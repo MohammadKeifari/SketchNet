@@ -209,7 +209,7 @@ class ViewsTest(TestCase):
         self.assertIn("filename", data)
 
     def test_export_does_not_leak_internal_errors(self):
-        """Unexpected export failures return a generic message."""
+        """Malformed graphs return a generic 400 instead of a traceback."""
         self.client.login(username="testuser", password="testpass123")
         payload = {"graph": {"nodes": "not-a-list"}}
         response = self.client.post(
@@ -217,7 +217,8 @@ class ViewsTest(TestCase):
             data=json.dumps(payload),
             content_type="application/json",
         )
-        self.assertIn(response.status_code, (400, 500))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "Invalid graph.")
         self.assertNotIn("Traceback", response.content.decode())
 
     def test_export_invalid_json(self):

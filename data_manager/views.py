@@ -4,15 +4,17 @@ from django.contrib import messages
 from django.http import FileResponse, JsonResponse
 from django.db.models import Q, Count
 from django.contrib.auth import get_user_model
+from django.views.decorators.http import require_POST
 from .models import Dataset
 from .forms import DatasetForm, DatasetEditForm
 from django.core.files import File
 
 import tempfile
 import os
-import traceback
+import logging
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 def get_visible_datasets(user):
@@ -188,6 +190,7 @@ def download_dataset(request, dataset_id):
 
 # ===== LIKE =====
 @login_required
+@require_POST
 def toggle_like(request, dataset_id):
     """Toggle the current user's like on a dataset."""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
@@ -316,6 +319,7 @@ def search_users(request, dataset_id):
 
 
 @login_required
+@require_POST
 def add_allowed_user(request, dataset_id, user_id):
     """Add a user to private dataset"""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
@@ -330,6 +334,7 @@ def add_allowed_user(request, dataset_id, user_id):
 
 
 @login_required
+@require_POST
 def remove_allowed_user(request, dataset_id, user_id):
     """Remove a user from private dataset"""
     dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
@@ -482,17 +487,36 @@ def generate_dataset(request):
     if ds_type not in defaults:
         return JsonResponse({"error": "Unknown dataset type."}, status=400)
 
-    # Merge defaults with user kwargs
-    final_kwargs = {**defaults[ds_type], **kwargs}
+    # Merge defaults with user kwargs (only known sklearn keys)
+    allowed = set(defaults[ds_type].keys())
+    user_kwargs = {k: v for k, v in kwargs.items() if k in allowed}
+    final_kwargs = {**defaults[ds_type], **user_kwargs}
     # Remove None values that sklearn might not accept
     final_kwargs.pop("random_state", None)
+
+    def _clamp(key, lo, hi, default):
+        try:
+            n = int(final_kwargs.get(key, default))
+        except (TypeError, ValueError):
+            n = default
+        final_kwargs[key] = max(lo, min(hi, n))
+
+    _clamp("n_samples", 10, 10_000, 100)
+    _clamp("n_features", 1, 64, 2)
+    if "n_informative" in final_kwargs:
+        _clamp("n_informative", 1, int(final_kwargs["n_features"]), 1)
+    if "n_classes" in final_kwargs:
+        _clamp("n_classes", 2, 50, 2)
+    if "centers" in final_kwargs:
+        _clamp("centers", 1, 50, 3)
 
     try:
         import pandas as pd
         from sklearn.datasets import make_classification, make_regression, make_blobs
-    except ImportError as e:
+    except ImportError:
+        logger.exception("sklearn is not installed")
         return JsonResponse(
-            {"error": f"Missing Python package: {e}. Please install scikit-learn."},
+            {"error": "Dataset generation is unavailable."},
             status=500,
         )
 
@@ -547,10 +571,9 @@ def generate_dataset(request):
             }
         )
 
-    except Exception as e:
-        # Always return JSON, never HTML
-        traceback.print_exc()
-        return JsonResponse({"error": f"Generation failed: {str(e)}"}, status=500)
+    except Exception:
+        logger.exception("Dataset generation failed")
+        return JsonResponse({"error": "Generation failed."}, status=500)
 
     finally:
         if "tmp" in locals() and os.path.exists(tmp.name):

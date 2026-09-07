@@ -13,6 +13,7 @@ from data_manager.models import Dataset
 from models_library.models import SketchModel
 from .codegen.generator import CodeGenerator
 from .codegen.validator import GraphValidator
+from .codegen.graph import GraphParseError
 from .codegen.phase_analyzer import highlight_path
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,8 @@ def export_api(request):
         return JsonResponse({"success": True, "code": code, "filename": "model.py"})
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+    except GraphParseError:
+        return JsonResponse({"success": False, "error": "Invalid graph."}, status=400)
     except Exception:
         logger.exception("export_api failed")
         return _api_error("Export failed.")
@@ -264,6 +267,8 @@ def validate_api(request):
         return JsonResponse({"success": True, **result})
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+    except GraphParseError:
+        return JsonResponse({"success": False, "error": "Invalid graph."}, status=400)
     except Exception:
         logger.exception("validate_api failed")
         return _api_error("Validation failed.")
@@ -281,6 +286,8 @@ def highlight_path_api(request):
         return JsonResponse({"success": True, **result})
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+    except GraphParseError:
+        return JsonResponse({"success": False, "error": "Invalid graph."}, status=400)
     except Exception:
         logger.exception("highlight_path_api failed")
         return _api_error("Highlight failed.")

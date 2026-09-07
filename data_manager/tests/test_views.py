@@ -244,6 +244,15 @@ class DataViewTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
 
+    def test_like_rejects_get(self):
+        """Like cannot be toggled with a GET request."""
+        self._login()
+        response = self.client.get(
+            reverse("data:like", kwargs={"dataset_id": self.dataset.dataset_id})
+        )
+        self.assertEqual(response.status_code, 405)
+        self.assertFalse(self.dataset.liked_by.filter(id=self.user.id).exists())
+
     def test_like_toggles_on(self):
         """Liking a dataset adds user to liked_by"""
         self._login()
@@ -372,12 +381,29 @@ class DataViewTests(TestCase):
         data = response.json()
         self.assertEqual(len(data["users"]), 0)
 
+    def test_add_allowed_user_rejects_get(self):
+        """Adding collaborators requires POST so the action cannot be CSRF'd via GET."""
+        self._login()
+        self.dataset.is_private = True
+        self.dataset.save()
+        response = self.client.get(
+            reverse(
+                "data:add_user",
+                kwargs={
+                    "dataset_id": self.dataset.dataset_id,
+                    "user_id": self.other.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 405)
+        self.assertFalse(self.dataset.allowed_users.filter(id=self.other.id).exists())
+
     def test_add_allowed_user(self):
         """Owner can add user to private dataset"""
         self._login()
         self.dataset.is_private = True
         self.dataset.save()
-        response = self.client.get(
+        response = self.client.post(
             reverse(
                 "data:add_user",
                 kwargs={
@@ -397,7 +423,7 @@ class DataViewTests(TestCase):
         self.dataset.is_private = True
         self.dataset.save()
         self.dataset.allowed_users.add(self.other)
-        response = self.client.get(
+        response = self.client.post(
             reverse(
                 "data:remove_user",
                 kwargs={

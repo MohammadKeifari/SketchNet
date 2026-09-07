@@ -1,0 +1,26 @@
+{% if model.fork_access == "public" or user == model.owner %}
+    {% if user.is_authenticated %}
+        <form method="post" action="{% url 'models:fork' model.model_id %}" style="display:contents">
+            {% csrf_token %}
+            <button type="submit" class="icon-btn" title="Fork">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="6" y1="3" x2="6" y2="15" />
+                    <circle cx="18" cy="6" r="3" />
+                    <circle cx="6" cy="18" r="3" />
+                    <path d="M18 9a9 9 0 0 1-9 9" />
+                </svg>
+            </button>
+        </form>
+    {% else %}
+        <a href="{% url 'account_login' %}?next={% url 'models:view' model.model_id %}"
+           class="icon-btn"
+           title="Fork">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="6" y1="3" x2="6" y2="15" />
+                <circle cx="18" cy="6" r="3" />
+                <circle cx="6" cy="18" r="3" />
+                <path d="M18 9a9 9 0 0 1-9 9" />
+            </svg>
+        </a>
+    {% endif %}
+{% endif %}
