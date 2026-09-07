@@ -170,7 +170,19 @@ class ViewsTest(TestCase):
         response = self.client.post(
             self.export_url, data="not json", content_type="application/json"
         )
-        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 400)
+
+    def test_export_rejects_invalid_graph(self):
+        """Export requires a valid graph."""
+        self.client.login(username="testuser", password="testpass123")
+        invalid = {"nodes": [], "links": [], "ports": []}
+        response = self.client.post(
+            self.export_url,
+            data=json.dumps({"graph": json.dumps(invalid), "format": "pytorch-py"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
 
     # ---------- Validate API ----------
     def test_validate_unauthenticated(self):
