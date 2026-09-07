@@ -935,7 +935,12 @@
     <script src="{% static 'sketchmod/js/canvas.js' %}"></script>
     <script src="{% static 'sketchmod/js/layout.js' %}"></script>
     {% if template_graph %}
-        <script>window.SKETCHNET_TEMPLATE = {{ template_graph|safe }};</script>
+        {{ template_graph|json_script:"sketchnet-template-data" }}
+        <script>
+            window.SKETCHNET_TEMPLATE = JSON.parse(
+                document.getElementById("sketchnet-template-data").textContent
+            );
+        </script>
     {% endif %}
     <!--testing the canvas-->
     {% comment %} <script src="{% static 'sketchmod/js/tests/test_canvas.js' %}"></script> {% endcomment %}

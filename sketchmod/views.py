@@ -2,6 +2,8 @@ import json
 import io
 import zipfile
 import os
+import re
+import logging
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
@@ -13,7 +15,14 @@ from .codegen.generator import CodeGenerator
 from .codegen.validator import GraphValidator
 from .codegen.phase_analyzer import highlight_path
 
+logger = logging.getLogger(__name__)
+
 MAX_GRAPH_BODY_BYTES = 2 * 1024 * 1024
+_TEMPLATE_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$")
+
+
+def _api_error(message="Request failed.", status=500):
+    return JsonResponse({"success": False, "error": message}, status=status)
 
 
 def _parse_graph_request(request):
@@ -120,8 +129,11 @@ def api_dataset_columns(request, dataset_id):
             )
         columns = df.columns.tolist()
         return JsonResponse({"columns": columns, "count": len(columns)})
-    except Exception as e:
-        return JsonResponse({"columns": [], "count": 0, "message": str(e)})
+    except Exception:
+        logger.exception("Failed to read dataset columns")
+        return JsonResponse(
+            {"columns": [], "count": 0, "message": "Could not read columns."}
+        )
 
 
 def export_api(request):
@@ -154,8 +166,9 @@ def export_api(request):
         return JsonResponse({"success": True, "code": code, "filename": "model.py"})
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
-    except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)}, status=500)
+    except Exception:
+        logger.exception("export_api failed")
+        return _api_error("Export failed.")
 
 
 def _export_zip(graph, code, request):
@@ -213,7 +226,7 @@ def _export_zip(graph, code, request):
                     else:
                         zf.writestr(
                             "data/README.txt",
-                            f"Dataset file not found at: {file_path}\n"
+                            "Dataset file not found.\n"
                             "Please download the dataset separately from SketchNet.\n",
                         )
                 else:
@@ -222,8 +235,9 @@ def _export_zip(graph, code, request):
                 zf.writestr(
                     "data/README.txt", f"Dataset with ID '{dataset_id}' not found.\n"
                 )
-            except Exception as e:
-                zf.writestr("data/README.txt", f"Error accessing dataset: {str(e)}\n")
+            except Exception:
+                logger.exception("Failed to attach dataset to export zip")
+                zf.writestr("data/README.txt", "Error accessing dataset.\n")
         else:
             zf.writestr(
                 "data/README.txt",
@@ -250,8 +264,9 @@ def validate_api(request):
         return JsonResponse({"success": True, **result})
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
-    except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)}, status=500)
+    except Exception:
+        logger.exception("validate_api failed")
+        return _api_error("Validation failed.")
 
 
 def highlight_path_api(request):
@@ -266,24 +281,38 @@ def highlight_path_api(request):
         return JsonResponse({"success": True, **result})
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
-    except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)}, status=500)
+    except Exception:
+        logger.exception("highlight_path_api failed")
+        return _api_error("Highlight failed.")
 
 
 def template_view(request, template_name):
     """Load a template and redirect to canvas with session storage set."""
-    import json, os
-    from django.conf import settings
-    from django.shortcuts import redirect
+    if not _TEMPLATE_SLUG_RE.fullmatch(template_name):
+        request.session["template_error"] = f"Template '{template_name}' not found."
+        return redirect("sketchmod:canvas")
 
-    template_path = os.path.join(
-        settings.BASE_DIR,
-        "sketchmod",
-        "static",
-        "sketchmod",
-        "templates",
-        f"{template_name}.json",
+    template_dir = os.path.abspath(
+        os.path.join(
+            settings.BASE_DIR,
+            "sketchmod",
+            "static",
+            "sketchmod",
+            "templates",
+        )
     )
+    template_path = os.path.abspath(
+        os.path.join(template_dir, f"{template_name}.json")
+    )
+    try:
+        if os.path.commonpath([template_dir, template_path]) != template_dir:
+            request.session["template_error"] = (
+                f"Template '{template_name}' not found."
+            )
+            return redirect("sketchmod:canvas")
+    except ValueError:
+        request.session["template_error"] = f"Template '{template_name}' not found."
+        return redirect("sketchmod:canvas")
 
     if os.path.exists(template_path):
         with open(template_path) as f:

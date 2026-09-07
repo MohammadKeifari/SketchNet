@@ -208,6 +208,18 @@ class ViewsTest(TestCase):
         self.assertIn("code", data)
         self.assertIn("filename", data)
 
+    def test_export_does_not_leak_internal_errors(self):
+        """Unexpected export failures return a generic message."""
+        self.client.login(username="testuser", password="testpass123")
+        payload = {"graph": {"nodes": "not-a-list"}}
+        response = self.client.post(
+            self.export_url,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertIn(response.status_code, (400, 500))
+        self.assertNotIn("Traceback", response.content.decode())
+
     def test_export_invalid_json(self):
         """Verify export invalid json."""
         self.client.login(username="testuser", password="testpass123")
@@ -390,4 +402,17 @@ class ViewsTest(TestCase):
         self.assertEqual(
             self.client.session.get("template_error"),
             "Template 'does-not-exist' not found.",
+        )
+
+    def test_template_load_rejects_dotdot_slug(self):
+        """Path-like template slugs are rejected without filesystem lookup."""
+        self.client.login(username="testuser", password="testpass123")
+        response = self.client.get(
+            reverse("sketchmod:template_load", args=[".."])
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn("template_graph", self.client.session)
+        self.assertEqual(
+            self.client.session.get("template_error"),
+            "Template '..' not found.",
         )

@@ -90,6 +90,24 @@ const SketchMod = {
         }
         return colors[theme] || colors.light;
     },
+    _escapeHtml(value) {
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    },
+    _datasetApiUrl(datasetId, endpoint) {
+        return `/data/api/${encodeURIComponent(datasetId)}/${endpoint}/`;
+    },
+    _modelApiUrl(modelId, endpoint) {
+        return `/models/${encodeURIComponent(modelId)}/${endpoint}/`;
+    },
+    _safeHexColor(value) {
+        const text = String(value ?? "");
+        return /^#[0-9a-fA-F]{3,8}$/.test(text) ? text : "#6c5ce7";
+    },
     //=========== register node =============
     registerNode(config) {
         this.nodeRegistry.push(config);
@@ -113,10 +131,16 @@ const SketchMod = {
         const loadGraph = () => {
             if (loadModelId) {
                 if (hasSession) {
-                    const sessionData = JSON.parse(hasSession);
-                    if (sessionData.modelId === loadModelId) {
-                        this._loadFromSession();
-                    } else {
+                    try {
+                        const sessionData = JSON.parse(hasSession);
+                        if (sessionData.modelId === loadModelId) {
+                            this._loadFromSession();
+                        } else {
+                            this._loadModelFromServer(loadModelId);
+                        }
+                    } catch (e) {
+                        console.warn("Corrupt session graph:", e);
+                        sessionStorage.removeItem("sketchmod-graph");
                         this._loadModelFromServer(loadModelId);
                     }
                 } else {
@@ -1839,7 +1863,7 @@ const SketchMod = {
         <div class="prop-group">
             <label>Shape</label>
             <p class="prop-hint" style="font-family: monospace; color: ${shapeColor}; font-size: 0.85rem;">
-                ${shapeText}
+                ${this._escapeHtml(shapeText)}
             </p>
         </div>
         ${phasesHTML}
@@ -2113,28 +2137,38 @@ const SketchMod = {
         if (!list) return;
         list.innerHTML = '<div class="dataset-loading">Loading...</div>';
 
-        let url = `/data/api/list/?section=${section}&search=${encodeURIComponent(search)}`;
+        const allowedSections = new Set(["all", "mine", "liked"]);
+        const safeSection = allowedSections.has(section) ? section : "all";
+        const url = `/data/api/list/?section=${encodeURIComponent(safeSection)}&search=${encodeURIComponent(search || "")}`;
         fetch(url)
             .then((res) => res.json())
             .then((data) => {
-                if (data.datasets.length === 0) {
+                const datasets = Array.isArray(data.datasets)
+                    ? data.datasets
+                    : [];
+                if (datasets.length === 0) {
                     list.innerHTML =
                         '<div class="dataset-empty">No datasets found</div>';
                     return;
                 }
-                list.innerHTML = data.datasets
+                list.innerHTML = datasets
                     .map(
                         (d) => `
-                    <div class="dataset-item" onclick="SketchMod._selectDataset('${d.id}', '${d.name.replace(/'/g, "\\'")}', this)">
+                    <div class="dataset-item" data-id="${this._escapeHtml(d.id)}" data-name="${this._escapeHtml(d.name)}">
                         <div class="dataset-item-info">
-                            <span class="dataset-item-name">${d.name}</span>
-                            <span class="dataset-item-meta">${d.format} · ${d.owner} · ${d.created_at}</span>
+                            <span class="dataset-item-name">${this._escapeHtml(d.name)}</span>
+                            <span class="dataset-item-meta">${this._escapeHtml(d.format)} · ${this._escapeHtml(d.owner)} · ${this._escapeHtml(d.created_at)}</span>
                         </div>
                         ${d.is_private ? '<span class="dataset-badge">Private</span>' : ""}
                     </div>
                 `,
                     )
                     .join("");
+                list.querySelectorAll(".dataset-item").forEach((el) => {
+                    el.addEventListener("click", () => {
+                        this._selectDataset(el.dataset.id, el.dataset.name, el);
+                    });
+                });
             })
             .catch(() => {
                 list.innerHTML =
@@ -2161,7 +2195,7 @@ const SketchMod = {
             node.datasetName = datasetName;
 
             // Fetch shape
-            fetch(`/data/api/${datasetId}/shape/`)
+            fetch(this._datasetApiUrl(datasetId, "shape"))
                 .then((res) => res.json())
                 .then((data) => {
                     const shape = data.shape || "";
@@ -2178,7 +2212,7 @@ const SketchMod = {
                 .catch(() => {});
 
             // Fetch file info
-            fetch(`/data/api/${datasetId}/info/`)
+            fetch(this._datasetApiUrl(datasetId, "info"))
                 .then((res) => res.json())
                 .then((data) => {
                     node.datasetFile = data.filename || "";
@@ -2492,7 +2526,7 @@ const SketchMod = {
 
     _fetchDatasetShape(node) {
         if (!node.datasetId) return;
-        const url = `/data/api/${node.datasetId}/columns/`;
+        const url = this._datasetApiUrl(node.datasetId, "columns");
         fetch(url)
             .then((res) => res.json())
             .then((data) => {
@@ -2606,7 +2640,7 @@ const SketchMod = {
 
     _fetchColumnsForNode(node) {
         if (!node.datasetId) return;
-        const url = `/data/api/${node.datasetId}/columns/`;
+        const url = this._datasetApiUrl(node.datasetId, "columns");
         fetch(url)
             .then((res) => res.json())
             .then((data) => {
@@ -2923,7 +2957,7 @@ const SketchMod = {
         if (coverFile) formData.append("cover_image", coverFile);
 
         const url = SketchMod._currentModelId
-            ? `/models/${SketchMod._currentModelId}/update/`
+            ? this._modelApiUrl(SketchMod._currentModelId, "update")
             : "/models/save/";
 
         fetch(url, {
@@ -3002,7 +3036,7 @@ const SketchMod = {
         const formData = new FormData();
         formData.append("graph_data", graphData);
 
-        fetch(`/models/${SketchMod._currentModelId}/update/`, {
+        fetch(this._modelApiUrl(SketchMod._currentModelId, "update"), {
             method: "POST",
             body: formData,
             headers: {
@@ -3047,7 +3081,7 @@ const SketchMod = {
         }, 2000);
     },
     _loadModelFromServer(modelId) {
-        fetch(`/models/${modelId}/data/`)
+        fetch(this._modelApiUrl(modelId, "data"))
             .then((res) => res.json())
             .then((data) => {
                 // Clear current graph
@@ -3599,16 +3633,17 @@ const SketchMod = {
                     </svg>`;
         let actions = "";
         if (item.nodeId) {
-            actions += `<button type="button" class="validation-action" data-jump-node="${item.nodeId}">Jump to node</button>`;
+            actions += `<button type="button" class="validation-action" data-jump-node="${this._escapeHtml(item.nodeId)}">Jump to node</button>`;
         }
         if (item.code) {
             const tab = this._learnTabForCode(item.code);
-            actions += `<a class="validation-action" href="/learn/?tab=${tab}#err-${item.code}" target="_blank" rel="noopener">Learn more</a>`;
+            const code = encodeURIComponent(item.code);
+            actions += `<a class="validation-action" href="/learn/?tab=${encodeURIComponent(tab)}#err-${code}" target="_blank" rel="noopener">Learn more</a>`;
         }
         return `<div class="validation-result ${kind}">
                     ${icon}
                     <div class="validation-row-body">
-                        <span>${item.message}</span>
+                        <span>${this._escapeHtml(item.message)}</span>
                         ${actions ? `<div class="validation-actions">${actions}</div>` : ""}
                     </div>
                 </div>`;
@@ -3658,7 +3693,7 @@ const SketchMod = {
             this.nodeCounter += 1;
         }
 
-        fetch(`/data/api/${datasetId}/info/`)
+        fetch(this._datasetApiUrl(datasetId, "info"))
             .then((r) => r.json())
             .then((data) => {
                 if (data.error) {
@@ -5641,7 +5676,7 @@ class BaseNode {
                             ? "var(--accent)"
                             : "var(--text-secondary)";
                         html += `<p class="prop-hint" style="font-family: monospace; color: ${color}; font-size: 0.8rem;">
-                        Port ${i + 1}.${j + 1}: ${shapeStr}${s.symbolic ? " (abstract)" : ""}
+                        Port ${i + 1}.${j + 1}: ${SketchMod._escapeHtml(shapeStr)}${s.symbolic ? " (abstract)" : ""}
                     </p>`;
                     }
                 } else {
@@ -5651,7 +5686,7 @@ class BaseNode {
                             ? "var(--accent)"
                             : "var(--text-secondary)";
                     html += `<p class="prop-hint" style="font-family: monospace; color: ${color}; font-size: 0.8rem;">
-                    Port ${i + 1}: ${shapeText}
+                    Port ${i + 1}: ${SketchMod._escapeHtml(shapeText)}
                 </p>`;
                 }
             }
@@ -5669,7 +5704,7 @@ class BaseNode {
                         ? "var(--accent)"
                         : "var(--text-secondary)";
                 html += `<p class="prop-hint" style="font-family: monospace; color: ${color}; font-size: 0.8rem;">
-                Port ${i + 1}: ${shapeText}
+                Port ${i + 1}: ${SketchMod._escapeHtml(shapeText)}
             </p>`;
             }
             html += "</div>";
@@ -5764,9 +5799,9 @@ class BaseNode {
         html +=
             '<p class="prop-hint" style="font-family: monospace; font-size: 0.8rem;">';
         if (moduleName) {
-            html += `Module: <strong style="color:var(--accent)">${moduleName}</strong><br>`;
+            html += `Module: <strong style="color:var(--accent)">${SketchMod._escapeHtml(moduleName)}</strong><br>`;
         }
-        html += `Variable: <strong style="color:var(--accent)">${varName}</strong>`;
+        html += `Variable: <strong style="color:var(--accent)">${SketchMod._escapeHtml(varName)}</strong>`;
         html += "</p></div>";
         return html;
     }
@@ -6250,12 +6285,13 @@ class InputDataNode extends RectNode {
         return this._makeShapes(shape, symbolic, !!shape);
     }
     getPropertiesHTML() {
+        const esc = (v) => SketchMod._escapeHtml(v);
         const datasetHTML = `
         <div class="prop-group">
             <label>Dataset</label>
             <div class="dataset-selector">
                 <div class="dataset-select-display" onclick="SketchMod._toggleDatasetPicker()">
-                    <span class="selected-dataset-name">${this.datasetName || "Select a dataset..."}</span>
+                    <span class="selected-dataset-name">${esc(this.datasetName || "Select a dataset...")}</span>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="6 9 12 15 18 9"/>
                     </svg>
@@ -6272,7 +6308,7 @@ class InputDataNode extends RectNode {
                     </div>
                 </div>
             </div>
-            ${this.datasetId ? `<div class="prop-group"><label>Dataset ID</label><p class="prop-hint" style="font-family: monospace;">${this.datasetId}</p></div>` : ""}
+            ${this.datasetId ? `<div class="prop-group"><label>Dataset ID</label><p class="prop-hint" style="font-family: monospace;">${esc(this.datasetId)}</p></div>` : ""}
         </div>`;
 
         const shapeHTML = `
@@ -6280,7 +6316,7 @@ class InputDataNode extends RectNode {
             <label>Shape</label>
             <input type="text" id="prop-manual-shape" class="prop-input" 
                 placeholder="e.g. (None, 28, 28)" 
-                value="${this.dataShape || ""}"
+                value="${esc(this.dataShape || "")}"
                 onchange="SketchMod._updateManualShape(this)">
             <p class="prop-hint">You can override the dataset shape manually.</p>
         </div>`;
@@ -6643,7 +6679,7 @@ class ColumnSelectNode extends RectNode {
                         <input type="checkbox" value="${i}" 
                                ${this.selectedColumns.includes(i) ? "checked" : ""}
                                onchange="SketchMod._updateColumnSelect(this)">
-                        ${i}: ${name}
+                        ${i}: ${SketchMod._escapeHtml(name)}
                     </label>
                 `,
                     )
@@ -6657,7 +6693,7 @@ class ColumnSelectNode extends RectNode {
             <label>Custom Selection</label>
             <input type="text" id="prop-column-input" class="prop-input" 
                    placeholder="e.g. 0:3, 5, 7" 
-                   value="${this.columnInput}"
+                   value="${SketchMod._escapeHtml(this.columnInput || "")}"
                    onchange="SketchMod._updateColumnInput(this)">
             <p class="prop-hint">Python slice notation: <code>start:end</code>, single indices, comma-separated</p>
             <p class="prop-hint">Python negative indices supported: <code>-1</code> = last column, <code>0:-1</code> = all except last</p>
@@ -6793,8 +6829,8 @@ class RowSelectNode extends RectNode {
             <div class="prop-group">
                 <label>Value</label>
                 <input type="text" id="prop-row-value" class="prop-input" 
-                       value="${this.value}"
-                       placeholder="${this._getPlaceholder()}"
+                       value="${SketchMod._escapeHtml(this.value)}"
+                       placeholder="${SketchMod._escapeHtml(this._getPlaceholder())}"
                        onchange="SketchMod._updateRowValue(this)">
                 <p class="prop-hint">${this._getHint()}</p>
             </div>
@@ -7028,7 +7064,7 @@ class DimSelectNode extends RectNode {
                 <div class="dim-row">
                     <span class="dim-label">Dim ${i} (${dimSize})</span>
                     <input type="text" class="prop-input dim-input" 
-                           value="${this.dimSelections[i] || ""}"
+                           value="${SketchMod._escapeHtml(this.dimSelections[i] || "")}"
                            placeholder=":"
                            data-dim="${i}"
                            onchange="SketchMod._updateDimSelect(this)">
@@ -7053,7 +7089,7 @@ class DimSelectNode extends RectNode {
                     ? `
             <div class="prop-group">
                 <label>Input Shape</label>
-                <p class="prop-hint">(${this.inputShape.join(", ")})</p>
+                <p class="prop-hint">(${this.inputShape.map((d) => SketchMod._escapeHtml(d)).join(", ")})</p>
             </div>
             `
                     : `
@@ -7904,7 +7940,7 @@ class PrintNode extends RectNode {
             <div class="prop-group">
                 <label>Label</label>
                 <input type="text" id="prop-print-label" class="prop-input"
-                       value="${this.label || ""}"
+                       value="${SketchMod._escapeHtml(this.label || "")}"
                        placeholder="e.g. Shape of X"
                        onchange="SketchMod._updatePrintLabel(this)">
             </div>
@@ -8709,7 +8745,7 @@ class VisualizationNode extends RectNode {
                         <div class="color-palette-row">
                             <span class="color-palette-index">${i}</span>
                             <input type="color" class="color-palette-picker"
-                                   value="${color}"
+                                   value="${SketchMod._safeHexColor(color)}"
                                    onchange="SketchMod._updateVizPaletteColor(${i}, this.value)">
                             <button class="color-palette-remove"
                                     onclick="SketchMod._removeVizPaletteColor(${i})"
@@ -8743,13 +8779,13 @@ class VisualizationNode extends RectNode {
             <div class="prop-group">
                 <label>Min Color (value 0.0)</label>
                 <input type="color" class="prop-input" style="height: 36px; padding: 4px;"
-                       value="${this.continuousMinColor}"
+                       value="${SketchMod._safeHexColor(this.continuousMinColor)}"
                        onchange="SketchMod._updateVizProp('continuousMinColor', this.value)">
             </div>
             <div class="prop-group">
                 <label>Max Color (value 1.0)</label>
                 <input type="color" class="prop-input" style="height: 36px; padding: 4px;"
-                       value="${this.continuousMaxColor}"
+                       value="${SketchMod._safeHexColor(this.continuousMaxColor)}"
                        onchange="SketchMod._updateVizProp('continuousMaxColor', this.value)">
             </div>
             <p class="prop-hint">Expects normalized values [0,1]. Out-of-range values are clamped.</p>`;
@@ -8853,7 +8889,7 @@ class ReshapeNode extends RectNode {
             <div class="prop-group">
                 <label>Target Shape</label>
                 <input type="text" id="prop-target-shape" class="prop-input"
-                       value="${this.targetShape}"
+                       value="${SketchMod._escapeHtml(this.targetShape)}"
                        onchange="SketchMod._updateReshapeTarget(this)">
                 <p class="prop-hint">Use -1 for one inferred dimension, e.g., (batch, -1) or (28, 28)</p>
             </div>
