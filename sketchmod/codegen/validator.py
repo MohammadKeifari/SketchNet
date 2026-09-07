@@ -1,688 +1,594 @@
 """
-Graph validation for SketchNet code generation.
+Graph validation.
 
-Checks the graph for errors (block code generation) and warnings
-(informational).  The validator is phase‑agnostic: any node can appear
-in any phase, but some combinations are suspicious.
+The validator draws one line: a graph either cannot be translated at all, or
+it produces a script that runs.
+
+* **Errors** mean the graph is not translatable -- a cycle, a missing
+  connection, two inputs whose batch sizes cannot meet.  Code generation is
+  blocked.
+* **Warnings** mean the graph translates fine but describes something odd,
+  such as a layer sitting in preprocessing where no optimizer can reach it.
+  The message says what the generated code will actually do.
+
+Every diagnostic carries a stable ``code`` so callers can match on it without
+depending on the wording, plus ``nodeId`` / ``portId`` for canvas highlighting.
 """
 
+import sympy
+
+from .analysis import Analysis, MODEL_TYPES, PARAMETRIC_TYPES
 from .graph import parse_graph
+from .nodes import SUPPORTED_TYPES
 from .phase_analyzer import analyze_phases
+
+#: Minimum number of data inputs each node type needs to mean anything.
+#: A node below its minimum has nothing to compute from, so the graph cannot
+#: be translated into working code.
+REQUIRED_INPUTS = {
+    "neuron": 1,
+    "layer": 1,
+    "conv2d": 1,
+    "dropout": 1,
+    "batchnorm": 1,
+    "flatten": 1,
+    "column-select": 1,
+    "row-select": 1,
+    "dim-select": 1,
+    "normalize": 1,
+    "onehot": 1,
+    "deonehot": 1,
+    "train-test": 1,
+    "reshape": 1,
+    "add": 2,
+    "concat": 2,
+}
 
 
 class GraphValidator:
+    """Checks a graph before code generation."""
+
     def __init__(self, graph_data):
         self.graph = parse_graph(graph_data)
         self.flow = analyze_phases(self.graph)
+        self.a = Analysis(self.graph, self.flow)
+        self.errors = []
+        self.warnings = []
 
+    # ------------------------------------------------------------------
     def validate(self):
-        errors = []
-        warnings = []
+        self.errors = []
+        self.warnings = []
 
-        self._check_input_output_present(errors)
-        self._check_optimizer_phase(errors)
-        self._check_param_port_cycles(errors)
-        self._check_required_inputs(errors)
-        self._check_data_flow_cycles(errors)
-        self._check_multi_input_batch_sizes(errors)
+        for check in (
+            self._required_nodes,
+            self._known_node_types,
+            self._data_flow_cycles,
+            self._param_cycles,
+            self._required_connections,
+            self._optimizer_wiring,
+            self._batch_size_conflicts,
+        ):
+            check()
 
-        self._check_optimizer_missing(warnings)
-        self._check_model_in_preprocessing(warnings)
-        self._check_model_eval_without_train(warnings)
-        self._check_visualization_in_training(warnings)
-        self._check_preprocessing_reaches_train_eval(warnings)
-        self._check_label_loss_compatibility(warnings)
-        self._check_accuracy_inputs(warnings)
-        self._check_visualization_shapes(warnings)
-        self._check_accuracy_label_reshape(warnings)
-        self._check_reshape_feasibility(warnings)
-        self._check_multiple_optimizers(warnings)
-        self._check_eval_entry_point(warnings)
-        self._check_optimizer_label_shape(warnings)
-        self._check_early_stopping_no_validation(warnings)
-        self._check_missing_dataset_or_shape(warnings)
+        for check in (
+            self._missing_optimizer,
+            self._multiple_optimizers,
+            self._untrained_layers,
+            self._visualization_in_training,
+            self._unreachable_preprocessing,
+            self._evaluation_entry_point,
+            self._loss_label_agreement,
+            self._accuracy_inputs,
+            self._visualization_samples,
+            self._reshape_feasibility,
+            self._early_stopping_without_validation,
+            self._input_data_source,
+        ):
+            check()
 
         return {
-            "errors": errors,
-            "warnings": warnings,
-            "isValid": len(errors) == 0,
+            "errors": self.errors,
+            "warnings": self.warnings,
+            "isValid": not self.errors,
         }
 
-    def _get_model_nodes(self):
-        """
-        Identify training‑order nodes that belong to the model.
-        Same logic as generator.py.
-        """
-        train_set = self.flow["train_set"]
-        output_id = None
-        for nid in train_set:
-            if self.graph.nodes[nid].type == "output":
-                output_id = nid
-                break
-        if output_id is None:
-            return []
+    # ------------------------------------------------------------------
+    def _error(self, code, message, **where):
+        self.errors.append({"code": code, "message": message, **where})
 
-        reachable = set()
-        queue = [output_id]
-        while queue:
-            cur = queue.pop(0)
-            if cur in reachable:
-                continue
-            reachable.add(cur)
-            for pred in self.graph.predecessors(cur):
-                if pred in train_set and pred not in reachable:
-                    queue.append(pred)
+    def _warn(self, code, message, **where):
+        self.warnings.append({"code": code, "message": message, **where})
 
-        pre_set = self.flow.get("preprocessing_set", set())
-        return [
-            nid
-            for nid in self.flow["train_order"]
-            if nid in reachable and nid not in pre_set
-        ]
+    def _nodes_of(self, *types):
+        return [n for n in self.graph.nodes.values() if n.type in types]
 
     @staticmethod
-    def _shape_str(shape_info):
+    def _shape_text(shape_info):
         if not shape_info or not shape_info.shape:
             return "unknown"
         return "(" + ", ".join(str(d) for d in shape_info.shape) + ")"
 
-    # ----------------------------------------------------------------
-    #  ERRORS
-    # ----------------------------------------------------------------
-    def _check_input_output_present(self, errors):
-        has_input = any(n.type == "input-data" for n in self.graph.nodes.values())
-        has_output = any(n.type == "output" for n in self.graph.nodes.values())
-        if not has_input:
-            errors.append({"message": "Missing Input Data node.", "nodeId": None})
-        if not has_output:
-            errors.append({"message": "Missing Output node.", "nodeId": None})
-
-    def _check_optimizer_phase(self, errors):
-        for nid, node in self.graph.nodes.items():
-            if node.type == "optimizer":
-                if nid not in self.flow["train_set"]:
-                    errors.append(
-                        {
-                            "message": "Optimizer node must be in the training phase.",
-                            "nodeId": nid,
-                        }
-                    )
-                return
-
-    def _check_param_port_cycles(self, errors):
-        adj = {nid: [] for nid in self.graph.nodes}
+    def _has_cycle(self, param_links: bool) -> bool:
+        adjacency = {nid: [] for nid in self.graph.nodes}
         for link in self.graph.links:
-            src = self.graph.ports[link.id_from]
-            tgt = self.graph.ports[link.id_to]
-            if src.port_kind == "param" and tgt.port_kind == "param":
-                adj[src.node_id].append(tgt.node_id)
+            source = self.graph.ports[link.id_from]
+            target = self.graph.ports[link.id_to]
+            is_param = source.port_kind == "param" and target.port_kind == "param"
+            if is_param == param_links:
+                adjacency[source.node_id].append(target.node_id)
 
-        WHITE, GRAY, BLACK = 0, 1, 2
-        color = {nid: WHITE for nid in self.graph.nodes}
+        WHITE, GREY, BLACK = 0, 1, 2
+        colour = {nid: WHITE for nid in self.graph.nodes}
 
-        def dfs(u):
-            color[u] = GRAY
-            for v in adj[u]:
-                if color[v] == GRAY:
+        def visit(node_id):
+            colour[node_id] = GREY
+            for neighbour in adjacency[node_id]:
+                if colour[neighbour] == GREY:
                     return True
-                if color[v] == WHITE and dfs(v):
+                if colour[neighbour] == WHITE and visit(neighbour):
                     return True
-            color[u] = BLACK
+            colour[node_id] = BLACK
             return False
 
-        for nid in self.graph.nodes:
-            if color[nid] == WHITE and dfs(nid):
-                errors.append(
-                    {
-                        "message": "Param‑port cycle detected – no valid execution order.",
-                        "nodeId": None,
-                    }
+        return any(
+            colour[nid] == WHITE and visit(nid) for nid in list(self.graph.nodes)
+        )
+
+    # ==================================================================
+    #  Errors: the graph cannot be translated
+    # ==================================================================
+    def _required_nodes(self):
+        if not self._nodes_of("input-data"):
+            self._error(
+                "missing-input",
+                "Missing Input Data node: there is no data to run through the graph.",
+                nodeId=None,
+            )
+        if self._nodes_of("output"):
+            return
+        # Without an optimizer the graph is still a valid preprocessing and
+        # plotting pipeline; only training genuinely needs somewhere to read
+        # the loss from.
+        if self._nodes_of("optimizer"):
+            self._error(
+                "missing-output",
+                "Missing Output node: the optimizer has no model output to "
+                "compute a loss from.",
+                nodeId=None,
+            )
+        else:
+            self._warn(
+                "missing-output",
+                "Missing Output node - the script will preprocess and visualize "
+                "data, but define no model.",
+                nodeId=None,
+            )
+
+    def _known_node_types(self):
+        for node in self.graph.nodes.values():
+            if node.type not in SUPPORTED_TYPES:
+                self._error(
+                    "unknown-node-type",
+                    f"Node '{node.id}' has unsupported type '{node.type}'.",
+                    nodeId=node.id,
+                )
+
+    def _data_flow_cycles(self):
+        if self._has_cycle(param_links=False):
+            self._error(
+                "data-flow-cycle",
+                "Data-flow cycle detected - the graph is not a DAG, "
+                "so there is no order in which the nodes can run.",
+                nodeId=None,
+            )
+
+    def _param_cycles(self):
+        if self._has_cycle(param_links=True):
+            self._error(
+                "param-cycle",
+                "Param-port cycle detected - the shared parameters depend on "
+                "each other, so none of them can be computed first.",
+                nodeId=None,
+            )
+
+    def _required_connections(self):
+        for node in self.graph.nodes.values():
+            needed = REQUIRED_INPUTS.get(node.type)
+            if needed is None:
+                continue
+            # Count links, not ports: several tensors may arrive on one port.
+            arriving = sum(len(self.a.links_into(port.id)) for port in node.inputs)
+            if node.type == "add" and arriving != needed:
+                self._error(
+                    "missing-input-connection",
+                    f"Add node '{node.id}' requires exactly {needed} inputs, "
+                    f"found {arriving}.",
+                    nodeId=node.id,
+                )
+            elif node.type == "concat" and arriving < needed:
+                self._error(
+                    "missing-input-connection",
+                    f"Concat node '{node.id}' requires at least {needed} inputs, "
+                    f"found {arriving}.",
+                    nodeId=node.id,
+                )
+            elif node.type not in ("add", "concat") and arriving < needed:
+                self._error(
+                    "missing-input-connection",
+                    f"'{node.type}' ({node.id}) requires at least "
+                    f"{needed} input connection.",
+                    nodeId=node.id,
+                )
+
+    def _optimizer_wiring(self):
+        for node in self._nodes_of("optimizer"):
+            if node.id not in self.flow["train_set"]:
+                self._error(
+                    "optimizer-not-training",
+                    f"Optimizer '{node.id}' is not reached by the training phase, "
+                    "so no training loop can be generated.",
+                    nodeId=node.id,
                 )
                 return
 
-    def _check_required_inputs(self, errors):
-        for node in self.graph.nodes.values():
-            in_count = sum(
-                1 for l in self.graph.links if l.id_to in {p.id for p in node.inputs}
-            )
-            if node.type in (
-                "neuron",
-                "layer",
-                "conv2d",
-                "dropout",
-                "batchnorm",
-            ):
-                if in_count < 1:
-                    errors.append(
-                        {
-                            "message": f"'{node.type}' ({node.id}) requires at least 1 input connection.",
-                            "nodeId": node.id,
-                        }
-                    )
-            elif node.type == "add":
-                if in_count != 2:
-                    errors.append(
-                        {
-                            "message": f"Add node '{node.id}' requires exactly 2 inputs, found {in_count}.",
-                            "nodeId": node.id,
-                        }
-                    )
-            elif node.type == "concat":
-                if in_count < 2:
-                    errors.append(
-                        {
-                            "message": f"Concat node '{node.id}' requires at least 2 inputs, found {in_count}.",
-                            "nodeId": node.id,
-                        }
-                    )
-
-    # ----------------------------------------------------------------
-    #  WARNINGS
-    # ----------------------------------------------------------------
-    def _check_optimizer_missing(self, warnings):
-        if self.flow.get("optimizer") is None:
-            warnings.append(
-                {
-                    "message": "No optimizer node – training loop will not be generated.",
-                    "nodeId": None,
-                }
-            )
-
-    def _check_model_in_preprocessing(self, warnings):
-        for nid in self.flow["preprocessing_order"]:
-            node = self.graph.nodes[nid]
-            if node.type in (
-                "neuron",
-                "layer",
-                "conv2d",
-                "dropout",
-                "batchnorm",
-            ):
-                warnings.append(
-                    {
-                        "message": f"Model node '{node.type}' ({nid}) is in preprocessing and will be untrained.",
-                        "nodeId": nid,
-                    }
-                )
-
-    def _check_model_eval_without_train(self, warnings):
-        eval_set = self.flow["eval_set"]
-        train_set = self.flow["train_set"]
-        for nid in eval_set - train_set:
-            node = self.graph.nodes[nid]
-            if node.type in (
-                "neuron",
-                "layer",
-                "conv2d",
-                "dropout",
-                "batchnorm",
-            ):
-                warnings.append(
-                    {
-                        "message": f"Model node '{node.type}' ({nid}) is in evaluation but not training – will be untrained.",
-                        "nodeId": nid,
-                    }
-                )
-
-    def _check_visualization_in_training(self, warnings):
-        for nid in self.flow["train_set"]:
-            node = self.graph.nodes[nid]
-            if node.type == "visualization":
-                warnings.append(
-                    {
-                        "message": f"Visualization '{nid}' is in the training phase and will be skipped.",
-                        "nodeId": nid,
-                    }
-                )
-
-    def _check_preprocessing_reaches_train_eval(self, warnings):
-        pre_set = self.flow["preprocessing_set"]
-        train_set = self.flow["train_set"]
-        eval_set = self.flow["eval_set"]
-        if pre_set and not train_set and not eval_set:
-            warnings.append(
-                {
-                    "message": "Preprocessing does not reach training or evaluation – only data loading will be generated.",
-                    "nodeId": None,
-                }
-            )
-
-    def _check_label_loss_compatibility(self, warnings):
-        opt = self.flow.get("optimizer")
-        if not opt or len(opt.inputs) < 2:
+        optimizer = self.a.optimizer
+        if optimizer is None:
             return
-        labels_port = opt.inputs[1]
-        loss_type = opt.properties.get("lossType", "mse")
-        for link in self.graph.links:
-            if link.id_to == labels_port.id:
-                src_node = self.graph.nodes[self.graph.ports[link.id_from].node_id]
-                if src_node.type == "onehot" and loss_type == "cross_entropy":
-                    warnings.append(
-                        {
-                            "message": "CrossEntropyLoss expects class indices, but labels come from a OneHot node.",
-                            "portId": labels_port.id,
-                        }
-                    )
-                elif src_node.type != "onehot" and loss_type == "bce":
-                    warnings.append(
-                        {
-                            "message": "BCEWithLogitsLoss expects one‑hot labels, but labels appear to be class indices.",
-                            "portId": labels_port.id,
-                        }
-                    )
-                break
 
-    def _check_accuracy_inputs(self, warnings):
+        # An Output node with nothing feeding it is only a problem once
+        # something wants to train against it.
+        output = self.a.output_node
+        if output is not None and not self.a.connected_inputs(output):
+            self._error(
+                "missing-input-connection",
+                f"Output node '{output.id}' has no input connected, so the "
+                "optimizer has no predictions to compute a loss from.",
+                nodeId=output.id,
+            )
+
+        if len(optimizer.inputs) < 2 or not self.a.first_source(optimizer.inputs[1]):
+            self._error(
+                "optimizer-missing-labels",
+                f"Optimizer '{optimizer.id}' has no labels connected, "
+                "so there is nothing to compute a loss against.",
+                nodeId=optimizer.id,
+            )
+        if optimizer.inputs and not self.a.first_source(optimizer.inputs[0]):
+            self._error(
+                "optimizer-missing-loss",
+                f"Optimizer '{optimizer.id}' has no loss input connected.",
+                nodeId=optimizer.id,
+            )
+        model_nodes = self.a.model_nodes()
+        trainable = [
+            nid
+            for nid in model_nodes
+            if self.graph.nodes[nid].type in PARAMETRIC_TYPES
+        ]
+        if not trainable:
+            self._error(
+                "no-trainable-parameters",
+                f"Optimizer '{optimizer.id}' reaches no layer with weights, so "
+                "there is nothing for it to optimize. Add a Layer, Neuron, "
+                "Conv2D or BatchNorm between the data and the Output node.",
+                nodeId=optimizer.id,
+            )
+
+        model_ids = set(model_nodes)
+        reaches_model = any(
+            source.node_id not in model_ids
+            for nid in model_nodes
+            for port in self.graph.nodes[nid].inputs
+            if port.port_kind != "param"
+            for source in self.a.active_sources(port, "training")
+        )
+        if model_nodes and not reaches_model:
+            self._error(
+                "model-input-missing",
+                "No data reaches the model during training - every input to the "
+                "model comes from inside the model itself.",
+                nodeId=model_nodes[0],
+            )
+
+    def _batch_size_conflicts(self):
+        """Two inputs that meet inside one layer during the same phase must agree."""
         for node in self.graph.nodes.values():
-            if node.type == "accuracy":
-                connected = sum(
-                    1 for p in node.inputs for l in self.graph.links if l.id_to == p.id
-                )
-                if connected < 2:
-                    warnings.append(
-                        {
-                            "message": f"Accuracy node '{node.id}' expects 2 inputs (predictions, labels).",
-                            "nodeId": node.id,
-                        }
-                    )
-
-    def _check_visualization_shapes(self, warnings):
-        for node in self.graph.nodes.values():
-            if node.type != "visualization":
+            if node.type not in PARAMETRIC_TYPES:
                 continue
-            coord_ports = [p for p in node.inputs if p.sub_type == "coord"]
-            first_dims = []
-            for port in coord_ports:
-                # Follow the link to get the source port's shape
-                src_shape = None
-                for link in self.graph.links:
-                    if link.id_to == port.id:
-                        src_port = self.graph.ports[link.id_from]
-                        src_shape = src_port.shape
-                        break
-                if src_shape and src_shape.shape and len(src_shape.shape) >= 1:
-                    first_dims.append((port.id, src_shape.shape[0]))
-            if len(first_dims) >= 2:
-                first_id, first_val = first_dims[0]
-                for other_id, other_val in first_dims[1:]:
-                    if str(first_val) != str(other_val):
-                        warnings.append(
-                            {
-                                "message": (
-                                    f"Visualization '{node.id}' ports {first_id} and {other_id} "
-                                    f"have different sample sizes ({first_val} vs {other_val})."
-                                ),
-                                "nodeId": node.id,
-                            }
-                        )
-                        break
-
-    def _check_accuracy_label_reshape(self, warnings):
-        """Warn if the accuracy label input will be automatically squeezed or argmaxed."""
-        for node in self.graph.nodes.values():
-            if node.type != "accuracy":
-                continue
-            label_port = node.inputs[1] if len(node.inputs) >= 2 else None
-            if not label_port:
-                continue
-            for link in self.graph.links:
-                if link.id_to == label_port.id:
-                    src_port = self.graph.ports[link.id_from]
-                    shape = src_port.shape
-                    if shape and shape.shape and len(shape.shape) == 2:
-                        dim = shape.shape[-1]
-                        try:
-                            last_dim = int(dim) if dim.is_concrete else -1
-                        except (ValueError, TypeError):
-                            last_dim = -1
-                        if last_dim > 1:
-                            warnings.append(
-                                {
-                                    "message": (
-                                        f"Accuracy label input port '{label_port.id}' "
-                                        f"appears to be one‑hot encoded (shape {shape.shape}). "
-                                        "It will be argmax‑ed automatically."
-                                    ),
-                                    "portId": label_port.id,
-                                }
-                            )
-                        elif last_dim == 1:
-                            warnings.append(
-                                {
-                                    "message": (
-                                        f"Accuracy label input port '{label_port.id}' "
-                                        f"has shape (N,1) – automatically squeezed to (N)."
-                                    ),
-                                    "portId": label_port.id,
-                                }
-                            )
-                    break
-
-    def _check_reshape_feasibility(self, warnings):
-        import sympy
-
-        for node in self.graph.nodes.values():
-            if node.type != "reshape":
-                continue
-
-            # ---- get input shape ----
-            inp = None
+            arriving = []
             for port in node.inputs:
-                for link in self.graph.links:
-                    if link.id_to == port.id:
-                        src_port = self.graph.ports[link.id_from]
-                        inp = src_port.shape
-                        break
-                if inp:
-                    break
-            if not inp or not inp.shape:
+                for source in self.a.sources(port):
+                    shared = set(port.activation_phases) & set(source.activation_phases)
+                    if shared and source.shape and source.shape.shape:
+                        arriving.append((source.shape, shared))
+
+            for index, (shape, phases) in enumerate(arriving):
+                for other_shape, other_phases in arriving[index + 1 :]:
+                    if not (phases & other_phases):
+                        continue
+                    if str(shape.shape[0]) == str(other_shape.shape[0]):
+                        continue
+                    self._error(
+                        "batch-size-mismatch",
+                        f"Model node '{node.id}' has multiple inputs with different "
+                        f"batch sizes ({shape.shape[0]} vs {other_shape.shape[0]}) "
+                        f"that are active in the same phase(s): "
+                        f"{phases & other_phases}. Batch sizes must match when "
+                        "feeding into the same model node.",
+                        nodeId=node.id,
+                    )
+                    return
+
+    # ==================================================================
+    #  Warnings: translatable, but probably not what you meant
+    # ==================================================================
+    def _missing_optimizer(self):
+        if not self._nodes_of("optimizer"):
+            self._warn(
+                "no-optimizer",
+                "No optimizer node - the script will load and transform data "
+                "but never train.",
+                nodeId=None,
+            )
+
+    def _multiple_optimizers(self):
+        optimizers = self._nodes_of("optimizer")
+        if len(optimizers) > 1:
+            self._warn(
+                "multiple-optimizers",
+                f"Graph contains {len(optimizers)} optimizer nodes. "
+                "Only the first one will be used.",
+                nodeId=None,
+            )
+
+    def _untrained_layers(self):
+        """A layer the optimizer cannot reach stays randomly initialized."""
+        trained = set(self.a.model_nodes())
+        for phase, key in (("preprocessing", "preprocessing_set"), ("evaluation", "eval_set")):
+            for nid in sorted(self.flow.get(key, set())):
+                node = self.graph.nodes[nid]
+                if node.type not in MODEL_TYPES or nid in trained:
+                    continue
+                if phase == "evaluation" and nid in self.flow.get("preprocessing_set", set()):
+                    continue
+                self._warn(
+                    "untrained-layer",
+                    f"{node.type.capitalize()} '{nid}' runs in {phase}, so it is "
+                    "applied untrained: its weights stay randomly initialized and "
+                    "it will scramble the data rather than learn from it.",
+                    nodeId=nid,
+                )
+
+    def _visualization_in_training(self):
+        for nid in sorted(self.flow.get("train_set", set())):
+            if self.graph.nodes[nid].type == "visualization":
+                self._warn(
+                    "visualization-in-training",
+                    f"Visualization '{nid}' is in the training phase and will be "
+                    "skipped - it would redraw on every batch.",
+                    nodeId=nid,
+                )
+
+    def _unreachable_preprocessing(self):
+        if self.flow.get("preprocessing_set") and not (
+            self.flow.get("train_set") or self.flow.get("eval_set")
+        ):
+            self._warn(
+                "preprocessing-dead-end",
+                "Preprocessing does not reach training or evaluation - "
+                "only data loading will be generated.",
+                nodeId=None,
+            )
+
+    def _evaluation_entry_point(self):
+        if self.a.evaluation_reuses_model():
+            return
+        self._warn(
+            "evaluation-entry-mismatch",
+            f"Evaluation enters the model at '{self.a.model_entry('evaluation')}', "
+            f"but the model starts at '{self.a.model_entry('training')}'. "
+            "Evaluation will be skipped because it cannot reuse the trained model.",
+            nodeId=self.a.model_entry("evaluation"),
+        )
+
+    def _label_port(self):
+        optimizer = self.a.optimizer
+        if not optimizer or len(optimizer.inputs) < 2:
+            return None, None
+        port = optimizer.inputs[1]
+        return port, self.a.first_source(port)
+
+    def _loss_label_agreement(self):
+        optimizer = self.a.optimizer
+        port, source = self._label_port()
+        if source is None:
+            return
+        loss_type = optimizer.properties.get("lossType", "mse")
+        origin = self.graph.nodes[source.node_id]
+
+        if origin.type == "onehot" and loss_type == "cross_entropy":
+            self._warn(
+                "label-loss-mismatch",
+                "CrossEntropyLoss expects class indices, but labels come from a "
+                "OneHot node. They will be argmax-ed back to indices.",
+                portId=port.id,
+            )
+        elif origin.type != "onehot" and loss_type == "bce":
+            self._warn(
+                "label-loss-mismatch",
+                "BCEWithLogitsLoss expects one-hot labels, but labels appear to "
+                "be class indices.",
+                portId=port.id,
+            )
+
+        if loss_type not in ("cross_entropy", "nll"):
+            return
+        shape = source.shape
+        if shape is None or not shape.shape:
+            self._warn(
+                "label-shape-unknown",
+                f"Optimizer '{optimizer.id}' uses {loss_type} loss, but the label "
+                "shape cannot be determined. Model might not work.",
+                nodeId=optimizer.id,
+            )
+            return
+        if len(shape.shape) == 2 and Analysis.dim(source, -1) == 1:
+            self._warn(
+                "label-shape-squeezed",
+                f"Optimizer '{optimizer.id}' uses {loss_type} loss. Label shape is "
+                f"{self._shape_text(shape)} - will be automatically squeezed to (N).",
+                nodeId=optimizer.id,
+            )
+        elif len(shape.shape) > 2:
+            self._warn(
+                "label-shape-unknown",
+                f"Optimizer '{optimizer.id}' uses {loss_type} loss, but the label "
+                f"shape is {self._shape_text(shape)}. Model might not work.",
+                nodeId=optimizer.id,
+            )
+
+    def _accuracy_inputs(self):
+        for node in self._nodes_of("accuracy"):
+            if len(self.a.connected_inputs(node)) < 2:
+                self._warn(
+                    "accuracy-missing-input",
+                    f"Accuracy node '{node.id}' expects 2 inputs "
+                    "(predictions, labels).",
+                    nodeId=node.id,
+                )
                 continue
 
-            # ---- parse target shape ----
-            target_str = node.properties.get("targetShape", "")
-            parts = [x.strip() for x in target_str.strip("()").split(",") if x.strip()]
-            parts = [x for x in parts if x]  # remove any remaining empty strings
+            label_port = node.inputs[1] if len(node.inputs) >= 2 else None
+            source = self.a.first_source(label_port) if label_port else None
+            if source is None or Analysis.rank(source) != 2:
+                continue
+            width = Analysis.dim(source, -1)
+            if width is not None and width > 1:
+                self._warn(
+                    "accuracy-label-reshape",
+                    f"Accuracy label input port '{label_port.id}' appears to be "
+                    f"one-hot encoded (shape {self._shape_text(source.shape)}). "
+                    "It will be argmax-ed automatically.",
+                    portId=label_port.id,
+                )
+            elif width == 1:
+                self._warn(
+                    "accuracy-label-reshape",
+                    f"Accuracy label input port '{label_port.id}' has shape (N,1) - "
+                    "automatically squeezed to (N).",
+                    portId=label_port.id,
+                )
+
+    def _visualization_samples(self):
+        for node in self._nodes_of("visualization"):
+            lengths = []
+            for port in node.inputs:
+                if port.sub_type != "coord":
+                    continue
+                source = self.a.first_source(port)
+                if source and source.shape and source.shape.shape:
+                    lengths.append((port.id, source.shape.shape[0]))
+            if len(lengths) < 2:
+                continue
+            first_id, first = lengths[0]
+            for other_id, other in lengths[1:]:
+                if str(first) != str(other):
+                    self._warn(
+                        "visualization-sample-mismatch",
+                        f"Visualization '{node.id}' ports {first_id} and {other_id} "
+                        f"have different sample sizes ({first} vs {other}).",
+                        nodeId=node.id,
+                    )
+                    break
+
+    def _reshape_feasibility(self):
+        for node in self._nodes_of("reshape"):
+            source = next(
+                (s for port in node.inputs for s in self.a.sources(port)), None
+            )
+            if source is None or not source.shape or not source.shape.shape:
+                continue
+
+            target = str(node.properties.get("targetShape", ""))
+            parts = [p.strip() for p in target.strip("()").split(",") if p.strip()]
             if not parts:
                 continue
 
-            # ---- count inferred / symbolic dimensions ----
-            infer_count = 0
-            for p in parts:
-                if p == "-1":
-                    infer_count += 1
-                else:
-                    try:
-                        int(p)
-                    except ValueError:
-                        infer_count += 1  # symbolic name also counts as inferred
-
-            if infer_count > 1:
-                warnings.append(
-                    {
-                        "message": f"Reshape node '{node.id}' has multiple -1 dimensions – PyTorch cannot infer.",
-                        "nodeId": node.id,
-                    }
+            if parts.count("-1") > 1:
+                self._warn(
+                    "reshape-ambiguous",
+                    f"Reshape node '{node.id}' has multiple -1 dimensions - "
+                    "PyTorch can only infer one.",
+                    nodeId=node.id,
                 )
                 continue
 
-            # ---- element count check ----
-            total_inp = sympy.Integer(1)
-            for d in inp.shape:
-                total_inp = total_inp * d._value
-
-            total_target = sympy.Integer(1)
-            for p in parts:
-                if p == "-1":
+            # Symbolic names are read off the input at runtime, so only the
+            # concrete part of the target constrains the element count.
+            fixed = sympy.Integer(1)
+            symbolic = False
+            for part in parts:
+                if part == "-1":
                     continue
                 try:
-                    total_target = total_target * int(p)
+                    fixed *= int(part)
                 except ValueError:
-                    pass  # symbolic dimension, can't multiply
+                    symbolic = True
 
-            if infer_count == 0:
-                if total_target != total_inp:
-                    warnings.append(
-                        {
-                            "message": f"Reshape node '{node.id}' total elements mismatch ({total_inp} vs {total_target}).",
-                            "nodeId": node.id,
-                        }
+            total = sympy.Integer(1)
+            for dimension in source.shape.shape:
+                total *= dimension._value
+            if not total.is_Integer or not fixed.is_Integer:
+                continue
+
+            inferred = symbolic or "-1" in parts
+            if not inferred:
+                if total != fixed:
+                    self._warn(
+                        "reshape-infeasible",
+                        f"Reshape node '{node.id}' total elements mismatch "
+                        f"({total} vs {fixed}).",
+                        nodeId=node.id,
                     )
-            else:
-                # there is exactly one inferred dimension (infer_count == 1)
-                if total_inp % total_target != 0:
-                    warnings.append(
-                        {
-                            "message": f"Reshape node '{node.id}' cannot infer dimension – {total_inp} not divisible by {total_target}.",
-                            "nodeId": node.id,
-                        }
-                    )
+            elif fixed != 0 and total % fixed != 0:
+                self._warn(
+                    "reshape-infeasible",
+                    f"Reshape node '{node.id}' cannot infer dimension - "
+                    f"{total} is not divisible by {fixed}.",
+                    nodeId=node.id,
+                )
 
-    def _check_multiple_optimizers(self, warnings):
-        optimizer_count = sum(
-            1 for n in self.graph.nodes.values() if n.type == "optimizer"
-        )
-        if optimizer_count > 1:
-            warnings.append(
-                {
-                    "message": (
-                        f"Graph contains {optimizer_count} optimizer nodes. "
-                        "Only the first one will be used."
-                    ),
-                    "nodeId": None,
-                }
-            )
-
-    def _check_eval_entry_point(self, warnings):
-        model_nodes = self._get_model_nodes()
-        if not model_nodes:
+    def _early_stopping_without_validation(self):
+        optimizer = self.a.optimizer
+        if not optimizer:
             return
-        train_entry = None
-        for nid in self.flow.get("train_order", []):
-            if nid in model_nodes:
-                train_entry = nid
-                break
-        eval_entry = None
-        for nid in self.flow.get("eval_order", []):
-            if nid in model_nodes:
-                eval_entry = nid
-                break
-        if train_entry and eval_entry and train_entry != eval_entry:
-            warnings.append(
-                {
-                    "message": (
-                        f"Evaluation enters the model at '{eval_entry}', "
-                        f"but the model starts at '{train_entry}'. "
-                        "Evaluation will be skipped because it cannot reuse the trained model."
-                    ),
-                    "nodeId": eval_entry,
-                }
-            )
-
-    def _check_data_flow_cycles(self, errors):
-        """Detect cycles formed by non‑param (data) links."""
-        adj = {nid: [] for nid in self.graph.nodes}
-        for link in self.graph.links:
-            src = self.graph.ports[link.id_from]
-            tgt = self.graph.ports[link.id_to]
-            if src.port_kind != "param" and tgt.port_kind != "param":
-                adj[src.node_id].append(tgt.node_id)
-
-        WHITE, GRAY, BLACK = 0, 1, 2
-        color = {nid: WHITE for nid in self.graph.nodes}
-
-        def dfs(u):
-            color[u] = GRAY
-            for v in adj[u]:
-                if color[v] == GRAY:
-                    return True
-                if color[v] == WHITE and dfs(v):
-                    return True
-            color[u] = BLACK
-            return False
-
-        for nid in self.graph.nodes:
-            if color[nid] == WHITE and dfs(nid):
-                errors.append(
-                    {
-                        "message": "Data-flow cycle detected - the graph is not a DAG.",
-                        "nodeId": None,
-                    }
-                )
-                return
-
-    def _check_optimizer_label_shape(self, warnings):
-        """Warn about label shape for CrossEntropyLoss / NLL."""
-        for node in self.graph.nodes.values():
-            if node.type != "optimizer":
-                continue
-            loss_type = node.properties.get("lossType", "mse")
-            if loss_type not in ("cross_entropy", "nll"):
-                continue
-
-            if len(node.inputs) < 2:
-                continue
-            label_port = node.inputs[1]
-
-            src_shape = None
-            for link in self.graph.links:
-                if link.id_to == label_port.id:
-                    src_port = self.graph.ports[link.id_from]
-                    src_shape = src_port.shape
-                    break
-
-            if src_shape is None or not src_shape.shape:
-                warnings.append(
-                    {
-                        "message": (
-                            f"Optimizer '{node.id}' uses {loss_type} loss, "
-                            "but the label shape cannot be determined. "
-                            "Model might not work."
-                        ),
-                        "nodeId": node.id,
-                    }
-                )
-                continue
-
-            if len(src_shape.shape) == 1:
-                continue  # 1‑D — OK
-
-            if len(src_shape.shape) == 2:
-                dim = src_shape.shape[-1]
-                try:
-                    last_dim = int(dim) if dim.is_concrete else -1
-                except (ValueError, TypeError):
-                    last_dim = -1
-                if last_dim == 1:
-                    warnings.append(
-                        {
-                            "message": (
-                                f"Optimizer '{node.id}' uses {loss_type} loss. "
-                                f"Label shape is {self._shape_str(src_shape)} – will be automatically squeezed to (N)."
-                            ),
-                            "nodeId": node.id,
-                        }
-                    )
-                elif last_dim > 1:
-                    warnings.append(
-                        {
-                            "message": (
-                                f"Optimizer '{node.id}' uses {loss_type} loss, "
-                                f"but the label shape is {self._shape_str(src_shape)}. "
-                                "Labels appear to be one‑hot encoded. CrossEntropyLoss expects class indices. "
-                                "Insert a Reshape node with target shape (-1) to flatten."
-                            ),
-                            "nodeId": node.id,
-                        }
-                    )
-                else:
-                    warnings.append(
-                        {
-                            "message": (
-                                f"Optimizer '{node.id}' uses {loss_type} loss, "
-                                f"but the label shape is {self._shape_str(src_shape)}. "
-                                "Model might not work."
-                            ),
-                            "nodeId": node.id,
-                        }
-                    )
-            else:
-                warnings.append(
-                    {
-                        "message": (
-                            f"Optimizer '{node.id}' uses {loss_type} loss, "
-                            f"but the label shape is {self._shape_str(src_shape)}. "
-                            "Model might not work."
-                        ),
-                        "nodeId": node.id,
-                    }
-                )
-
-    def _check_early_stopping_no_validation(self, warnings):
-        opt = self.flow.get("optimizer")
-        if not opt:
-            return
+        properties = optimizer.properties
         if (
-            opt.properties.get("earlyStopping")
-            and opt.properties.get("validationMode", "none") == "none"
+            properties.get("earlyStopping")
+            and properties.get("validationMode", "none") == "none"
         ):
-            warnings.append(
-                {
-                    "message": "Early stopping is enabled but validation mode is 'none' – early stopping will have no effect.",
-                    "nodeId": opt.id,
-                }
+            self._warn(
+                "early-stopping-without-validation",
+                "Early stopping is enabled but validation mode is 'none' - "
+                "there is no metric to stop on, so it will have no effect.",
+                nodeId=optimizer.id,
             )
 
-    def _check_multi_input_batch_sizes(self, errors):
-        """Error if model node has multiple inputs with different batch sizes
-        that are active in the SAME phase."""
-        for node in self.graph.nodes.values():
-            if node.type not in ("neuron", "layer"):
-                continue
-
-            connected = []
-            for port in node.inputs:
-                target_phases = set(port.activation_phases)
-                for link in self.graph.links:
-                    if link.id_to == port.id:
-                        src_port = self.graph.ports[link.id_from]
-                        if src_port.shape and src_port.shape.shape:
-                            src_phases = set(src_port.activation_phases)
-                            effective_phases = target_phases & src_phases
-                            if effective_phases:
-                                connected.append(
-                                    (port.id, src_port.shape, effective_phases)
-                                )
-
-            if len(connected) < 2:
-                continue
-
-            for i in range(len(connected)):
-                for j in range(i + 1, len(connected)):
-                    pid1, shape1, phases1 = connected[i]
-                    pid2, shape2, phases2 = connected[j]
-                    if phases1 & phases2:
-                        if str(shape1.shape[0]) != str(shape2.shape[0]):
-                            errors.append(
-                                {
-                                    "message": (
-                                        f"Model node '{node.id}' has multiple inputs with "
-                                        f"different batch sizes ({shape1.shape[0]} vs {shape2.shape[0]}) "
-                                        f"that are active in the same phase(s): {phases1 & phases2}. "
-                                        "Batch sizes must match when feeding into the same model node."
-                                    ),
-                                    "nodeId": node.id,
-                                }
-                            )
-                            return
-
-    def _check_missing_dataset_or_shape(self, warnings):
-        """Warn if InputData node has no dataset and no manual shape."""
-        for node in self.graph.nodes.values():
-            if node.type != "input-data":
-                continue
-            has_dataset = bool(node.properties.get("datasetId"))
-            has_shape = bool(node.properties.get("dataShape"))
-            if not has_dataset and not has_shape:
-                warnings.append(
-                    {
-                        "message": (
-                            f"InputData node '{node.id}' has no dataset attached and no shape defined. "
-                            "The generated code will use random data. Model may not work as expected."
-                        ),
-                        "nodeId": node.id,
-                    }
+    def _input_data_source(self):
+        for node in self._nodes_of("input-data"):
+            shape = node.properties.get("dataShape")
+            if not node.properties.get("datasetId") and not shape:
+                self._warn(
+                    "missing-dataset",
+                    f"InputData node '{node.id}' has no dataset attached and no "
+                    "shape defined. The generated code will use random data.",
+                    nodeId=node.id,
                 )
-            elif has_shape:
-                # Check if shape is symbolic (contains None or '?')
-                shape_str = node.properties.get("dataShape", "")
-                if shape_str and ("None" in shape_str or "?" in shape_str):
-                    warnings.append(
-                        {
-                            "message": (
-                                f"InputData node '{node.id}' has an unclear shape '{shape_str}'. "
-                                "Symbolic dimensions (None / ?) will be replaced with placeholder values. "
-                                "Consider attaching a dataset or specifying concrete dimensions."
-                            ),
-                            "nodeId": node.id,
-                        }
-                    )
+            elif shape and ("None" in str(shape) or "?" in str(shape)):
+                self._warn(
+                    "unclear-data-shape",
+                    f"InputData node '{node.id}' has an unclear shape '{shape}'. "
+                    "Symbolic dimensions will be replaced with placeholder values.",
+                    nodeId=node.id,
+                )
