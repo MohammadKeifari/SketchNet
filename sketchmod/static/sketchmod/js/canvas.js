@@ -4318,6 +4318,7 @@ const SketchMod = {
         this._saveUndoState();
         node.outputActivations[role] = value;
         this._saveToSession();
+        this._propagateShapes();
         this._render();
     },
     _updateReshapeTarget(input) {
@@ -6353,6 +6354,12 @@ class OutputNode extends RectNode {
 
     fromJSON(d) {
         super.fromJSON(d);
+        if (d.outputActivations) {
+            this.outputActivations = {
+                ...this.outputActivations,
+                ...d.outputActivations,
+            };
+        }
 
         const defaultRoles = ["loss", "prediction", "evaluation"];
         const fixedOutputs = [];
@@ -6432,15 +6439,23 @@ class OutputNode extends RectNode {
                 break;
             }
         }
-        if (foundShape) {
-            return this.outputs.map(() => ({
-                shape: foundShape.shape.map((s) => new ShapeExpr(s)),
+        if (!foundShape) return this._emptyShapes();
+
+        const activations = this.outputActivations || {};
+        return this.outputs.map((port) => {
+            const act = activations[port.role] || "none";
+            // Argmax reduces (batch, features) to (batch,), matching graph.py.
+            const dims =
+                act === "argmax" && foundShape.shape.length > 0
+                    ? [foundShape.shape[0]]
+                    : foundShape.shape;
+            return {
+                shape: dims.map((s) => new ShapeExpr(s)),
                 dtype: foundShape.dtype,
                 known: foundShape.known,
                 symbolic: foundShape.symbolic,
-            }));
-        }
-        return this._emptyShapes();
+            };
+        });
     }
 
     canAddOutput() {

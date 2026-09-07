@@ -48,6 +48,38 @@ def _is_reference(expr) -> bool:
     return bool(expr) and bool(_REFERENCE.match(expr))
 
 
+_ASSIGN = re.compile(r"^([A-Za-z_]\w*) = (.+)$")
+_IDENT = re.compile(r"[A-Za-z_]\w*")
+
+
+def _identifiers(text: str) -> set[str]:
+    return set(_IDENT.findall(text or ""))
+
+
+def _prune_dead_bindings(lines, extra_live=()):
+    """Drop ``name = expr`` lines whose name is never read.
+
+    Side-effecting statements (``print``, ``plt.show``, …) are kept. Names in
+    ``extra_live`` count as used after this block (for example ``Data`` fields).
+    """
+    live = set(extra_live)
+    kept = []
+    for line in reversed(lines):
+        match = _ASSIGN.match(line.strip())
+        if match is None:
+            live.update(_identifiers(line))
+            kept.append(line)
+            continue
+        name, expr = match.group(1), match.group(2)
+        if name not in live:
+            continue
+        live.discard(name)
+        live.update(_identifiers(expr))
+        kept.append(line)
+    kept.reverse()
+    return kept
+
+
 # ======================================================================
 #  Plan pieces
 # ======================================================================
@@ -513,11 +545,19 @@ class PlanBuilder:
         train.setup = list(scope.lines)
         scope.lines = []
 
+        train.validation = self._validation_spec()
+        # Validation rewrites feature/label tensors in place, so those names
+        # must stay real variables. Otherwise a bare ``data.foo`` is fine.
+        can_inline = train.validation is None
+
         for name, binding in zip(feature_names, self.model_inputs):
             if binding.train_expr is None:
                 continue
-            scope.lines.append(f"{name} = {binding.train_expr}")
-            train.feature_tensors.append(name)
+            if can_inline and _is_reference(binding.train_expr):
+                train.feature_tensors.append(binding.train_expr)
+            else:
+                scope.lines.append(f"{name} = {binding.train_expr}")
+                train.feature_tensors.append(name)
             train.loop_vars.append(binding.param)
 
         if not train.feature_tensors:
@@ -528,8 +568,11 @@ class PlanBuilder:
         if labels is None:
             self.plan.skip_reason = "the optimizer has no labels connected"
             return
-        train.labels = labels_name
-        scope.lines.append(f"{labels_name} = {labels}")
+        if can_inline and _is_reference(labels):
+            train.labels = labels
+        else:
+            train.labels = labels_name
+            scope.lines.append(f"{labels_name} = {labels}")
 
         props = self.optimizer.properties
         scope.lines.append(
@@ -551,7 +594,6 @@ class PlanBuilder:
         train.body = scope.lines
 
         train.gradient_clip = props.get("gradientClip")
-        train.validation = self._validation_spec()
         self.plan.train = train
 
     def _phase_expression(self, scope, sources):
@@ -661,6 +703,10 @@ class PlanBuilder:
     # ------------------------------------------------------------------
     def _finish(self):
         self.plan.data_fields = self.exports.fields
+        live = set()
+        for _, value in self.plan.data_fields:
+            live.update(_identifiers(value))
+        self.plan.load_lines = _prune_dead_bindings(self.load.lines, live)
         if self.optimizer is not None and self.plan.train is not None:
             props = self.optimizer.properties
             self.plan.constants = [

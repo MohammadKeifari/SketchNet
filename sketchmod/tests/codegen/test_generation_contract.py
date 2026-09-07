@@ -22,6 +22,10 @@ from sketchmod.codegen.generator import CodeGenerator
 from sketchmod.codegen.validator import GraphValidator
 
 EXAMPLES_DIR = Path(__file__).resolve().parent / "examples"
+TEMPLATES_DIR = (
+    Path(__file__).resolve().parents[2] / "static" / "sketchmod" / "templates"
+)
+TEMPLATE_WARNING_ALLOWLIST = {"missing-dataset"}
 PHASES = ("preprocessing", "training", "evaluation")
 
 
@@ -115,6 +119,35 @@ class GenerationContractTests(unittest.TestCase):
                 with self.subTest(example=path.stem, message=item["message"]):
                     self.assertTrue(item.get("code"), "diagnostic has no code")
                     self.assertTrue(item.get("message"), "diagnostic has no message")
+
+
+class StarterTemplateTests(unittest.TestCase):
+    """Learn starter templates must be valid graphs, not merely translatable."""
+
+    def test_templates_are_valid_and_compile(self):
+        templates = sorted(TEMPLATES_DIR.glob("*.json"))
+        self.assertGreaterEqual(len(templates), 4, "expected the four Learn templates")
+        for path in templates:
+            with self.subTest(template=path.stem):
+                graph = json.loads(path.read_text(encoding="utf-8"))
+                report = GraphValidator(graph).validate()
+                self.assertTrue(
+                    report["isValid"],
+                    f"{path.stem} was rejected: {report['errors']}",
+                )
+                self.assertEqual(report["errors"], [])
+                extra = {
+                    item["code"]
+                    for item in report["warnings"]
+                    if item["code"] not in TEMPLATE_WARNING_ALLOWLIST
+                }
+                self.assertEqual(
+                    extra,
+                    set(),
+                    f"{path.stem} raised unexpected warnings: {extra}",
+                )
+                code = CodeGenerator(graph).generate()
+                compile(code, f"<{path.stem}>", "exec")
 
 
 if __name__ == "__main__":

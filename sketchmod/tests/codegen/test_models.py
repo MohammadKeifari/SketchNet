@@ -986,8 +986,45 @@ def check_model50(proc, code, graph):
     )
 
 
+def check_model51(proc, code, graph):
+    """A Print node between the loss port and the optimizer severs the loss path."""
+    return all(
+        [
+            check("Graph rejected", not diagnostics(graph)["isValid"]),
+            check(
+                "optimizer-missing-loss reported",
+                "optimizer-missing-loss" in error_codes(graph),
+            ),
+        ]
+    )
+
+
+def check_model52(proc, code, graph):
+    """A Layer that only runs in preprocessing is untrained."""
+    return all(
+        [
+            check("untrained-layer reported", "untrained-layer" in warning_codes(graph)),
+            check("Ghost layer still emitted", mentions(code, "ghost")),
+            check("Training completed", "Training complete." in proc.stdout),
+            check("Graph still translatable", diagnostics(graph)["isValid"]),
+        ]
+    )
+
+
+def check_model53(proc, code, graph):
+    """A Conv2D that only runs in evaluation is untrained."""
+    return all(
+        [
+            check("untrained-layer reported", "untrained-layer" in warning_codes(graph)),
+            check("Conv2D present", "nn.Conv2d" in code),
+            check("Training completed", "Training complete." in proc.stdout),
+            check("Graph still translatable", diagnostics(graph)["isValid"]),
+        ]
+    )
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
-VALIDATION_ONLY_MODELS = {13, 14, 15, 16, 17, 27, 31, 32, 44, 45, 48}
+VALIDATION_ONLY_MODELS = {13, 14, 15, 16, 17, 27, 31, 32, 44, 45, 48, 51}
 
 MODEL_CHECKS = {
     1: check_model1,
@@ -1040,6 +1077,9 @@ MODEL_CHECKS = {
     48: check_model48,
     49: check_model49,
     50: check_model50,
+    51: check_model51,
+    52: check_model52,
+    53: check_model53,
 }
 
 

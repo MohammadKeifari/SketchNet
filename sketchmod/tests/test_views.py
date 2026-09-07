@@ -363,3 +363,31 @@ class ViewsTest(TestCase):
         url = reverse("sketchmod:api_dataset_columns", args=["nonexist"])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
+
+    # ---------- Starter templates ----------
+    def test_template_load_known_slug(self):
+        """A known Learn template is stored on the session and redirects to canvas."""
+        self.client.login(username="testuser", password="testpass123")
+        response = self.client.get(
+            reverse("sketchmod:template_load", args=["linear-regression"])
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("sketchmod:canvas"))
+        graph = self.client.session.get("template_graph")
+        self.assertIsInstance(graph, dict)
+        self.assertTrue(any(node.get("type") == "input-data" for node in graph["nodes"]))
+        self.assertNotIn("template_error", self.client.session)
+
+    def test_template_load_unknown_slug(self):
+        """An unknown slug records a template error and does not store a graph."""
+        self.client.login(username="testuser", password="testpass123")
+        response = self.client.get(
+            reverse("sketchmod:template_load", args=["does-not-exist"])
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("sketchmod:canvas"))
+        self.assertNotIn("template_graph", self.client.session)
+        self.assertEqual(
+            self.client.session.get("template_error"),
+            "Template 'does-not-exist' not found.",
+        )

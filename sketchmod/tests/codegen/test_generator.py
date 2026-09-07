@@ -6,6 +6,7 @@ Checks that the generated code contains expected patterns.
 import json
 import re
 import unittest
+from pathlib import Path
 
 from sketchmod.codegen.generator import CodeGenerator
 
@@ -466,6 +467,22 @@ class GeneratorTest(unittest.TestCase):
         # The raw split feeds later preprocessing only, so it stays local.
         self.assertIn("split_train = raw[", code)
         self.assertNotIn("split_train: torch.Tensor", code)
+
+    def test_unused_split_half_is_not_emitted(self):
+        """A train/test output that nothing reads is dropped from load_data."""
+        path = Path(__file__).resolve().parent / "examples" / "model5.JSON"
+        code = CodeGenerator(json.loads(path.read_text(encoding="utf-8"))).generate()
+        self.assertIn("t2_train = ", code)
+        self.assertNotIn("t2_test = ", code)
+        self.assertNotIn("t3_test = ", code)
+
+    def test_train_inlines_data_aliases(self):
+        """Single-use ``features = data.x`` aliases are inlined into TensorDataset."""
+        path = Path(__file__).resolve().parent / "examples" / "model5.JSON"
+        code = CodeGenerator(json.loads(path.read_text(encoding="utf-8"))).generate()
+        self.assertIn("TensorDataset(data.t2_train, data.t3_train)", code)
+        self.assertNotIn("features = data.t2_train", code)
+        self.assertNotIn("labels = data.t3_train", code)
 
     def test_output_activation_softmax(self):
         graph = json.loads(json.dumps(self.minimal_graph))
