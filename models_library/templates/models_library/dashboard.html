@@ -68,7 +68,7 @@
                                 {% if user == model.owner %}
                                     <a href="{% url 'sketchmod:canvas' %}?load={{ model.model_id }}"
                                        class="icon-btn"
-                                       title="Edit Graph">
+                                       title="Open in SketchMod">
                                         <svg width="15"
                                              height="15"
                                              viewBox="0 0 24 24"
@@ -441,7 +441,7 @@
                                     {% if user == model.owner %}
                                         <a href="{% url 'sketchmod:canvas' %}?load={{ model.model_id }}"
                                            class="icon-btn"
-                                           title="Edit Graph">
+                                           title="Open in SketchMod">
                                             <svg width="15"
                                                  height="15"
                                                  viewBox="0 0 24 24"
