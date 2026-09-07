@@ -1079,7 +1079,9 @@ const SketchMod = {
             document.getElementById("saveModal")?.style.display === "flex" ||
             document.getElementById("validationModal")?.style.display ===
                 "flex" ||
-            document.getElementById("importModal")?.style.display === "flex"
+            document.getElementById("importModal")?.style.display === "flex" ||
+            document.getElementById("shortcutsModal")?.style.display === "flex" ||
+            document.getElementById("reportModal")?.style.display === "flex"
         ) {
             return;
         }
@@ -1105,6 +1107,10 @@ const SketchMod = {
         if (e.key === "s") this.setTool("select");
         if (e.key === "h") this.setTool("pan");
         if (e.key === "d") this.setTool("delete");
+        if (e.key === "?" && !e.ctrlKey && !e.metaKey) {
+            this.openShortcutsModal();
+            e.preventDefault();
+        }
         if (e.key === "Delete") {
             this._deleteSelected();
         }
@@ -2828,12 +2834,12 @@ const SketchMod = {
                     SketchMod._updateModelInfo();
                     SketchMod._showToast("Model saved!");
                 } else {
-                    alert(data.error || "Save failed");
+                    this._showToast(data.error || "Save failed");
                 }
             })
             .catch((err) => {
                 console.error("Save failed:", err);
-                alert("Save failed. Check console.");
+                this._showToast("Save failed. Check console.");
             });
     },
     _getCsrfToken() {
@@ -2900,7 +2906,7 @@ const SketchMod = {
                     SketchMod._updateModelInfo();
                     SketchMod._showToast("Model updated!");
                 } else {
-                    alert(data.error || "Update failed");
+                    this._showToast(data.error || "Update failed");
                 }
             })
             .catch((err) => {
@@ -2911,6 +2917,8 @@ const SketchMod = {
     _showToast(message) {
         let toast = document.createElement("div");
         toast.className = "toast";
+        toast.setAttribute("role", "status");
+        toast.setAttribute("aria-live", "polite");
         toast.textContent = message;
         toast.style.cssText = `
         position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
@@ -3384,7 +3392,7 @@ const SketchMod = {
                 this._showToast("JSON copied!");
             })
             .catch(() => {
-                alert("Failed to copy. Check console for the JSON.");
+                this._showToast("Failed to copy. Check console for the JSON.");
                 console.log(data);
             });
     },
@@ -3448,6 +3456,14 @@ const SketchMod = {
     },
     _closeValidationModal() {
         document.getElementById("validationModal").style.display = "none";
+    },
+    openShortcutsModal() {
+        const modal = document.getElementById("shortcutsModal");
+        if (modal) modal.style.display = "flex";
+    },
+    closeShortcutsModal() {
+        const modal = document.getElementById("shortcutsModal");
+        if (modal) modal.style.display = "none";
     },
     _clearValidation() {
         this.errorLinkIds = new Set();
