@@ -564,7 +564,8 @@ def api_dataset_info(request, dataset_id):
         return JsonResponse({"error": "Not allowed"}, status=403)
     return JsonResponse(
         {
-            "filename": dataset.file.name.split("/")[-1],  # actual file name
+            "name": dataset.name,
+            "filename": dataset.file.name.split("/")[-1],
             "format": dataset.format,
         }
     )
