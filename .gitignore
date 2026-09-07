@@ -9,6 +9,9 @@ db.sqlite3
 *.code-workspace
 media/
 todo.txt
-sketchmod/tests/codegen/examples/*.py
-# sketchmod/tests/codegen/examples/data
+# Codegen fixtures (model*.JSON + data/*.csv) must stay in git for CI.
+# Ignore generated dumps only, not fixture scripts.
+sketchmod/tests/codegen/examples/*_generated.py
+sketchmod/tests/codegen/examples/model.py
+!sketchmod/tests/codegen/examples/data_generator.py
 .cursor/

@@ -47,6 +47,31 @@ from sketchmod.codegen.graph import parse_graph
 
 EXAMPLES_DIR = Path(__file__).resolve().parent / "examples"
 DATA_DIR = EXAMPLES_DIR / "data"
+MODEL_JSON_RE = re.compile(r"^model(\d+)\.json$", re.IGNORECASE)
+
+
+def discover_model_json_files(indices: list[int] | None = None) -> list[Path]:
+    """Find model JSON fixtures (case-insensitive for Linux CI)."""
+    all_files = [
+        path
+        for path in EXAMPLES_DIR.iterdir()
+        if path.is_file() and MODEL_JSON_RE.match(path.name)
+    ]
+    by_index = {
+        int(MODEL_JSON_RE.match(path.name).group(1)): path for path in all_files
+    }
+
+    if indices is None:
+        return [by_index[i] for i in sorted(by_index)]
+
+    files = []
+    for index in indices:
+        match = by_index.get(index)
+        if match:
+            files.append(match)
+        else:
+            print(f"Warning: model file for index {index} not found, skipping.")
+    return files
 
 
 # ----------------------------------------------------------------------
@@ -844,20 +869,9 @@ def main():
 
     if args.models:
         indices = [int(x.strip()) for x in args.models.split(",")]
-        json_files = []
-        for i in indices:
-            pattern = f"model{i}.json"
-            match = (
-                next(EXAMPLES_DIR.glob(pattern), None)
-                or next(EXAMPLES_DIR.glob(pattern.upper()), None)
-                or next(EXAMPLES_DIR.glob(pattern.lower()), None)
-            )
-            if match:
-                json_files.append(match)
-            else:
-                print(f"Warning: model file for index {i} not found, skipping.")
+        json_files = discover_model_json_files(indices)
     else:
-        json_files = sorted(EXAMPLES_DIR.glob("model*.json"))
+        json_files = discover_model_json_files()
 
     if not json_files:
         print("No model JSON files found.")
