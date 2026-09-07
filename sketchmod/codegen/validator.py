@@ -33,6 +33,7 @@ REQUIRED_INPUTS = {
     "neuron": 1,
     "layer": 1,
     "conv2d": 1,
+    "maxpool2d": 1,
     "dropout": 1,
     "batchnorm": 1,
     "flatten": 1,

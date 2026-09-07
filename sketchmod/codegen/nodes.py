@@ -493,6 +493,31 @@ class Conv2DEmitter(_ParametricEmitter):
         )
 
 
+class MaxPool2DEmitter(NodeEmitter):
+    def submodules(self, n):
+        if not n.in_model:
+            return []
+        args = [str(n.props.get("kernelSize", 2))]
+        stride = n.props.get("stride", n.props.get("kernelSize", 2))
+        if stride != n.props.get("kernelSize", 2):
+            args.append(f"stride={stride}")
+        padding = n.props.get("padding", 0)
+        if padding:
+            args.append(f"padding={padding}")
+        return [f"self.{n.attr} = nn.MaxPool2d({', '.join(args)})"]
+
+    def expressions(self, n):
+        kernel = n.props.get("kernelSize", 2)
+        stride = n.props.get("stride", kernel)
+        padding = n.props.get("padding", 0)
+        if n.in_model:
+            return [f"self.{n.attr}({n.input(0)})"]
+        return [
+            f"torch.nn.functional.max_pool2d({n.input(0)}, "
+            f"kernel_size={kernel}, stride={stride}, padding={padding})"
+        ]
+
+
 class BatchNormEmitter(_ParametricEmitter):
     def _num_features(self, n):
         rank = n.rank(0)
@@ -688,6 +713,7 @@ EMITTERS = {
     "neuron": NeuronEmitter(),
     "layer": LinearEmitter(),
     "conv2d": Conv2DEmitter(),
+    "maxpool2d": MaxPool2DEmitter(),
     "batchnorm": BatchNormEmitter(),
     "dropout": DropoutEmitter(),
     "flatten": FlattenEmitter(),

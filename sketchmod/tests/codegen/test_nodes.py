@@ -313,6 +313,18 @@ class Conv2DTest(EmitterTest):
         self.assertEqual(result["values"], ["torch.relu(self.conv(x))"])
 
 
+class MaxPool2DTest(EmitterTest):
+    def test_maxpool2d_reduces_spatial_dims(self):
+        node = self.node(
+            "pool",
+            "maxpool2d",
+            {"kernelSize": 2, "stride": 2, "padding": 0},
+        )
+        result = self.emit(node, ["x"], [port("a", dims=(100, 8, 6, 6))], in_model=True)
+        self.assertEqual(result["submodules"], ["self.pool = nn.MaxPool2d(2)"])
+        self.assertEqual(result["values"], ["self.pool(x)"])
+
+
 class BatchNormTest(EmitterTest):
     def test_one_dimensional(self):
         node = self.node("bn", "batchnorm")

@@ -347,6 +347,8 @@ def _propagate_shapes(graph: Graph):
             _shape_layer(node, graph, out_features=None)
         elif node.type == "conv2d":
             _shape_conv2d(node, graph)
+        elif node.type == "maxpool2d":
+            _shape_maxpool2d(node, graph)
         elif node.type == "flatten":
             _shape_flatten(node, graph)
         elif node.type in ("dropout", "batchnorm"):
@@ -492,6 +494,21 @@ def _shape_conv2d(node, graph):
     h_out = ShapeDim(sympy.simplify(h_val))
     w_out = ShapeDim(sympy.simplify(w_val))
     _set_output_shape(node, ShapeInfo(shape=[n, ShapeDim(filters), h_out, w_out]))
+
+
+def _shape_maxpool2d(node, graph):
+    inp = _first_input_shape(node, graph)
+    if not inp or not inp.shape or len(inp.shape) < 4:
+        return
+    n, c, h, w = inp.shape[:4]
+    k = node.properties.get("kernelSize", 2)
+    stride = node.properties.get("stride", k)
+    padding = node.properties.get("padding", 0)
+    h_val = (h._value + 2 * padding - k) // stride + 1
+    w_val = (w._value + 2 * padding - k) // stride + 1
+    h_out = ShapeDim(sympy.simplify(h_val))
+    w_out = ShapeDim(sympy.simplify(w_val))
+    _set_output_shape(node, ShapeInfo(shape=[n, c, h_out, w_out]))
 
 
 def _shape_flatten(node, graph):
