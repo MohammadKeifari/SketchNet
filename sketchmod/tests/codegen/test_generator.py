@@ -3,8 +3,10 @@ Unit tests for the main code generator.
 Checks that the generated code contains expected patterns.
 """
 
-import unittest
 import json
+import re
+import unittest
+
 from sketchmod.codegen.generator import CodeGenerator
 
 
@@ -406,16 +408,34 @@ class GeneratorTest(unittest.TestCase):
             "nodeCounter": 0,
         }
 
+    # ---------- helpers ----------
+    @staticmethod
+    def data_fields(code):
+        """Field names of the generated Data NamedTuple."""
+        block = code.split("class Data(NamedTuple):")[1].split("\n\n")[0]
+        return re.findall(r"^\s+(\w+): torch\.Tensor$", block, re.M)
+
+    @staticmethod
+    def forward_body(code):
+        return code.split("def forward(")[1].split("\n\n")[0]
+
     # ---------- basic generation ----------
     def test_generate_minimal_training_script(self):
-        gen = CodeGenerator(self.minimal_graph)
-        code = gen.generate()
+        code = CodeGenerator(self.minimal_graph).generate()
         self.assertIn("class Model(nn.Module):", code)
-        self.assertIn("def train_model(", code)
-        self.assertIn("def evaluate(", code)  # now present!
+        self.assertIn("def train(model: Model, data: Data) -> None:", code)
+        self.assertIn("def evaluate(", code)
         self.assertIn("criterion = nn.MSELoss()", code)
-        self.assertIn("optimizer = optim.Adam(model.parameters(), lr=0.01", code)
-        self.assertIn("for epoch in range(config.get('epochs', 10)):", code)
+        self.assertIn("optimizer = optim.Adam(model.parameters(), lr=0.01)", code)
+        self.assertIn("EPOCHS = 5", code)
+        self.assertIn("for epoch in range(1, EPOCHS + 1):", code)
+
+    def test_forward_is_static_single_assignment(self):
+        """No dictionary plumbing, no runtime guards - one binding per node."""
+        body = self.forward_body(CodeGenerator(self.minimal_graph).generate())
+        self.assertIn("layer1 = torch.relu(self.layer1(x))", body)
+        for pattern in ("outputs[", "inputs_dict", "if ", ".dim()"):
+            self.assertNotIn(pattern, body)
 
     def test_no_optimizer_skips_training(self):
         graph = json.loads(json.dumps(self.minimal_graph))
@@ -427,24 +447,25 @@ class GeneratorTest(unittest.TestCase):
             if l["from"] not in opt_node_ids and l["to"] not in opt_node_ids
         ]
         graph["nodes"] = [n for n in graph["nodes"] if n["type"] != "optimizer"]
-        gen = CodeGenerator(graph)
-        code = gen.generate()
-        self.assertIn("# No training phase with optimizer – training skipped.", code)
+        code = CodeGenerator(graph).generate()
+        self.assertIn("# Training skipped: no optimizer node", code)
         self.assertNotIn("class Model", code)
 
     def test_evaluation_present(self):
-        gen = CodeGenerator(self.minimal_graph)
-        code = gen.generate()
-        self.assertIn("def evaluate(model, pre_data):", code)
+        code = CodeGenerator(self.minimal_graph).generate()
+        self.assertIn("def evaluate(model: Model, data: Data) -> None:", code)
         self.assertIn("model.eval()", code)
+        self.assertIn("out = model(data.norm_test.to(DEVICE))", code)
 
-    def test_pre_data_only_seeds(self):
-        gen = CodeGenerator(self.minimal_graph)
-        code = gen.generate()
-        self.assertIn("'feat_col_out'", code)
-        self.assertIn("'label_col_out'", code)
-        self.assertIn("'norm_test_out'", code)  # evaluation seed
-        self.assertNotIn("'split_train'", code)  # only preprocessing
+    def test_data_carries_only_live_values(self):
+        """Exported fields are the ones train/evaluate read, nothing else."""
+        code = CodeGenerator(self.minimal_graph).generate()
+        self.assertEqual(
+            sorted(self.data_fields(code)), ["feat_col", "label_col", "norm_test"]
+        )
+        # The raw split feeds later preprocessing only, so it stays local.
+        self.assertIn("split_train = raw[", code)
+        self.assertNotIn("split_train: torch.Tensor", code)
 
     def test_output_activation_softmax(self):
         graph = json.loads(json.dumps(self.minimal_graph))
@@ -453,16 +474,14 @@ class GeneratorTest(unittest.TestCase):
             "loss": "none",
             "evaluation": "none",
         }
-        gen = CodeGenerator(graph)
-        code = gen.generate()
-        self.assertIn("torch.softmax(x, dim=-1)", code)
+        code = CodeGenerator(graph).generate()
+        self.assertIn("prediction=torch.softmax(layer1, dim=-1),", code)
 
     def test_crossentropy_cast_long(self):
         graph = json.loads(json.dumps(self.minimal_graph))
         graph["nodes"][-1]["lossType"] = "cross_entropy"
-        gen = CodeGenerator(graph)
-        code = gen.generate()
-        self.assertIn("labels = labels.long()", code)
+        code = CodeGenerator(graph).generate()
+        self.assertIn("labels = data.label_col.squeeze(-1).long()", code)
         self.assertIn("nn.CrossEntropyLoss()", code)
 
     def test_visualization_skipped_in_training(self):

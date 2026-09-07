@@ -267,12 +267,7 @@ class ViewsTest(TestCase):
         data = response.json()
         self.assertFalse(data["isValid"])
         errors = data["errors"]
-        self.assertTrue(
-            any(
-                "Optimizer node must be in the training phase" in e["message"]
-                for e in errors
-            )
-        )
+        self.assertTrue(any(e["code"] == "optimizer-not-training" for e in errors))
 
     # ---------- Highlight Path API ----------
     def test_highlight_unauthenticated(self):

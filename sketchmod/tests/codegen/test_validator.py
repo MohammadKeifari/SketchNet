@@ -232,6 +232,12 @@ class ValidatorTest(unittest.TestCase):
                 return
         self.fail(msg or f"No message containing '{substring}' found in {collection}")
 
+    def _assert_has_code(self, collection, code, msg=None):
+        """Prefer this over message matching: codes are the stable contract."""
+        found = {item.get("code") for item in collection}
+        if code not in found:
+            self.fail(msg or f"No diagnostic with code '{code}' in {sorted(found)}")
+
     # ----------------------------------------------------------------
     # ERRORS
     # ----------------------------------------------------------------
@@ -262,9 +268,7 @@ class ValidatorTest(unittest.TestCase):
         opt["inputPorts"][0]["activationPhases"] = ["preprocessing"]
         opt["inputPorts"][1]["activationPhases"] = ["preprocessing"]
         r = GraphValidator(g).validate()
-        self._assert_has_message(
-            r["errors"], "Optimizer node must be in the training phase"
-        )
+        self._assert_has_code(r["errors"], "optimizer-not-training")
         self.assertFalse(r["isValid"])
 
     def test_param_port_cycle_error(self):
@@ -389,7 +393,7 @@ class ValidatorTest(unittest.TestCase):
             ]
         )
         r = GraphValidator(g).validate()
-        self._assert_has_message(r["errors"], "Param‑port cycle detected")
+        self._assert_has_code(r["errors"], "param-cycle")
         self.assertFalse(r["isValid"])
 
     def test_layer_no_input_error(self):
@@ -518,9 +522,8 @@ class ValidatorTest(unittest.TestCase):
         layer["inputPorts"][0]["activationPhases"] = ["preprocessing"]
         layer["outputPorts"][0]["activationPhases"] = ["preprocessing"]
         r = GraphValidator(g).validate()
-        self._assert_has_message(
-            r["warnings"], "is in preprocessing and will be untrained"
-        )
+        self._assert_has_code(r["warnings"], "untrained-layer")
+        self._assert_has_message(r["warnings"], "runs in preprocessing")
 
     def test_model_eval_without_train_warning(self):
         g = deepcopy(self._base())
@@ -530,7 +533,8 @@ class ValidatorTest(unittest.TestCase):
         layer["inputPorts"][0]["activationPhases"] = ["evaluation"]
         layer["outputPorts"][0]["activationPhases"] = ["evaluation"]
         r = GraphValidator(g).validate()
-        self._assert_has_message(r["warnings"], "is in evaluation but not training")
+        self._assert_has_code(r["warnings"], "untrained-layer")
+        self._assert_has_message(r["warnings"], "runs in evaluation")
 
     def test_visualization_in_training_warning(self):
         g = deepcopy(self._base())
@@ -660,9 +664,8 @@ class ValidatorTest(unittest.TestCase):
         opt = next(n for n in g["nodes"] if n["type"] == "optimizer")
         opt["lossType"] = "bce"
         r = GraphValidator(g).validate()
-        self._assert_has_message(
-            r["warnings"], "BCEWithLogitsLoss expects one‑hot labels"
-        )
+        self._assert_has_code(r["warnings"], "label-loss-mismatch")
+        self._assert_has_message(r["warnings"], "BCEWithLogitsLoss expects one-hot")
 
     def test_accuracy_missing_inputs_warning(self):
         g = deepcopy(self._base())
@@ -994,7 +997,8 @@ class ValidatorTest(unittest.TestCase):
         g["links"].append({"from": "oh_out", "to": "acc_label", "weight": 1})
         g["links"].append({"from": "pred_p", "to": "acc_pred", "weight": 1})
         r = GraphValidator(g).validate()
-        self._assert_has_message(r["warnings"], "appears to be one‑hot encoded")
+        self._assert_has_code(r["warnings"], "accuracy-label-reshape")
+        self._assert_has_message(r["warnings"], "appears to be one-hot encoded")
 
     def test_accuracy_label_squeeze_warning(self):
         g = deepcopy(self._base())

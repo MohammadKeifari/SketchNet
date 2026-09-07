@@ -18,6 +18,11 @@ Usage:
   # clear-cache
 
 Place model JSON files in `examples/` and datasets in `examples/data/`.
+
+The checks below are behavioural: they assert what the generated script does
+(which port feeds the loss, whether the model converges, which diagnostics the
+validator raises) rather than how the emitter happens to format it.  Accuracy,
+loss and epoch thresholds are the contract and should not be relaxed.
 """
 
 import argparse
@@ -86,6 +91,27 @@ def run_generated_code(
     return proc
 
 
+# Constructs the old dictionary-based generator emitted.  None of them should
+# come back: every dataflow decision is now resolved at generation time.
+LEGACY_PATTERNS = (
+    "inputs_dict",
+    "outputs.get(",
+    "outputs[",
+    "if tmp is not None",
+    "in dir()",
+    ".dim() ==",
+)
+
+
+def static_check(code: str) -> bool:
+    """Checks every generated script must satisfy, whatever the graph."""
+    found = [p for p in LEGACY_PATTERNS if p in code]
+    if found:
+        print(f"❌ Generated code fell back to runtime dataflow: {found}")
+        return False
+    return True
+
+
 def default_check(proc, code, graph):
     """Basic checks that apply to every model."""
     ok = True
@@ -109,7 +135,8 @@ def default_check(proc, code, graph):
         else:
             print("⚠️  stderr output (likely harmless warnings):")
             print(proc.stderr.strip()[:500])
-    return ok
+
+    return static_check(code) and ok
 
 
 def clear_project_cache():
@@ -131,1184 +158,542 @@ def clear_project_cache():
 
 
 # ----------------------------------------------------------------------
+# Assertion helpers
+# ----------------------------------------------------------------------
+
+
+def check(label: str, condition, detail: str = "") -> bool:
+    """Print one named check and return whether it held."""
+    passed = bool(condition)
+    suffix = f" - {detail}" if detail else ""
+    print(f"{'✅' if passed else '❌'} {label}{suffix}")
+    return passed
+
+
+def section(code: str, header: str) -> str:
+    """The body of one top-level ``def``/``class`` in the generated script."""
+    lines = code.splitlines()
+    start = next((i for i, l in enumerate(lines) if l.startswith(header)), None)
+    if start is None:
+        return ""
+    body = []
+    for line in lines[start + 1 :]:
+        if line and not line.startswith(" "):
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def output_roles(code: str) -> dict:
+    """Maps each Output field to the expression ``forward`` returns for it."""
+    match = re.search(r"return Output\(\n(.*?)\n\s*\)", code, re.S)
+    if not match:
+        return {}
+    roles = {}
+    for line in match.group(1).splitlines():
+        name, _, expression = line.strip().rstrip(",").partition("=")
+        if name.strip():
+            roles[name.strip()] = expression.strip()
+    return roles
+
+
+def figure_titles(code: str) -> list:
+    return re.findall(r"plt\.title\('([^']*)'\)", code)
+
+
+def mentions(code: str, identifier: str) -> bool:
+    return re.search(rf"\b{re.escape(identifier)}\b", code) is not None
+
+
+def diagnostics(graph: dict) -> dict:
+    from sketchmod.codegen.validator import GraphValidator
+
+    return GraphValidator(graph).validate()
+
+
+def error_codes(graph: dict) -> set:
+    return {e.get("code") for e in diagnostics(graph)["errors"]}
+
+
+def warning_codes(graph: dict) -> set:
+    return {w.get("code") for w in diagnostics(graph)["warnings"]}
+
+
+def train_losses(proc) -> list:
+    return [float(v) for v in re.findall(r"Train Loss: ([0-9.eE+-]+)", proc.stdout)]
+
+
+def final_accuracy(proc):
+    match = re.search(r"Accuracy: ([0-9.]+)", proc.stdout)
+    return float(match.group(1)) if match else None
+
+
+def last_epoch(proc):
+    epochs = re.findall(r"Epoch\s+(\d+)", proc.stdout)
+    return int(epochs[-1]) if epochs else None
+
+
+def loss_trend(proc) -> str:
+    losses = train_losses(proc)
+    return f"{losses[0]} → {losses[-1]}" if losses else "no loss output"
+
+
+def converged(proc, threshold: float) -> bool:
+    losses = train_losses(proc)
+    return bool(losses) and losses[-1] < threshold
+
+
+def loss_decreased(proc) -> bool:
+    losses = train_losses(proc)
+    return len(losses) >= 2 and losses[-1] < losses[0]
+
+
+def accurate_to(proc, threshold: float) -> bool:
+    accuracy = final_accuracy(proc)
+    return accuracy is not None and accuracy > threshold
+
+
+def linear_layers(code: str) -> list:
+    """(in_features, out_features) of every nn.Linear the model builds."""
+    return [
+        (int(a), int(b)) for a, b in re.findall(r"nn\.Linear\((\d+),\s*(\d+)", code)
+    ]
+
+
+# ----------------------------------------------------------------------
 # Model‑specific checks
 # ----------------------------------------------------------------------
 
 
 def check_model1(proc, code, graph):
-    """
-    model1 checks:
-      1. Output ports are correctly transformed:
-         loss -> raw logits, prediction -> argmax, evaluation -> softmax.
-      2. OneHot → DeOneHot parameter sharing is wired.
-      3. Phase analysis produces correct sets.
-      4. General execution succeeds.
-    """
-    ok = True
+    """Output port roles, OneHot→DeOneHot parameter sharing, phase partition."""
+    roles = output_roles(code)
+    flow = analyze_phases(parse_graph(graph))
 
-    # 1) Output port assignments
-    loss_line = re.search(
-        r"outputs\['output-main_output_0'\]\s*=\s*x\s*$", code, re.MULTILINE
+    return all(
+        [
+            check("Loss port carries raw logits", roles.get("loss", "").isidentifier()),
+            check(
+                "Prediction port applies argmax",
+                roles.get("prediction", "").startswith("torch.argmax("),
+            ),
+            check(
+                "Evaluation port applies softmax",
+                roles.get("evaluation", "").startswith("torch.softmax("),
+            ),
+            check(
+                "DeOneHot reuses the OneHot categories",
+                "torch.arange" not in code,
+                "no category tensor is rebuilt",
+            ),
+            check("OneHot o8 is preprocessing", "o8" in flow["preprocessing_set"]),
+            check("Layer l9 trains and evaluates", "l9" in flow["train_set"]
+                  and "l9" in flow["eval_set"]),
+            check("Visualization v12 stays out of training",
+                  "v12" not in flow["train_set"]),
+            check("DeOneHot d23 stays out of training", "d23" not in flow["train_set"]),
+        ]
     )
-    argmax_line = re.search(
-        r"outputs\['output-main_output_1'\]\s*=\s*torch\.argmax\(x,\s*dim=-1\)", code
-    )
-    softmax_line = re.search(
-        r"outputs\['output-main_output_2'\]\s*=\s*torch\.softmax\(x,\s*dim=-1\)", code
-    )
-
-    if not loss_line:
-        print("❌ Loss port not assigned as raw logits")
-        ok = False
-    else:
-        print("✅ Loss port (raw logits)")
-
-    if not argmax_line:
-        print("❌ Prediction port not assigned as argmax")
-        ok = False
-    else:
-        print("✅ Prediction port (argmax)")
-
-    if not softmax_line:
-        print("❌ Evaluation port not assigned as softmax")
-        ok = False
-    else:
-        print("✅ Evaluation port (softmax)")
-
-    # 2) OneHot → DeOneHot parameter sharing
-    eval_section = code.split("def evaluate(")[1] if "def evaluate(" in code else code
-    # In evaluation section, find the DeOneHot part (which produces d23_out)
-    d23_match = re.search(r"d23_out\s*=\s*torch\.argmax", eval_section)
-    if not d23_match:
-        print("❌ DeOneHot d23 not found")
-        ok = False
-    else:
-        # Everything after d23_out until next function or end
-        d23_block = eval_section[d23_match.start() :]
-        if "torch.arange" in d23_block:
-            print("❌ DeOneHot creates its own categories (missing parameter sharing)")
-            ok = False
-        else:
-            print("✅ OneHot → DeOneHot parameter sharing")
-
-    # 3) Phase analysis
-    parsed = parse_graph(graph)
-    flow = analyze_phases(parsed)
-    pre_set = flow["preprocessing_set"]
-    train_set = flow["train_set"]
-    eval_set = flow["eval_set"]
-
-    if "o8" not in pre_set:
-        print("❌ OneHot (o8) not in preprocessing set")
-        ok = False
-    if "l9" not in train_set:
-        print("❌ Layer l9 not in training set")
-        ok = False
-    if "l9" not in eval_set:
-        print("❌ Layer l9 not in evaluation set")
-        ok = False
-    if "v12" in train_set:
-        print("❌ Visualization v12 should NOT be in training set")
-        ok = False
-    if "d23" in train_set:
-        print("❌ DeOneHot d23 should NOT be in training set")
-        ok = False
-    else:
-        print("✅ Phase analysis sets are correct")
-
-    return ok
 
 
 def check_model2(proc, code, graph):
-    """
-    model2 checks:
-      1. Both visualizations v12 and v1 are present (both active in evaluation).
-      2. The generated code contains exactly two plt.show() calls.
-      3. General execution succeeds.
-    """
-    ok = True
-
-    for viz in ("v12", "v1"):
-        if f"Visualization '{viz}'" not in code:
-            print(f"❌ Visualization {viz} missing")
-            ok = False
-        else:
-            print(f"✅ Visualization {viz} present")
-
-    show_count = code.count("plt.show()")
-    if show_count != 2:
-        print(f"❌ Expected 2 plt.show() calls, found {show_count}")
-        ok = False
-    else:
-        print(f"✅ Found {show_count} plt.show() calls")
-
-    return ok
+    """Both evaluation visualizations are drawn, exactly once each."""
+    titles = figure_titles(code)
+    return all(
+        [
+            check("Both visualizations emitted", {"v12", "v1"} <= set(titles), str(titles)),
+            check("Two figures shown", code.count("plt.show()") == 2),
+        ]
+    )
 
 
 def check_model3(proc, code, graph):
-    """
-    model3 checks:
-      1. Nodes that are NOT fully active in any phase must NOT appear in the generated code.
-      2. Print node p7 (empty activationPhases) must be absent.
-      3. Accuracy a6 and visualization v1 must be absent because some of their input ports lack the correct phase.
-      4. Visualization v12 and DeOneHot d23 must be present (they have full evaluation connectivity).
-      5. General execution succeeds.
-    """
-    ok = True
-
-    # p7 should NOT be generated
-    if "p7" in code:
-        print("❌ p7 (Print) should not be generated (activationPhases empty)")
-        ok = False
-    else:
-        print("✅ p7 correctly absent")
-
-    # a6 should NOT be generated
-    if "a6" in code:
-        print(
-            "❌ a6 (Accuracy) should not be generated (one input missing evaluation phase)"
-        )
-        ok = False
-    else:
-        print("✅ a6 correctly absent")
-
-    # v1 should NOT be generated
-    if "v1" in code and "Visualization 'v1'" in code:
-        print(
-            "❌ v1 (Visualization) should not be generated (color input lacks evaluation phase)"
-        )
-        ok = False
-    else:
-        print("✅ v1 correctly absent")
-
-    # v12 and d23 SHOULD be generated
-    if "Visualization 'v12'" not in code:
-        print("❌ v12 missing but should be active")
-        ok = False
-    else:
-        print("✅ v12 present")
-
-    if "d23_out" not in code:
-        print("❌ d23 missing but should be active")
-        ok = False
-    else:
-        print("✅ d23 present")
-
-    return ok
+    """Partially-connected nodes are dropped; fully-connected ones survive."""
+    titles = figure_titles(code)
+    return all(
+        [
+            check("Print p7 absent (no activation phase)", not mentions(code, "p7")),
+            check("Accuracy a6 absent (input lacks evaluation)", not mentions(code, "a6")),
+            check("Visualization v1 absent (color lacks evaluation)", "v1" not in titles),
+            check("Visualization v12 present", "v12" in titles),
+            check("DeOneHot d23 present", mentions(code, "d23")),
+        ]
+    )
 
 
 def check_model4(proc, code, graph):
-    ok = True
+    """Prints, DeOneHot on a softmax port, accuracy wiring, both plots."""
+    titles = figure_titles(code)
+    train_body = section(code, "def train(")
+    deonehot = re.search(r"d23 = torch\.argmax\((out\.\w+), dim=-1\)", code)
 
-    # 1. p12 (loss print) inside training loop
-    if "print('loss" not in code and 'print("loss' not in code:
-        print("❌ p12 (loss print) missing in training loop")
-        ok = False
-    else:
-        print("✅ p12 (loss print) present in training loop")
-
-    # 2. DeOneHot handles softmax input
-    if "d23_out = torch.argmax(output_main_output_2_tensor, dim=-1)" not in code:
-        print("❌ d23 not handling softmax correctly")
-        ok = False
-    else:
-        print("✅ d23 handles softmax")
-
-    # 3. Confusion matrix printed
-    if "Confusion Matrix:" not in code:
-        print("❌ Confusion matrix not printed")
-        ok = False
-    else:
-        print("✅ Confusion matrix will be printed")
-
-    # 4. Accuracy uses argmax predictions and c5 labels
-    if "pred_labels = output_main_output_1_tensor" not in code:
-        print(
-            "❌ Accuracy predictions should use argmax output (output_main_output_1_tensor)"
-        )
-        ok = False
-    else:
-        print("✅ Accuracy predictions from correct port")
-    if "true_labels = c5" not in code:
-        print("❌ Accuracy labels should use c5")
-        ok = False
-    else:
-        print("✅ Accuracy labels from c5")
-
-    # 5. Both visualizations present
-    for viz in ("v12", "v1"):
-        if f"Visualization '{viz}'" not in code:
-            print(f"❌ {viz} missing")
-            ok = False
-        else:
-            print(f"✅ {viz} present")
-
-    return ok
+    return all(
+        [
+            check("Loss print runs inside the training loop", "print(" in train_body),
+            check(
+                "DeOneHot reads the softmax evaluation port",
+                deonehot and deonehot.group(1) == "out.evaluation",
+                deonehot.group(1) if deonehot else "no DeOneHot",
+            ),
+            check("Confusion matrix requested", "confusion_matrix" in code),
+            check(
+                "Accuracy compares the prediction role port",
+                "a6_predicted = out.prediction" in code,
+            ),
+            check("Accuracy labels come from c5", "a6_actual = data.c5" in code),
+            check("Both visualizations emitted", {"v12", "v1"} <= set(titles)),
+        ]
+    )
 
 
 def check_model5(proc, code, graph):
-    ok = True
-
-    # 1. Three Train/Test Split nodes (t1, t2, t3) are present – check for the
-    #    new variable names: train_data_t1, train_data_t2, train_data_t3.
-    for s in ("t1", "t2", "t3"):
-        if f"train_data_{s}" in code:
-            print(f"✅ Split node {s} found")
-        else:
-            print(f"❌ Split node {s} missing")
-            ok = False
-
-    # 2. Training present
-    if "class Model" in code and "train_model" in code:
-        print("✅ Training loop present")
-    else:
-        print("❌ Training loop missing")
-        ok = False
-
-    # 3 & 4. Evaluation and visualization present
-    if "def evaluate(" in code and "Visualization 'v1'" in code:
-        print("✅ Evaluation + visualization v1 present")
-    else:
-        print("❌ Evaluation or visualization v1 missing")
-        ok = False
-
-    # 5. No shape mismatch warnings
-    from sketchmod.codegen.validator import GraphValidator
-
-    result = GraphValidator(graph).validate()
-    warnings = [w["message"] for w in result.get("warnings", [])]
-    if any(">1 column" in w for w in warnings) or any(
-        "different sample sizes" in w for w in warnings
-    ):
-        print("❌ Unexpected shape mismatch warning for visualization")
-        ok = False
-    else:
-        print("✅ No shape mismatch warnings")
-
-    return ok
+    """Three chained splits, a trained model, and a clean visualization."""
+    load_body = section(code, "def load_data()")
+    return all(
+        [
+            check(
+                "All three Train/Test splits emitted",
+                all(f"{s}_train" in load_body for s in ("t1", "t2", "t3")),
+            ),
+            check("Training loop present", "class Model" in code and "def train(" in code),
+            check(
+                "Evaluation draws v1",
+                "def evaluate(" in code and "v1" in figure_titles(code),
+            ),
+            check(
+                "No visualization shape warnings",
+                "visualization-sample-mismatch" not in warning_codes(graph),
+            ),
+        ]
+    )
 
 
 def check_model6(proc, code, graph):
-    """
-    model6 checks:
-      1. Dropout, Add, Concat nodes are present in the generated code.
-      2. Preprocessing visualization (viz_pre) is present and runs in load_and_preprocess.
-      3. Evaluation visualization (viz_eval) is present and runs in evaluate.
-      4. Training visualization (viz_train) triggers a validator warning.
-      5. Model converges (final training loss < 0.1).
-    """
-    ok = True
-
-    # 1. Key nodes
-    for node_name in ["dropout", "Add", "Concat"]:
-        if node_name.lower() in code.lower():
-            print(f"✅ {node_name} found")
-        else:
-            print(f"❌ {node_name} missing")
-            ok = False
-
-    # 2. Preprocessing viz
-    if "Visualization 'viz_pre'" in code:
-        print("✅ viz_pre present")
-    else:
-        print("❌ viz_pre missing")
-        ok = False
-
-    # 3. Evaluation viz
-    if "Visualization 'viz_eval'" in code:
-        print("✅ viz_eval present")
-    else:
-        print("❌ viz_eval missing")
-        ok = False
-
-    # 4. Training viz warning
-    from sketchmod.codegen.validator import GraphValidator
-
-    result = GraphValidator(graph).validate()
-    warnings = [w["message"] for w in result.get("warnings", [])]
-    if any("training" in w.lower() and "visualization" in w.lower() for w in warnings):
-        print("✅ Training visualization warning present")
-    else:
-        print("❌ Training visualization warning missing")
-        ok = False
-
-    # 5. Convergence
-    output = proc.stdout
-    import re
-
-    losses = re.findall(r"Train Loss: ([0-9.]+)", output)
-    if losses:
-        final_train_loss = float(losses[-1])
-        if final_train_loss < 0.1:
-            print(f"✅ Model converged (final train loss = {final_train_loss:.6f})")
-        else:
-            print(
-                f"❌ Model did not converge (final train loss = {final_train_loss:.6f})"
-            )
-            ok = False
-    else:
-        print("❌ Could not parse train loss from output")
-        ok = False
-
-    return ok
+    """Dropout/Add/Concat topology, per-phase plots, convergence below 0.1."""
+    return all(
+        [
+            check("Dropout present", "nn.Dropout" in code),
+            check("Add merge present", re.search(r"= \w+ \+ \w+$", code, re.M)),
+            check("Concat merge present", "torch.cat(" in code),
+            check("viz_pre drawn during preprocessing",
+                  "viz_pre" in figure_titles(section(code, "def load_data()"))),
+            check("viz_eval drawn during evaluation",
+                  "viz_eval" in figure_titles(section(code, "def evaluate("))),
+            check(
+                "Training visualization is reported and skipped",
+                "visualization-in-training" in warning_codes(graph)
+                and "viz_train" not in figure_titles(code),
+            ),
+            check("Converged below 0.1", converged(proc, 0.1), loss_trend(proc)),
+        ]
+    )
 
 
 def check_model7(proc, code, graph):
-    """
-    model7 checks:
-      1. RowSelect node is present.
-      2. BatchNorm node is present.
-      3. LeakyReLU activation is used.
-      4. CrossEntropyLoss is configured.
-      5. Output activations softmax/argmax are correctly set.
-      6. Accuracy node appears and final accuracy exceeds 80 %.
-      7. Visualization with discrete colour mapping is present.
-    """
-    ok = True
-
-    # 1. RowSelect
-    if "row_sel_out" in code or "row_sel" in code:
-        print("✅ RowSelect found")
-    else:
-        print("❌ RowSelect missing")
-        ok = False
-
-    # 2. BatchNorm
-    if "BatchNorm" in code or "bn1" in code:
-        print("✅ BatchNorm found")
-    else:
-        print("❌ BatchNorm missing")
-        ok = False
-
-    # 3. LeakyReLU
-    if "leaky_relu" in code:
-        print("✅ LeakyReLU activation used")
-    else:
-        print("❌ LeakyReLU not found")
-        ok = False
-
-    # 4. CrossEntropyLoss
-    if "CrossEntropyLoss" in code:
-        print("✅ CrossEntropyLoss")
-    else:
-        print("❌ CrossEntropyLoss missing")
-        ok = False
-
-    # 5. Output activations
-    if "torch.argmax(x, dim=-1)" in code:
-        print("✅ Argmax on prediction/evaluation ports")
-    else:
-        print("❌ Argmax missing")
-        ok = False
-
-    # 6. Accuracy > 80%
-    output = proc.stdout
-    import re
-
-    acc_match = re.search(r"Accuracy: ([0-9.]+)", output)
-    if acc_match:
-        acc = float(acc_match.group(1))
-        if acc > 0.8:
-            print(f"✅ Accuracy {acc:.4f} > 0.8")
-        else:
-            print(f"❌ Accuracy {acc:.4f} ≤ 0.8")
-            ok = False
-    else:
-        print("❌ Could not parse Accuracy from output")
-        ok = False
-
-    # 7. Visualization with colour
-    if "ListedColormap" in code:
-        print("✅ Discrete colour mapping present")
-    else:
-        print("❌ No discrete colour mapping found")
-        ok = False
-
-    return ok
+    """RowSelect, BatchNorm, LeakyReLU, CrossEntropy, accuracy above 0.8."""
+    roles = output_roles(code)
+    return all(
+        [
+            check("RowSelect present", mentions(code, "row_sel")),
+            check("BatchNorm present", "nn.BatchNorm" in code),
+            check("LeakyReLU activation used", "leaky_relu" in code),
+            check("CrossEntropyLoss configured", "nn.CrossEntropyLoss()" in code),
+            check(
+                "Prediction and evaluation ports apply argmax",
+                all(
+                    roles.get(r, "").startswith("torch.argmax(")
+                    for r in ("prediction", "evaluation")
+                ),
+            ),
+            check("Accuracy above 0.8", accurate_to(proc, 0.8), str(final_accuracy(proc))),
+            check("Discrete colour mapping present", "ListedColormap" in code),
+        ]
+    )
 
 
 def check_model8(proc, code, graph):
-    """
-    model8 checks:
-      1. Conv2D node present in generated code.
-      2. Reshape node present.
-      3. Flatten node present.
-      4. Accuracy > 0.7 (should be near 1.0 with this simple dataset).
-    """
-    ok = True
-
-    if "nn.Conv2d" in code or "self.conv_conv" in code:
-        print("✅ Conv2D found")
-    else:
-        print("❌ Conv2D missing")
-        ok = False
-
-    if ".reshape(" in code:
-        print("✅ Reshape found")
-    else:
-        print("❌ Reshape missing")
-        ok = False
-
-    if "nn.Flatten" in code or "self.flatten_flat" in code:
-        print("✅ Flatten found")
-    else:
-        print("❌ Flatten missing")
-        ok = False
-
-    import re
-
-    acc_match = re.search(r"Accuracy: ([0-9.]+)", proc.stdout)
-    if acc_match:
-        acc = float(acc_match.group(1))
-        if acc > 0.7:
-            print(f"✅ Accuracy {acc:.4f} > 0.7")
-        else:
-            print(f"❌ Accuracy {acc:.4f} ≤ 0.7")
-            ok = False
-    else:
-        print("❌ Could not parse Accuracy")
-        ok = False
-
-    return ok
+    """Conv2D → Reshape → Flatten pipeline reaching accuracy above 0.7."""
+    return all(
+        [
+            check("Conv2D present", "nn.Conv2d" in code),
+            check("Reshape present", ".reshape(" in code),
+            check("Flatten present", "nn.Flatten" in code),
+            check("Accuracy above 0.7", accurate_to(proc, 0.7), str(final_accuracy(proc))),
+        ]
+    )
 
 
 def check_model9(proc, code, graph):
-    """
-    model9 checks:
-      1. Validator warns about multiple optimizers.
-      2. Training still runs with the first optimizer.
-    """
-    ok = True
-
-    from sketchmod.codegen.validator import GraphValidator
-
-    result = GraphValidator(graph).validate()
-    warnings = result.get("warnings", [])
-    if any("Only the first one will be used" in w.get("message", "") for w in warnings):
-        print("✅ Multiple optimizers warning present")
-    else:
-        print("❌ Expected warning for multiple optimizers not found")
-        ok = False
-
-    if "Training complete." in proc.stdout:
-        print("✅ Training completed with first optimizer")
-    else:
-        print("❌ Training did not complete")
-        ok = False
-
-    return ok
+    """Extra optimizers are reported and ignored; training still runs."""
+    return all(
+        [
+            check("Multiple optimizers reported", "multiple-optimizers" in warning_codes(graph)),
+            check("Exactly one optimizer built", code.count("optimizer = optim.") == 1),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
 
 
 def check_model10(proc, code, graph):
-    ok = True
-    from sketchmod.codegen.validator import GraphValidator
-
-    result = GraphValidator(graph).validate()
-    warnings = result.get("warnings", [])
-    if any("Evaluation will be skipped" in w.get("message", "") for w in warnings):
-        print("✅ Evaluation entry point warning present")
-    else:
-        print("❌ Expected warning for evaluation entry point not found")
-        ok = False
-    if "def evaluate(" not in code:
-        print("✅ No evaluation function generated")
-    else:
-        print("❌ Evaluation function should not be generated")
-        ok = False
-    if proc.returncode == 0 and "Training complete." in proc.stdout:
-        print("✅ Script exited cleanly")
-    else:
-        print("❌ Script crashed or training incomplete")
-        ok = False
-    return ok
+    """Evaluation entering the model elsewhere is reported and skipped."""
+    return all(
+        [
+            check(
+                "Evaluation entry mismatch reported",
+                "evaluation-entry-mismatch" in warning_codes(graph),
+            ),
+            check("No evaluation function generated", "def evaluate(" not in code),
+            check(
+                "Script exited cleanly",
+                proc.returncode == 0 and "Training complete." in proc.stdout,
+            ),
+        ]
+    )
 
 
 def check_model11(proc, code, graph):
-    ok = True
-    import re
-
-    if "Training complete." not in proc.stdout:
-        print("❌ Training incomplete")
-        ok = False
-
-    losses = re.findall(r"Train Loss: ([0-9.]+)", proc.stdout)
-    if losses and float(losses[-1]) < 0.05:
-        print(f"✅ Converged (final loss {losses[-1]})")
-    else:
-        print("❌ Did not converge")
-        ok = False
-
-    return ok
+    """Straightforward regression that must converge below 0.05."""
+    return all(
+        [
+            check("Training completed", "Training complete." in proc.stdout),
+            check("Converged below 0.05", converged(proc, 0.05), loss_trend(proc)),
+        ]
+    )
 
 
 def check_model12(proc, code, graph):
-    """
-    model12 checks:
-      1. Branched network with Add merge is generated.
-      2. Preprocessing visualization exists.
-      3. Evaluation visualization exists.
-      4. Print nodes appear in all three phases.
-      5. Model converges (final train loss < 0.5).
-    """
-    ok = True
+    """Branched network with an Add merge, prints in all three phases."""
+    load_body = section(code, "def load_data()")
+    train_body = section(code, "def train(")
+    eval_body = section(code, "def evaluate(")
 
-    # 1. Add merge present
-    if "x = a + b" in code or "outputs['add']" in code:
-        print("✅ Add merge found")
-    else:
-        print("❌ Add merge missing")
-        ok = False
-
-    # 2. Preprocessing viz
-    if "Visualization 'viz_pre'" in code:
-        print("✅ viz_pre present")
-    else:
-        print("❌ viz_pre missing")
-        ok = False
-
-    # 3. Evaluation viz
-    if "Visualization 'viz_eval'" in code:
-        print("✅ viz_eval present")
-    else:
-        print("❌ viz_eval missing")
-        ok = False
-
-    # 4. Print nodes in all phases
-    for label in ("pre_data_shape", "train_loss_tensor", "predictions"):
-        if f'print("{label}' in code or f"print('{label}" in code:
-            print(f"✅ Print '{label}' found")
-        else:
-            print(f"❌ Print '{label}' missing")
-            ok = False
-
-    # 5. Convergence
-    output = proc.stdout if proc else ""
-    import re
-
-    losses = re.findall(r"Train Loss: ([0-9.]+)", output)
-    if losses:
-        final_train_loss = float(losses[-1])
-        if final_train_loss < 0.5:
-            print(f"✅ Model converged (final train loss = {final_train_loss:.6f})")
-        else:
-            print(
-                f"❌ Model did not converge (final train loss = {final_train_loss:.6f})"
-            )
-            ok = False
-    else:
-        print("❌ Could not parse train loss from output")
-        ok = False
-
-    return ok
+    return all(
+        [
+            check("Add merge present", re.search(r"= \w+ \+ \w+$", code, re.M)),
+            check("viz_pre drawn during preprocessing", "viz_pre" in figure_titles(load_body)),
+            check("viz_eval drawn during evaluation", "viz_eval" in figure_titles(eval_body)),
+            check("Preprocessing print present", "pre_data_shape" in load_body),
+            check("Training print present", "train_loss_tensor" in train_body),
+            check("Evaluation print present", "predictions" in eval_body),
+            check("Converged below 0.5", converged(proc, 0.5), loss_trend(proc)),
+        ]
+    )
 
 
 def check_model13(proc, code, graph):
-    """
-    model13 checks:
-      1. Data-flow cycle error detected.
-      2. Unconnected layer input error detected.
-      3. Impossible reshape warning detected.
-    """
-    ok = True
-
-    from sketchmod.codegen.validator import GraphValidator
-
-    result = GraphValidator(graph).validate()
-    errors = result.get("errors", [])
-    warnings = result.get("warnings", [])
-
-    if any("cycle" in e.get("message", "").lower() for e in errors):
-        print("✅ Data-flow cycle error detected")
-    else:
-        print("❌ Data-flow cycle error not found")
-        ok = False
-
-    if any(
-        "requires at least 1 input connection" in e.get("message", "") for e in errors
-    ):
-        print("✅ Unconnected layer input error detected")
-    else:
-        print("❌ Unconnected layer input error not found")
-        ok = False
-
-    if any("total elements mismatch" in w.get("message", "") for w in warnings):
-        print("✅ Impossible reshape warning detected")
-    else:
-        print("❌ Impossible reshape warning not found")
-        ok = False
-
-    return ok
+    """A cycle, an unconnected layer input and an impossible reshape."""
+    errors, warnings = error_codes(graph), warning_codes(graph)
+    return all(
+        [
+            check("Graph rejected", not diagnostics(graph)["isValid"]),
+            check("Data-flow cycle reported", "data-flow-cycle" in errors),
+            check("Unconnected layer input reported", "missing-input-connection" in errors),
+            check("Impossible reshape reported", "reshape-infeasible" in warnings),
+        ]
+    )
 
 
 def check_model14(proc, code, graph):
-    """
-    model14 checks:
-      1. Reshape line contains the symbolic name 'batch' (preserved, not substituted).
-      2. Reshape line uses -1 for inferred dimension.
-      3. No shape feasibility warning (the input size 200*28*28 is divisible by batch=200).
-      4. The model is validation-only - code is generated but not executed.
-    """
-    ok = True
-
-    # 1. Symbolic 'batch' appears in the reshape call.
-    if "batch" in code:
-        print("✅ Symbolic 'batch' present in generated code")
-    else:
-        print("❌ Symbolic 'batch' missing")
-        ok = False
-
-    # 2. The -1 dimension is kept (it should be inferred, so -1 should appear).
-    # The reshape call should look like: .reshape((batch, -1))
-    if ".reshape((batch, -1))" in code:
-        print("✅ Reshape with -1 inferred dimension")
-    else:
-        # Fallback: maybe the code uses a different formatting
-        if "-1" in code and "batch" in code:
-            print("✅ Reshape line contains -1 and batch")
-        else:
-            print("❌ Reshape line does not contain -1")
-            ok = False
-
-    # 3. Check validator warnings: there should be no reshape feasibility warning.
-    from sketchmod.codegen.validator import GraphValidator
-
-    result = GraphValidator(graph).validate()
-    warnings = [w["message"] for w in result.get("warnings", [])]
-    reshape_warnings = [
-        w for w in warnings if "reshape" in w.lower() and "total elements" in w.lower()
-    ]
-    if reshape_warnings:
-        print("❌ Unexpected reshape feasibility warning:", reshape_warnings[0])
-        ok = False
-    else:
-        print("✅ No reshape feasibility warning")
-
-    return ok
+    """A symbolic reshape dimension resolves statically, without warnings."""
+    reshape = re.search(r"\.reshape\((.+)\)\s*$", code, re.M)
+    arguments = [a.strip() for a in reshape.group(1).split(",")] if reshape else []
+    resolved = all(
+        a == "-1" or a.lstrip("-").isdigit() or ".size(" in a for a in arguments
+    )
+    return all(
+        [
+            check("Reshape emitted", bool(reshape), reshape.group(0) if reshape else "none"),
+            check("Symbolic dimension resolved statically", resolved, str(arguments)),
+            check("One inferred dimension", arguments.count("-1") == 1),
+            check("No reshape feasibility warning",
+                  "reshape-infeasible" not in warning_codes(graph)),
+        ]
+    )
 
 
 def check_model15(proc, code, graph):
-    ok = True
-    from sketchmod.codegen.validator import GraphValidator
-
-    result = GraphValidator(graph).validate()
-    errors = result.get("errors", [])
-    if any(
-        "param" in e.get("message", "").lower()
-        and "cycle" in e.get("message", "").lower()
-        for e in errors
-    ):
-        print("✅ Param‑port cycle error detected")
-    else:
-        print("❌ Param‑port cycle error not found")
-        ok = False
-    return ok
+    """Shared-parameter ports that depend on each other cannot be ordered."""
+    return all(
+        [
+            check("Graph rejected", not diagnostics(graph)["isValid"]),
+            check("Param-port cycle reported", "param-cycle" in error_codes(graph)),
+        ]
+    )
 
 
 def check_model16(proc, code, graph):
-    """
-    model16 checks (validation only):
-      1. Error: Data-flow cycle detected.
-    """
-    ok = True
-    from sketchmod.codegen.validator import GraphValidator
-
-    result = GraphValidator(graph).validate()
-    errors = result.get("errors", [])
-
-    if any("cycle" in e.get("message", "").lower() for e in errors):
-        print("✅ Data-flow cycle error detected")
-    else:
-        print("❌ Data-flow cycle error not found")
-        ok = False
-
-    return ok
+    """A data-flow cycle makes the graph untranslatable."""
+    return all(
+        [
+            check("Graph rejected", not diagnostics(graph)["isValid"]),
+            check("Data-flow cycle reported", "data-flow-cycle" in error_codes(graph)),
+        ]
+    )
 
 
 def check_model17(proc, code, graph):
-    """
-    model17 checks (validation only):
-      1. Error: Param-port cycle detected.
-    """
-    ok = True
-    from sketchmod.codegen.validator import GraphValidator
-
-    result = GraphValidator(graph).validate()
-    errors = result.get("errors", [])
-
-    if any("Param‑port cycle" in e.get("message", "") for e in errors):
-        print("✅ Param‑port cycle error detected")
-    else:
-        print("❌ Param‑port cycle error not found")
-        ok = False
-
-    return ok
+    """A param-port cycle makes the graph untranslatable."""
+    return all(
+        [
+            check("Graph rejected", not diagnostics(graph)["isValid"]),
+            check("Param-port cycle reported", "param-cycle" in error_codes(graph)),
+        ]
+    )
 
 
 def check_model18(proc, code, graph):
-    """
-    model18 checks (practical regression):
-      1. Code uses MSELoss and Linear(1,1)
-      2. Training completes
-      3. Final training loss is near zero (< 1e-4) – proves it learned y=2x
-    """
-    ok = True
-
-    # 1. Code patterns
-    if "MSELoss" not in code:
-        print("❌ MSELoss not found")
-        ok = False
-    else:
-        print("✅ MSELoss present")
-
-    if "nn.Linear(1, 1)" not in code:
-        print("❌ Expected nn.Linear(1, 1) missing")
-        ok = False
-    else:
-        print("✅ Correct layer size")
-
-    # 2. Training completion
-    if "Training complete." not in proc.stdout:
-        print("❌ Training did not complete")
-        return False
-
-    # 3. Convergence
-    import re
-
-    losses = re.findall(r"Train Loss: ([0-9.eE+-]+)", proc.stdout)
-    if not losses:
-        print("❌ Could not parse training losses")
-        return False
-
-    final_loss = float(losses[-1])
-    if final_loss < 1e-4:
-        print(f"✅ Converged (final loss {final_loss:.2e})")
-    else:
-        print(f"❌ Final loss {final_loss:.6f} – did not learn correctly")
-        ok = False
-
-    return ok
+    """y = 2x must be learned essentially exactly."""
+    return all(
+        [
+            check("MSELoss configured", "nn.MSELoss()" in code),
+            check("Single 1→1 layer", linear_layers(code) == [(1, 1)], str(linear_layers(code))),
+            check("Training completed", "Training complete." in proc.stdout),
+            check("Converged below 1e-4", converged(proc, 1e-4), loss_trend(proc)),
+        ]
+    )
 
 
 def check_model19(proc, code, graph):
-    """
-    model19 checks (classification):
-      1. CrossEntropyLoss present
-      2. Softmax & argmax on correct output ports
-      3. Accuracy > 0.8 (should be near 1.0 on this linearly separable data)
-      4. Training completes
-    """
-    ok = True
-
-    # 1. Loss
-    if "CrossEntropyLoss" not in code:
-        print("❌ CrossEntropyLoss not found")
-        ok = False
-    else:
-        print("✅ CrossEntropyLoss present")
-
-    # 2. Output activations
-    if "softmax(x, dim=-1)" in code:
-        print("✅ Softmax on prediction port")
-    else:
-        print("❌ Softmax missing")
-        ok = False
-    if "argmax(x, dim=-1)" in code:
-        print("✅ Argmax on evaluation port")
-    else:
-        print("❌ Argmax missing")
-        ok = False
-
-    # 3. Accuracy
-    import re
-
-    acc_match = re.search(r"Accuracy: ([0-9.]+)", proc.stdout)
-    if acc_match:
-        acc = float(acc_match.group(1))
-        if acc > 0.8:
-            print(f"✅ Accuracy {acc:.4f} (>0.8)")
-        else:
-            print(f"❌ Accuracy {acc:.4f} ≤ 0.8")
-            ok = False
-    else:
-        print("❌ Accuracy not found in output")
-        ok = False
-
-    # 4. Training complete
-    if "Training complete." not in proc.stdout:
-        print("❌ Training incomplete")
-        ok = False
-
-    return ok
+    """Linearly separable classification: accuracy above 0.8."""
+    roles = output_roles(code)
+    return all(
+        [
+            check("CrossEntropyLoss configured", "nn.CrossEntropyLoss()" in code),
+            check("Prediction port applies softmax",
+                  roles.get("prediction", "").startswith("torch.softmax(")),
+            check("Evaluation port applies argmax",
+                  roles.get("evaluation", "").startswith("torch.argmax(")),
+            check("Accuracy above 0.8", accurate_to(proc, 0.8), str(final_accuracy(proc))),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
 
 
 def check_model20(proc, code, graph):
-    """
-    model20 checks (Conv2D + Flatten):
-      1. Code contains nn.Conv2d and nn.Flatten (or flatten logic)
-      2. Accuracy > 0.8 (should be near 1.0)
-      3. Training loss decreases
-    """
-    ok = True
-
-    # 1. Conv2D & Flatten in code
-    if "nn.Conv2d" in code:
-        print("✅ Conv2D present")
-    else:
-        print("❌ Conv2D missing")
-        ok = False
-    if "nn.Flatten" in code or "flatten" in code.lower():
-        print("✅ Flatten present")
-    else:
-        print("❌ Flatten missing")
-        ok = False
-
-    # 2. Accuracy
-    import re
-
-    acc_match = re.search(r"Accuracy: ([0-9.]+)", proc.stdout)
-    if acc_match:
-        acc = float(acc_match.group(1))
-        if acc > 0.8:
-            print(f"✅ Accuracy {acc:.4f} (>0.8)")
-        else:
-            print(f"❌ Accuracy {acc:.4f} ≤ 0.8")
-            ok = False
-    else:
-        print("❌ Accuracy not found")
-        ok = False
-
-    # 3. Training loss decrease
-    losses = re.findall(r"Train Loss: ([0-9.]+)", proc.stdout)
-    if len(losses) >= 2 and float(losses[-1]) < float(losses[0]):
-        print(f"✅ Loss decreased ({losses[0]} → {losses[-1]})")
-    else:
-        print("❌ Loss did not decrease")
-        ok = False
-
-    return ok
+    """Conv2D + Flatten classifier: accuracy above 0.8 and a falling loss."""
+    return all(
+        [
+            check("Conv2D present", "nn.Conv2d" in code),
+            check("Flatten present", "nn.Flatten" in code),
+            check("Accuracy above 0.8", accurate_to(proc, 0.8), str(final_accuracy(proc))),
+            check("Loss decreased", loss_decreased(proc), loss_trend(proc)),
+        ]
+    )
 
 
 def check_model21(proc, code, graph):
-    """
-    model21 checks (multi‑branch Add):
-      1. Add operation present in generated code
-      2. Two Linear layers with matching output dimensions (both 1)
-      3. Training loss < 0.01 (perfect data, should converge easily)
-    """
-    ok = True
-
-    # 1. Add operation
-    if "a + b" in code or "x = a + b" in code:
-        print("✅ Add merge present")
-    else:
-        print("❌ Add merge missing")
-        ok = False
-
-    # 2. Two branches with matching output size
-    import re
-
-    linear_matches = re.findall(r"nn\.Linear\((\d+), (\d+)\)", code)
-    if len(linear_matches) >= 2:
-        out_dims = [int(m[1]) for m in linear_matches]
-        if out_dims[0] == out_dims[1]:
-            print("✅ Branches have matching output dimensions")
-        else:
-            print("❌ Branch output dimensions mismatch")
-            ok = False
-    else:
-        print("❌ Not enough Linear layers")
-        ok = False
-
-    # 3. Convergence
-    losses = re.findall(r"Train Loss: ([0-9.]+)", proc.stdout)
-    if losses and float(losses[-1]) < 0.01:
-        print(f"✅ Converged (final loss {losses[-1]})")
-    else:
-        print("❌ Did not converge or final loss > 0.01")
-        ok = False
-
-    return ok
+    """Two branches added together must agree in width and converge."""
+    layers = linear_layers(code)
+    widths = {out for _, out in layers}
+    return all(
+        [
+            check("Add merge present", re.search(r"= \w+ \+ \w+$", code, re.M)),
+            check("At least two branches", len(layers) >= 2, str(layers)),
+            check("Branch widths match", len(widths) == 1, str(widths)),
+            check("Converged below 0.01", converged(proc, 0.01), loss_trend(proc)),
+        ]
+    )
 
 
 def check_model22(proc, code, graph):
-    ok = True
-    import re
-
-    # 1. No crash
-    if proc.returncode != 0:
-        print("❌ Script crashed")
-        return False
-
-    # 2. Training complete
-    if "Training complete." not in proc.stdout:
-        print("❌ Training incomplete")
-        ok = False
-
-    # 3. Accuracy > 0.9
-    acc = re.search(r"Accuracy: ([0-9.]+)", proc.stdout)
-    if acc and float(acc.group(1)) > 0.9:
-        print(f"✅ Accuracy {acc.group(1)}")
-    else:
-        print(f"❌ Accuracy missing or ≤ 0.9")
-        ok = False
-
-    # 4. Loss decreasing
-    losses = re.findall(r"Train Loss: ([0-9.]+)", proc.stdout)
-    if len(losses) >= 2 and float(losses[-1]) < float(losses[0]):
-        print("✅ Loss decreased")
-    else:
-        print("❌ Loss did not decrease")
-        ok = False
-
-    return ok
+    """Classification run: accuracy above 0.9 with a falling loss."""
+    return all(
+        [
+            check("Script exited cleanly", proc.returncode == 0),
+            check("Training completed", "Training complete." in proc.stdout),
+            check("Accuracy above 0.9", accurate_to(proc, 0.9), str(final_accuracy(proc))),
+            check("Loss decreased", loss_decreased(proc), loss_trend(proc)),
+        ]
+    )
 
 
 def check_model23(proc, code, graph):
-    """
-    model23 checks (visualizations with discrete colour):
-      1. Code contains 'ListedColormap' (discrete colour palette)
-      2. Code contains 'c=colors' (colour argument in scatter)
-      3. Exactly two plt.show() calls
-      4. Script ran without error (returncode 0)
-    """
-    ok = True
-
-    # 1. ListedColormap for discrete palette
-    if "ListedColormap" in code:
-        print("✅ ListedColormap present")
-    else:
-        print("❌ ListedColormap missing")
-        ok = False
-
-    # 2. Scatter with colour mapping (look for 'c=colors')
-    if "c=colors" in code:
-        print("✅ Colour scatter present")
-    else:
-        print("❌ Colour scatter not found")
-        ok = False
-
-    # 3. Two plt.show() calls
-    show_count = code.count("plt.show()")
-    if show_count == 2:
-        print(f"✅ Found {show_count} plt.show() calls")
-    else:
-        print(f"❌ Expected 2 plt.show(), found {show_count}")
-        ok = False
-
-    # 4. No crash
-    if proc.returncode != 0:
-        print("❌ Script crashed")
-        ok = False
-
-    return ok
+    """A visualization-only graph still produces a runnable script."""
+    scatter_colours = re.findall(r"plt\.scatter\([^\n]*c=([^,]+),", code)
+    return all(
+        [
+            check("Discrete palette present", "ListedColormap" in code),
+            check("Scatter is colour-mapped", bool(scatter_colours), str(scatter_colours)),
+            check("Two figures shown", code.count("plt.show()") == 2),
+            check("Script exited cleanly", proc.returncode == 0),
+            check(
+                "Missing model reported as a warning, not an error",
+                diagnostics(graph)["isValid"]
+                and "missing-output" in warning_codes(graph),
+            ),
+        ]
+    )
 
 
 def check_model24(proc, code, graph):
-    """
-    model24 checks (continuous colour mapping):
-      1. LinearSegmentedColormap present
-      2. Custom colours #ff0000 and #ffff00 appear
-      3. Script runs without error
-    """
-    ok = True
-
-    if "LinearSegmentedColormap" in code:
-        print("✅ LinearSegmentedColormap present")
-    else:
-        print("❌ LinearSegmentedColormap missing")
-        ok = False
-
-    if "#ff0000" in code and "#ffff00" in code:
-        print("✅ Custom continuous colours (red → yellow)")
-    else:
-        print("❌ Custom colours missing")
-        ok = False
-
-    if proc.returncode != 0:
-        print("❌ Script crashed")
-        ok = False
-
-    return ok
+    """Continuous colour mapping keeps the configured endpoint colours."""
+    return all(
+        [
+            check("Continuous colour map present", "LinearSegmentedColormap" in code),
+            check("Configured colours preserved", "#ff0000" in code and "#ffff00" in code),
+            check("Script exited cleanly", proc.returncode == 0),
+        ]
+    )
 
 
 def check_model25(proc, code, graph):
-    """
-    model25 checks (validation split + early stopping):
-      1. Generated code contains the validation split logic
-      2. "Early stopping." appears in stdout
-      3. Training stopped before max epochs (last epoch < 200)
-    """
-    ok = True
-    import re
-
-    # 1. Code includes validation split
-    if "val_size = int(features.size(0) * 0.2)" in code:
-        print("✅ Validation split code present")
-    else:
-        print("❌ Validation split code missing")
-        ok = False
-
-    # 2. Early stopping message
-    if "Early stopping." in proc.stdout:
-        print("✅ Early stopping triggered")
-    else:
-        print("❌ Early stopping not triggered")
-        ok = False
-
-    # 3. Epoch count < max epochs (200)
-    epochs = re.findall(r"Epoch\s+(\d+)", proc.stdout)
-    if epochs:
-        last = int(epochs[-1])
-        if last < 200:
-            print(f"✅ Stopped at epoch {last}")
-        else:
-            print(f"❌ Ran full 200 epochs")
-            ok = False
-    else:
-        print("❌ No epoch output found")
-        ok = False
-
-    return ok
+    """Validation split plus early stopping cuts training short."""
+    epoch = last_epoch(proc)
+    return all(
+        [
+            check("Validation split emitted",
+                  "val_size = int(features.size(0) * 0.2)" in code),
+            check("Early stopping triggered", "Early stopping." in proc.stdout),
+            check("Stopped before the epoch cap", epoch is not None and epoch < 200,
+                  f"last epoch {epoch}"),
+        ]
+    )
 
 
 def check_model26(proc, code, graph):
-    """
-    model26 checks (multiple model inputs):
-      1. Forward pass contains references to both feat1_out and feat2_out
-      2. Training completes
-      3. Accuracy > 0.8
-    """
-    ok = True
-
-    # 1. Both feature source port IDs appear in the generated code
-    if "feat1_out" in code and "feat2_out" in code:
-        print("✅ Multiple input sources detected")
-    else:
-        print("❌ Expected both feat1_out and feat2_out in code")
-        ok = False
-
-    # 2. Training completion
-    if "Training complete." not in proc.stdout:
-        print("❌ Training incomplete")
-        ok = False
-
-    # 3. Accuracy
-    import re
-
-    acc = re.search(r"Accuracy: ([0-9.]+)", proc.stdout)
-    if acc:
-        val = float(acc.group(1))
-        if val > 0.8:
-            print(f"✅ Accuracy {val:.4f}")
-        else:
-            print(f"❌ Accuracy {val:.4f} ≤ 0.8")
-            ok = False
-    else:
-        print("❌ Accuracy not found")
-        ok = False
-
-    return ok
+    """Two parallel features must both reach the layer, not just the first."""
+    layers = linear_layers(code)
+    call_sites = re.findall(r"torch\.cat\(\[data\.\w+, data\.\w+\], dim=1\)", code)
+    return all(
+        [
+            check("Layer sized for both features", layers and layers[0][0] == 2, str(layers)),
+            check("Both features concatenated at the call site", len(call_sites) >= 1),
+            check("Training completed", "Training complete." in proc.stdout),
+            check("Accuracy above 0.8", accurate_to(proc, 0.8), str(final_accuracy(proc))),
+        ]
+    )
 
 
 def check_model27(proc, code, graph):
-    """
-    model27 checks (validation only):
-      - Error: batch size mismatch for multi‑input model node.
-    """
-    ok = True
-    from sketchmod.codegen.validator import GraphValidator
-
-    result = GraphValidator(graph).validate()
-    errors = result.get("errors", [])
-
-    if any("different batch sizes" in e.get("message", "") for e in errors):
-        print("✅ Batch size mismatch error detected")
-    else:
-        print("❌ Expected batch size mismatch error not found")
-        ok = False
-
-    return ok
+    """Inputs with incompatible batch sizes cannot meet inside one layer."""
+    return all(
+        [
+            check("Graph rejected", not diagnostics(graph)["isValid"]),
+            check("Batch size conflict reported", "batch-size-mismatch" in error_codes(graph)),
+        ]
+    )
 
 
 def check_model28(proc, code, graph):
-    """
-    model28 checks:
-      1. SGD with momentum, weight decay, gradient clipping present
-      2. Validation split with accuracy metric used
-      3. Early stopping triggered
-      4. Confusion matrix printed
-      5. Continuous colour visualisation present
-      6. Training stopped before max epochs
-    """
-    ok = True
-    import re
-
-    # 1. SGD + momentum + weight decay + gradient clip
-    if "optim.SGD" in code:
-        print("✅ SGD optimizer")
-    else:
-        print("❌ SGD not found")
-        ok = False
-    if "momentum=0.9" in code:
-        print("✅ Momentum configured")
-    else:
-        print("❌ Momentum missing")
-        ok = False
-    if "weight_decay=0.0001" in code:
-        print("✅ Weight decay present")
-    else:
-        print("❌ Weight decay missing")
-        ok = False
-    if "clip_grad_norm_" in code:
-        print("✅ Gradient clipping present")
-    else:
-        print("❌ Gradient clipping missing")
-        ok = False
-
-    # 2. Validation split with accuracy
-    if "val_size = int(features.size(0) * 0.2)" in code:
-        print("✅ Validation split present")
-    else:
-        print("❌ Validation split missing")
-        ok = False
-    if "Val Accuracy:" in proc.stdout or "val_acc" in code:
-        print("✅ Accuracy metric used for validation")
-    else:
-        print("❌ Accuracy metric not found")
-        ok = False
-
-    # 3. Early stopping
-    if "Early stopping." in proc.stdout:
-        print("✅ Early stopping triggered")
-    else:
-        print("❌ Early stopping not triggered")
-        ok = False
-
-    # 4. Confusion matrix
-    if "Confusion Matrix:" in proc.stdout or "confusion_matrix" in code:
-        print("✅ Confusion matrix printed")
-    else:
-        print("❌ Confusion matrix not found")
-        ok = False
-
-    # 5. Discrete colour visualisation
-    if "ListedColormap" in code:
-        print("✅ Discrete colour visualisation present")
-    else:
-        print("❌ Discrete colour visualisation missing")
-        ok = False
-
-    # 6. Epoch count < max
-    epochs = re.findall(r"Epoch\s+(\d+)", proc.stdout)
-    if epochs:
-        last = int(epochs[-1])
-        if last < 200:
-            print(f"✅ Stopped at epoch {last}")
-        else:
-            print(f"❌ Ran full 200 epochs")
-            ok = False
-
-    return ok
+    """Full-featured run: SGD, clipping, validation accuracy, early stopping."""
+    epoch = last_epoch(proc)
+    return all(
+        [
+            check("SGD with momentum and weight decay",
+                  "optim.SGD" in code and "momentum=0.9" in code
+                  and "weight_decay=0.0001" in code),
+            check("Gradient clipping applied", "clip_grad_norm_" in code),
+            check("Validation split emitted",
+                  "val_size = int(features.size(0) * 0.2)" in code),
+            check("Validation uses accuracy",
+                  "val_acc" in code and "Val Accuracy:" in proc.stdout),
+            check("Early stopping triggered", "Early stopping." in proc.stdout),
+            check("Confusion matrix printed", "Confusion Matrix:" in proc.stdout),
+            check("Discrete colour visualisation present", "ListedColormap" in code),
+            check("Stopped before the epoch cap", epoch is not None and epoch < 200,
+                  f"last epoch {epoch}"),
+        ]
+    )
 
 
 # Models that only test validator errors – their generated code must NOT be executed.
@@ -1380,13 +765,13 @@ def test_model(model_file: Path, interactive: bool, dump_code: bool = False) -> 
     # Validation‑only models: skip execution, only check validator
     if model_idx in VALIDATION_ONLY_MODELS:
         print("⏭️  Validation‑only model – skipping execution.")
+        ok = static_check(code)
         if model_idx is not None and model_idx in MODEL_CHECKS:
             print("\nRunning specific checks...")
-            ok = MODEL_CHECKS[model_idx](None, code, graph)
-            if ok:
-                print("✅ All checks passed.")
-            return ok
-        return True
+            ok = MODEL_CHECKS[model_idx](None, code, graph) and ok
+        if ok:
+            print("✅ All checks passed.")
+        return ok
 
     proc = run_generated_code(code, timeout=120, interactive=interactive)
 
@@ -1418,10 +803,6 @@ def test_model(model_file: Path, interactive: bool, dump_code: bool = False) -> 
     if interactive:
         print("✅ Model ran interactively without error.")
         return True
-
-    # Determine model index from filename
-    m = re.match(r"model(\d+)\.json", model_file.name, re.IGNORECASE)
-    model_idx = int(m.group(1)) if m else None
 
     # Run default checks
     ok = default_check(proc, code, graph)
