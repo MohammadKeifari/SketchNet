@@ -3636,7 +3636,6 @@ const SketchMod = {
     _afterGraphLoaded() {
         this._applyDatasetDeepLink();
         this._applyDefaultPhaseHighlight();
-        this._updatePhaseWizard();
     },
 
     _applyDatasetDeepLink() {
@@ -3670,7 +3669,6 @@ const SketchMod = {
                 node.datasetName = data.name || datasetId;
                 this._saveToSession();
                 this._propagateShapes();
-                this._updatePhaseWizard();
                 this._render();
                 this._showToast(`Dataset "${node.datasetName}" attached.`);
             })
@@ -3683,38 +3681,6 @@ const SketchMod = {
         if (!phase || phase === "none") return;
         this._phaseHighlightApplied = true;
         this._highlightPhase(phase);
-    },
-
-    _updatePhaseWizard() {
-        const list = document.getElementById("phaseWizardList");
-        if (!list) return;
-        const hasInput = this.nodes.some((n) => n.type === "input-data");
-        const hasDataset = this.nodes.some(
-            (n) => n.type === "input-data" && n.datasetId,
-        );
-        const hasOutput = this.nodes.some((n) => n.type === "output");
-        const hasLayer = this.nodes.some((n) =>
-            ["layer", "neuron", "conv2d"].includes(n.type),
-        );
-        const optimizerInTraining = this.nodes.some((n) => {
-            if (n.type !== "optimizer") return false;
-            return n.inputs?.some((p) =>
-                p.activationPhases?.includes("training"),
-            );
-        });
-        const items = [
-            { label: "Input Data node", ok: hasInput },
-            { label: "Dataset attached", ok: hasDataset },
-            { label: "Output node", ok: hasOutput },
-            { label: "Trainable layer", ok: hasLayer },
-            { label: "Optimizer in Training phase", ok: optimizerInTraining },
-        ];
-        list.innerHTML = items
-            .map(
-                (item) =>
-                    `<li class="phase-wizard-item${item.ok ? " ok" : ""}">${item.ok ? "✓" : "○"} ${item.label}</li>`,
-            )
-            .join("");
     },
 
     _runCheck() {
@@ -3737,7 +3703,6 @@ const SketchMod = {
                         warnings: data.warnings,
                         isValid: data.isValid,
                     });
-                    this._updatePhaseWizard();
                     this._render();
                 }
             })

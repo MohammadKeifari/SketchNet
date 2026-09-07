@@ -1397,27 +1397,6 @@
     background: var(--bg-hover);
 }
 
-/* ===== PHASE WIZARD ===== */
-.phase-wizard {
-    padding: 8px 0 4px;
-}
-
-.phase-wizard-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-}
-
-.phase-wizard-item {
-    padding: 4px 0;
-}
-
-.phase-wizard-item.ok {
-    color: #4ade80;
-}
-
 /* ===== EXPORT PREVIEW ===== */
 .export-preview-code {
     background: var(--bg-primary);
