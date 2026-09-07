@@ -37,6 +37,16 @@ def settings_view(request):
             request.POST.get("collapse_right_sidebar") == "on"
         )
 
+        export_format = request.POST.get("default_export_format")
+        if export_format in ("pytorch-py", "pytorch-zip"):
+            user_settings.default_export_format = export_format
+
+        highlight_phase = request.POST.get("highlight_phase_on_open")
+        if highlight_phase in ("none", "preprocessing", "training", "evaluation"):
+            user_settings.highlight_phase_on_open = highlight_phase
+
+        user_settings.public_profile = request.POST.get("public_profile") == "on"
+
         user_settings.save()
         saved = True
 

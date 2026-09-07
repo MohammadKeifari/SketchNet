@@ -42,6 +42,29 @@ def _zip_requirements(code: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _canvas_context(request, readonly=False, loaded_model=None):
+    collapse_left = False
+    collapse_right = False
+    default_export_format = "pytorch-py"
+    highlight_phase_on_open = "none"
+    if request.user.is_authenticated:
+        user_settings = request.user.settings
+        collapse_left = user_settings.collapse_left_sidebar
+        collapse_right = user_settings.collapse_right_sidebar
+        default_export_format = user_settings.default_export_format
+        highlight_phase_on_open = user_settings.highlight_phase_on_open
+    context = {
+        "readonly": readonly,
+        "collapse_left_sidebar": collapse_left,
+        "collapse_right_sidebar": collapse_right,
+        "default_export_format": default_export_format,
+        "highlight_phase_on_open": highlight_phase_on_open,
+    }
+    if loaded_model is not None:
+        context["loaded_model"] = loaded_model
+    return context
+
+
 def canvas(request):
     load_id = request.GET.get("load")
     readonly = request.GET.get("readonly") == "1"
@@ -51,29 +74,21 @@ def canvas(request):
         if not model.can_view(request.user):
             login_url = reverse("account_login")
             return redirect(f"{login_url}?next={request.get_full_path()}")
-        context = {
-            "readonly": True,
-            "loaded_model": model,
-            "collapse_left_sidebar": False,
-            "collapse_right_sidebar": False,
-        }
-        if request.user.is_authenticated:
-            user_settings = request.user.settings
-            context["collapse_left_sidebar"] = user_settings.collapse_left_sidebar
-            context["collapse_right_sidebar"] = user_settings.collapse_right_sidebar
-        return render(request, "sketchmod/canvas.html", context)
+        return render(
+            request,
+            "sketchmod/canvas.html",
+            _canvas_context(request, readonly=True, loaded_model=model),
+        )
 
     if not request.user.is_authenticated:
         login_url = reverse("account_login")
         return redirect(f"{login_url}?next={request.get_full_path()}")
 
-    user_settings = request.user.settings
-    context = {
-        "readonly": False,
-        "collapse_left_sidebar": user_settings.collapse_left_sidebar,
-        "collapse_right_sidebar": user_settings.collapse_right_sidebar,
-    }
-    return render(request, "sketchmod/canvas.html", context)
+    return render(
+        request,
+        "sketchmod/canvas.html",
+        _canvas_context(request, readonly=False),
+    )
 
 
 def api_dataset_columns(request, dataset_id):

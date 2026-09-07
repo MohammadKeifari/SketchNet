@@ -291,3 +291,13 @@
     color: #27ae60;
     font-size: 0.85rem;
 }
+
+.setting-select {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.9rem;
+}

@@ -242,6 +242,65 @@
                     </label>
                 </div>
             </div>
+            <div class="settings-card">
+                <h2>SketchMod</h2>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <span class="setting-label">Default export format</span>
+                        <span class="setting-desc">Preferred format when exporting PyTorch code</span>
+                    </div>
+                    <select name="default_export_format" class="setting-select">
+                        <option value="pytorch-py"
+                                {% if settings.default_export_format == "pytorch-py" %}selected{% endif %}>
+                            PyTorch (.py)
+                        </option>
+                        <option value="pytorch-zip"
+                                {% if settings.default_export_format == "pytorch-zip" %}selected{% endif %}>
+                            PyTorch (.zip)
+                        </option>
+                    </select>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <span class="setting-label">Highlight phase on open</span>
+                        <span class="setting-desc">Automatically highlight a phase path when SketchMod loads</span>
+                    </div>
+                    <select name="highlight_phase_on_open" class="setting-select">
+                        <option value="none"
+                                {% if settings.highlight_phase_on_open == "none" %}selected{% endif %}>None</option>
+                        <option value="preprocessing"
+                                {% if settings.highlight_phase_on_open == "preprocessing" %}selected{% endif %}>
+                            Preprocessing
+                        </option>
+                        <option value="training"
+                                {% if settings.highlight_phase_on_open == "training" %}selected{% endif %}>
+                            Training
+                        </option>
+                        <option value="evaluation"
+                                {% if settings.highlight_phase_on_open == "evaluation" %}selected{% endif %}>
+                            Evaluation
+                        </option>
+                    </select>
+                </div>
+            </div>
+            <div class="settings-card">
+                <h2>Account</h2>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <span class="setting-label">Public profile</span>
+                        <span class="setting-desc">
+                            Show your public models and datasets at
+                            <a href="{% url 'public_profile' user.username %}">/accounts/u/{{ user.username }}/</a>
+                        </span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox"
+                               name="public_profile"
+                               {% if settings.public_profile %}checked{% endif %}>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
             <button type="submit" class="btn-submit">Save Settings</button>
         </form>
     </div>

@@ -39,11 +39,33 @@ class UserSettings(models.Model):
         help_text="Collapse the right sidebar by default",
     )
 
-    # Future fields - just comments for now:
-    # editor_font_size = models.IntegerField(default=14)
-    # auto_save_interval = models.IntegerField(default=60)
-    # email_notifications = models.BooleanField(default=True)
-    # public_profile = models.BooleanField(default=False)
+    EXPORT_FORMAT_CHOICES = [
+        ("pytorch-py", "PyTorch (.py)"),
+        ("pytorch-zip", "PyTorch (.zip)"),
+    ]
+    PHASE_HIGHLIGHT_CHOICES = [
+        ("none", "None"),
+        ("preprocessing", "Preprocessing"),
+        ("training", "Training"),
+        ("evaluation", "Evaluation"),
+    ]
+
+    default_export_format = models.CharField(
+        max_length=20,
+        choices=EXPORT_FORMAT_CHOICES,
+        default="pytorch-py",
+        help_text="Preferred export format from SketchMod",
+    )
+    highlight_phase_on_open = models.CharField(
+        max_length=20,
+        choices=PHASE_HIGHLIGHT_CHOICES,
+        default="none",
+        help_text="Automatically highlight a phase path when opening the canvas",
+    )
+    public_profile = models.BooleanField(
+        default=False,
+        help_text="Show your public models and datasets on a profile page",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
