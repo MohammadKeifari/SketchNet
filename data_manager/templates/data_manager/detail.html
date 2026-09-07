@@ -116,6 +116,22 @@
                         Download
                     </a>
                     {% if user.is_authenticated %}
+                        <a href="{% url 'sketchmod:canvas' %}?dataset={{ dataset.dataset_id }}"
+                           class="btn btn-ghost">
+                            <svg width="16"
+                                 height="16"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2">
+                                <polyline points="16 18 22 12 16 6" />
+                                <polyline points="8 6 2 12 8 18" />
+                                <line x1="12" y1="2" x2="12" y2="22" />
+                            </svg>
+                            Open in SketchMod
+                        </a>
+                    {% endif %}
+                    {% if user.is_authenticated %}
                         <button class="btn btn-ghost like-btn-large"
                                 data-id="{{ dataset.dataset_id }}">
                             {% if user in dataset.liked_by.all %}
