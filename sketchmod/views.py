@@ -2,11 +2,13 @@ import json
 import io
 import zipfile
 import os
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
+from django.urls import reverse
 from data_manager.models import Dataset
+from models_library.models import SketchModel
 from .codegen.generator import CodeGenerator
 from .codegen.validator import GraphValidator
 from .codegen.phase_analyzer import highlight_path
@@ -40,16 +42,37 @@ def _zip_requirements(code: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-@login_required
 def canvas(request):
-    context = {}
-    if request.user.is_authenticated:
-        user_settings = request.user.settings
-        context["collapse_left_sidebar"] = user_settings.collapse_left_sidebar
-        context["collapse_right_sidebar"] = user_settings.collapse_right_sidebar
-    else:
-        context["collapse_left_sidebar"] = False
-        context["collapse_right_sidebar"] = False
+    load_id = request.GET.get("load")
+    readonly = request.GET.get("readonly") == "1"
+
+    if load_id and readonly:
+        model = get_object_or_404(SketchModel, model_id=load_id)
+        if not model.can_view(request.user):
+            login_url = reverse("account_login")
+            return redirect(f"{login_url}?next={request.get_full_path()}")
+        context = {
+            "readonly": True,
+            "loaded_model": model,
+            "collapse_left_sidebar": False,
+            "collapse_right_sidebar": False,
+        }
+        if request.user.is_authenticated:
+            user_settings = request.user.settings
+            context["collapse_left_sidebar"] = user_settings.collapse_left_sidebar
+            context["collapse_right_sidebar"] = user_settings.collapse_right_sidebar
+        return render(request, "sketchmod/canvas.html", context)
+
+    if not request.user.is_authenticated:
+        login_url = reverse("account_login")
+        return redirect(f"{login_url}?next={request.get_full_path()}")
+
+    user_settings = request.user.settings
+    context = {
+        "readonly": False,
+        "collapse_left_sidebar": user_settings.collapse_left_sidebar,
+        "collapse_right_sidebar": user_settings.collapse_right_sidebar,
+    }
     return render(request, "sketchmod/canvas.html", context)
 
 
@@ -86,7 +109,6 @@ def api_dataset_columns(request, dataset_id):
         return JsonResponse({"columns": [], "count": 0, "message": str(e)})
 
 
-@login_required
 def export_api(request):
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "POST required"}, status=405)
@@ -202,7 +224,6 @@ def _export_zip(graph, code, request):
     return response
 
 
-@login_required
 def validate_api(request):
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "POST required"}, status=405)
@@ -218,7 +239,6 @@ def validate_api(request):
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
-@login_required
 def highlight_path_api(request):
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "POST required"}, status=405)

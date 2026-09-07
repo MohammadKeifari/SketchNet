@@ -423,3 +423,12 @@ class ModelViewTests(TestCase):
         """Verify all models search."""
         response = self.client.get(reverse("models:all") + "?search=nonexistent")
         self.assertContains(response, "No models found")
+
+    def test_view_page_shows_view_graph_for_anonymous(self):
+        """Public model detail shows read-only View graph link."""
+        response = self.client.get(
+            reverse("models:view", args=[self.model.model_id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "View graph")
+        self.assertContains(response, f"load={self.model.model_id}&readonly=1")

@@ -665,7 +665,11 @@
         <!-- Quick Start -->
         <div class="learn-panel active" id="panel-quickstart" role="tabpanel">
             <h2>Quick Start</h2>
-            <p>You need a free SketchNet account to open <strong>SketchMod</strong>. Once signed in, follow these four steps.</p>
+            <p>
+                You need a free SketchNet account to <strong>build</strong> models in SketchMod.
+                Public models can be <strong>viewed and exported</strong> without signing in — open any public model and click <strong>View graph</strong>.
+                Once signed in, follow these four steps to create your own model.
+            </p>
             <div class="learn-card">
                 <h3>1. Add your data</h3>
                 <p>
@@ -1088,7 +1092,7 @@ python model.py</code>
         <!-- CTA -->
         <div class="learn-cta">
             <h2>Ready to try it yourself?</h2>
-            <p>Open SketchMod and build your first model. A SketchNet account is required.</p>
+            <p>Open SketchMod and build your first model. A SketchNet account is required to create and save graphs.</p>
             {% if user.is_authenticated %}
             <a href="{% url 'sketchmod:canvas' %}" class="btn-hero btn-hero-primary">
             {% else %}

@@ -13,9 +13,20 @@
     <link rel="stylesheet" href="{% static 'sketchmod/css/canvas.css' %}">
 {% endblock extra_css %}
 {% block content %}
-    <div class="sketchmod-container"
+    {% if readonly %}
+        <div class="readonly-banner" id="readonlyBanner">
+            <span>
+                Viewing public model{% if loaded_model %} — <strong>{{ loaded_model.name }}</strong>{% endif %}
+            </span>
+            {% if not user.is_authenticated %}
+                <a href="{% url 'account_login' %}?next={% url 'sketchmod:canvas' %}?load={{ loaded_model.model_id }}&amp;readonly=1">Sign in to fork or edit</a>
+            {% endif %}
+        </div>
+    {% endif %}
+    <div class="sketchmod-container{% if readonly %} readonly-mode{% endif %}"
          data-collapse-left="{{ collapse_left_sidebar|lower }}"
-         data-collapse-right="{{ collapse_right_sidebar|lower }}">
+         data-collapse-right="{{ collapse_right_sidebar|lower }}"
+         data-readonly="{{ readonly|yesno:'true,false' }}">
         <!-- Left Toolbar -->
         <div class="toolbar toolbar-left" id="leftToolbar">
             <!--filled using the js-->
@@ -890,6 +901,9 @@
     </div>
 {% endblock content %}
 {% block extra_js %}
+    {% if readonly %}
+        <script>window.SKETCHNET_READONLY = true;</script>
+    {% endif %}
     <script src="{% static 'sketchmod/js/canvas.js' %}"></script>
     <script src="{% static 'sketchmod/js/layout.js' %}"></script>
     {% if template_graph %}

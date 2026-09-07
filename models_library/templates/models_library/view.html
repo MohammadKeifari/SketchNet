@@ -299,6 +299,21 @@
                             Edit Graph
                         </a>
                     {% endif %}
+                    {% if user != model.owner %}
+                        <a href="{% url 'sketchmod:canvas' %}?load={{ model.model_id }}&readonly=1"
+                           class="btn btn-primary">
+                            <svg width="16"
+                                 height="16"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                <circle cx="12" cy="12" r="3" />
+                            </svg>
+                            View graph
+                        </a>
+                    {% endif %}
                     <a href="{% url 'models:download' model.model_id %}"
                        class="btn btn-ghost">
                         <svg width="16"
@@ -314,7 +329,11 @@
                         Download
                     </a>
                     {% if model.fork_access == "public" or user == model.owner %}
+                        {% if user.is_authenticated %}
                         <a href="{% url 'models:fork' model.model_id %}" class="btn btn-ghost">
+                        {% else %}
+                        <a href="{% url 'account_login' %}?next={% url 'models:fork' model.model_id %}" class="btn btn-ghost">
+                        {% endif %}
                             <svg width="16"
                                  height="16"
                                  viewBox="0 0 24 24"

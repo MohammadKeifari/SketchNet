@@ -11,6 +11,7 @@ const SketchMod = {
     ports: [],
     nodeCounter: 0,
     currentTool: "select",
+    readonly: false,
 
     // Pan/Zoom
     offsetX: 0,
@@ -95,11 +96,33 @@ const SketchMod = {
         this.canvas = document.getElementById("sketchCanvas");
         this.ctx = this.canvas.getContext("2d");
 
+        this.readonly =
+            window.SKETCHNET_READONLY === true ||
+            document.querySelector(".sketchmod-container")?.dataset.readonly ===
+                "true";
+
         // Check if loading a specific model
         const urlParams = new URLSearchParams(window.location.search);
         const loadModelId = urlParams.get("load");
 
         const hasSession = sessionStorage.getItem("sketchmod-graph");
+
+        const loadGraph = () => {
+            if (loadModelId) {
+                if (hasSession) {
+                    const sessionData = JSON.parse(hasSession);
+                    if (sessionData.modelId === loadModelId) {
+                        this._loadFromSession();
+                    } else {
+                        this._loadModelFromServer(loadModelId);
+                    }
+                } else {
+                    this._loadModelFromServer(loadModelId);
+                }
+            } else {
+                this._loadFromSession();
+            }
+        };
 
         // ----- Admin bug report graph (loaded via Django template) -----
         if (window.SKETCHNET_TEMPLATE) {
@@ -108,25 +131,9 @@ const SketchMod = {
             this._saveToSession();
             this._propagateShapes();
             // Skip the rest of graph loading — go straight to UI setup
+        } else if (this.readonly) {
+            loadGraph();
         } else {
-            // Helper that runs the correct graph loader
-            const loadGraph = () => {
-                if (loadModelId) {
-                    if (hasSession) {
-                        const sessionData = JSON.parse(hasSession);
-                        if (sessionData.modelId === loadModelId) {
-                            this._loadFromSession();
-                        } else {
-                            this._loadModelFromServer(loadModelId);
-                        }
-                    } else {
-                        this._loadModelFromServer(loadModelId);
-                    }
-                } else {
-                    this._loadFromSession();
-                }
-            };
-
             // Try template first, fall back to normal load
             fetch("/sketchmod/api/consume-template/")
                 .then((r) => r.json())
@@ -426,6 +433,9 @@ const SketchMod = {
             ?.addEventListener("click", () => this._openReportModal());
         // Toolbar
         this._buildToolbar();
+        if (this.readonly) {
+            this.setTool("select");
+        }
 
         // Context menu actions
         document.querySelectorAll(".context-menu-item").forEach((item) => {
@@ -804,6 +814,10 @@ const SketchMod = {
         const my = e.offsetY;
 
         // === RIGHT CLICK ===
+        if (this.readonly && e.button === 2) {
+            e.preventDefault();
+            return;
+        }
         if (e.button === 2) {
             const hit = this._hitTest(mx, my);
 
@@ -839,7 +853,7 @@ const SketchMod = {
         const hit = this._hitTest(mx, my);
 
         // Delete tool
-        if (this.currentTool === "delete") {
+        if (this.currentTool === "delete" && !this.readonly) {
             if (hit && hit.port) {
                 this._deletePort(hit.port);
                 return;
@@ -856,7 +870,7 @@ const SketchMod = {
         }
 
         // Click on port — drag to connect or click to select
-        if (hit && hit.port) {
+        if (hit && hit.port && !this.readonly) {
             this.linking.active = true;
             this.linking.sourcePort = hit.port;
             this.linking.startX = mx;
@@ -885,6 +899,11 @@ const SketchMod = {
                 this._showProperties(this.selectedNodes[0]);
             } else {
                 this._hideProperties();
+            }
+
+            if (this.readonly) {
+                this._render();
+                return;
             }
 
             this.isDraggingNode = true;
@@ -938,6 +957,9 @@ const SketchMod = {
         this._render();
 
         // Place node
+        if (this.readonly) {
+            return;
+        }
         const entry = this.nodeRegistry.find(
             (r) => r.type === this.currentTool,
         );
@@ -1094,6 +1116,38 @@ const SketchMod = {
             tag === "SELECT" ||
             document.activeElement?.isContentEditable
         ) {
+            return;
+        }
+
+        if (this.readonly) {
+            if (e.code === "Space") {
+                this.spacePressed = true;
+                e.preventDefault();
+            }
+            if (e.key === "h") this.setTool("pan");
+            if (e.key === "?" && !e.ctrlKey && !e.metaKey) {
+                this.openShortcutsModal();
+                e.preventDefault();
+            }
+            if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) {
+                this._zoomStep(1.25);
+                e.preventDefault();
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === "-") {
+                this._zoomStep(0.8);
+                e.preventDefault();
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+                this._zoomFit();
+                e.preventDefault();
+            }
+            if (e.key === "Escape") {
+                this.selectedNodes = [];
+                this.selectedLinks = [];
+                this.selectedPorts = [];
+                this._hideProperties();
+                this._render();
+            }
             return;
         }
 
@@ -2183,6 +2237,13 @@ const SketchMod = {
 
     // ========== TOOLS ==========
     setTool(toolName) {
+        if (
+            this.readonly &&
+            toolName !== "select" &&
+            toolName !== "pan"
+        ) {
+            return;
+        }
         this.currentTool = toolName;
         document
             .querySelectorAll(".tool-btn")

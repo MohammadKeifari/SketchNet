@@ -1,4 +1,27 @@
 /* ===== LAYOUT ===== */
+.readonly-banner {
+    position: fixed;
+    top: var(--nav-height);
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 8px 16px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.9rem;
+}
+
+.readonly-banner a {
+    color: #fff;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
 .sketchmod-container {
     display: flex;
     height: calc(100vh - var(--nav-height));
@@ -9,6 +32,34 @@
     left: 0;
     right: 0;
     bottom: 0;
+}
+
+.sketchmod-container.readonly-mode {
+    top: calc(var(--nav-height) + 40px);
+    height: calc(100vh - var(--nav-height) - 40px);
+}
+
+.sketchmod-container.readonly-mode .toolbar-left {
+    display: none;
+}
+
+.sketchmod-container.readonly-mode .prop-group input,
+.sketchmod-container.readonly-mode .prop-group select,
+.sketchmod-container.readonly-mode .prop-group textarea,
+.sketchmod-container.readonly-mode .prop-group button,
+.sketchmod-container.readonly-mode .dataset-select-display,
+.sketchmod-container.readonly-mode .dataset-tab {
+    pointer-events: none;
+    opacity: 0.75;
+}
+
+.sketchmod-container.readonly-mode #btnSave,
+.sketchmod-container.readonly-mode #btnUndo,
+.sketchmod-container.readonly-mode #btnRedo,
+.sketchmod-container.readonly-mode #btnAutoLayout,
+.sketchmod-container.readonly-mode #btnNewModel,
+.sketchmod-container.readonly-mode #btnImportJson {
+    display: none;
 }
 
 /* ===== LEFT TOOLBAR ===== */

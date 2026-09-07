@@ -2,6 +2,7 @@ import json
 from django.test import TestCase, Client
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from models_library.models import SketchModel
 
 User = get_user_model()
 
@@ -121,7 +122,22 @@ class ViewsTest(TestCase):
         """Set up test fixtures."""
         self.client = Client()
         self.user = User.objects.create_user(
-            username="testuser", password="testpass123"
+            username="testuser", email="test@example.com", password="testpass123"
+        )
+        self.owner = User.objects.create_user(
+            username="owner", email="owner@example.com", password="testpass123"
+        )
+        self.public_model = SketchModel.objects.create(
+            name="Public Model",
+            graph_data={"nodes": [], "links": [], "ports": [], "nodeCounter": 0},
+            owner=self.owner,
+            view_access="public",
+        )
+        self.private_model = SketchModel.objects.create(
+            name="Private Model",
+            graph_data={"nodes": [], "links": [], "ports": [], "nodeCounter": 0},
+            owner=self.owner,
+            view_access="private",
         )
         # URLs
         self.canvas_url = reverse("sketchmod:canvas")
@@ -131,9 +147,25 @@ class ViewsTest(TestCase):
 
     # ---------- Canvas ----------
     def test_canvas_requires_login(self):
-        """Verify canvas requires login."""
+        """Blank canvas requires login."""
         response = self.client.get(self.canvas_url)
         self.assertEqual(response.status_code, 302)
+        self.assertIn("login", response.url)
+
+    def test_canvas_anonymous_readonly_public(self):
+        """Anonymous users can view public models in read-only mode."""
+        url = f"{self.canvas_url}?load={self.public_model.model_id}&readonly=1"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["readonly"])
+        self.assertContains(response, "Viewing public model")
+
+    def test_canvas_anonymous_private_readonly_denied(self):
+        """Anonymous users cannot view private models."""
+        url = f"{self.canvas_url}?load={self.private_model.model_id}&readonly=1"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("login", response.url)
 
     def test_canvas_authenticated(self):
         """Verify canvas authenticated."""
@@ -141,13 +173,25 @@ class ViewsTest(TestCase):
         response = self.client.get(self.canvas_url)
         self.assertEqual(response.status_code, 200)
 
+    def test_canvas_owner_load_without_readonly(self):
+        """Logged-in owner can open edit mode without readonly flag."""
+        self.client.login(username="owner", password="testpass123")
+        url = f"{self.canvas_url}?load={self.public_model.model_id}"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["readonly"])
+
     # ---------- Export API ----------
     def test_export_unauthenticated(self):
-        """Verify export unauthenticated."""
+        """Anonymous users can export valid graphs."""
+        graph_str = json.dumps(VALID_GRAPH)
         response = self.client.post(
-            self.export_url, {}, content_type="application/json"
+            self.export_url,
+            data=json.dumps({"graph": graph_str, "format": "pytorch-py"}),
+            content_type="application/json",
         )
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
 
     def test_export_valid_graph(self):
         """Verify export valid graph."""
@@ -186,11 +230,14 @@ class ViewsTest(TestCase):
 
     # ---------- Validate API ----------
     def test_validate_unauthenticated(self):
-        """Verify validate unauthenticated."""
+        """Anonymous users can validate graphs."""
         response = self.client.post(
-            self.validate_url, {}, content_type="application/json"
+            self.validate_url,
+            data=json.dumps({"graph": json.dumps(VALID_GRAPH)}),
+            content_type="application/json",
         )
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
 
     def test_validate_valid_graph(self):
         """Verify validate valid graph."""
@@ -283,11 +330,16 @@ class ViewsTest(TestCase):
 
     # ---------- Highlight Path API ----------
     def test_highlight_unauthenticated(self):
-        """Verify highlight unauthenticated."""
+        """Anonymous users can highlight paths."""
         response = self.client.post(
-            self.highlight_url, {}, content_type="application/json"
+            self.highlight_url,
+            data=json.dumps(
+                {"graph": json.dumps(VALID_GRAPH), "phase": "preprocessing"}
+            ),
+            content_type="application/json",
         )
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
 
     def test_highlight_valid(self):
         """Verify highlight valid."""
