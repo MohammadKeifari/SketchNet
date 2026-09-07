@@ -1383,18 +1383,28 @@
 .validation-action {
     font-size: 0.78rem;
     font-weight: 600;
-    color: var(--accent);
+    color: inherit;
     background: transparent;
-    border: 1px solid var(--border);
+    border: 1px solid currentColor;
     border-radius: 6px;
     padding: 4px 10px;
     cursor: pointer;
     text-decoration: none;
     font-family: inherit;
+    opacity: 0.9;
 }
 
 .validation-action:hover {
-    background: var(--bg-hover);
+    opacity: 1;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.validation-result.warning .validation-action {
+    color: #f59e0b;
+}
+
+.validation-result.error .validation-action {
+    color: #ef4444;
 }
 
 /* ===== EXPORT PREVIEW ===== */
