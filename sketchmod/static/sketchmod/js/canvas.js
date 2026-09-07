@@ -12,6 +12,9 @@ const SketchMod = {
     nodeCounter: 0,
     currentTool: "select",
     readonly: false,
+    _pendingExport: null,
+    _datasetDeepLinkApplied: false,
+    _phaseHighlightApplied: false,
 
     // Pan/Zoom
     offsetX: 0,
@@ -130,6 +133,7 @@ const SketchMod = {
             this._showToast("Bug report graph loaded.");
             this._saveToSession();
             this._propagateShapes();
+            this._afterGraphLoaded();
             // Skip the rest of graph loading — go straight to UI setup
         } else if (this.readonly) {
             loadGraph();
@@ -436,6 +440,20 @@ const SketchMod = {
         if (this.readonly) {
             this.setTool("select");
         }
+
+        document
+            .getElementById("validationContent")
+            ?.addEventListener("click", (e) => {
+                const jumpBtn = e.target.closest("[data-jump-node]");
+                if (jumpBtn) {
+                    this._jumpToNode(jumpBtn.dataset.jumpNode);
+                }
+            });
+        document
+            .getElementById("btnConfirmExport")
+            ?.addEventListener("click", () => this._confirmExportPreview());
+
+        setTimeout(() => this._afterGraphLoaded(), 150);
 
         // Context menu actions
         document.querySelectorAll(".context-menu-item").forEach((item) => {
@@ -2047,6 +2065,36 @@ const SketchMod = {
                 this._render();
             });
         }
+        const kernelInput = document.getElementById("prop-kernel");
+        if (kernelInput) {
+            kernelInput.addEventListener("change", () => {
+                this._saveUndoState();
+                node.kernelSize = parseInt(kernelInput.value) || 2;
+                this._saveToSession();
+                this._propagateShapes();
+                this._render();
+            });
+        }
+        const strideInput = document.getElementById("prop-stride");
+        if (strideInput) {
+            strideInput.addEventListener("change", () => {
+                this._saveUndoState();
+                node.stride = parseInt(strideInput.value) || 1;
+                this._saveToSession();
+                this._propagateShapes();
+                this._render();
+            });
+        }
+        const paddingInput = document.getElementById("prop-padding");
+        if (paddingInput) {
+            paddingInput.addEventListener("change", () => {
+                this._saveUndoState();
+                node.padding = parseInt(paddingInput.value) || 0;
+                this._saveToSession();
+                this._propagateShapes();
+                this._render();
+            });
+        }
     },
     _toggleDatasetPicker(node) {
         const container = this._getPropertiesContainer();
@@ -2223,6 +2271,7 @@ const SketchMod = {
         }
         this._updateModelInfo();
         this._propagateShapes();
+        this._afterGraphLoaded();
     },
 
     // ========== SERVER ==========
@@ -3069,6 +3118,7 @@ const SketchMod = {
                 this._updateModelInfo();
                 this._propagateShapes();
                 this._render();
+                this._afterGraphLoaded();
             })
             .catch((err) => {
                 console.error("Failed to load model:", err);
@@ -3256,7 +3306,11 @@ const SketchMod = {
                             return;
                         }
 
-                        this._doExport(type, graphData);
+                        if (type === "pytorch-py" || type === "pytorch-zip") {
+                            this._showExportPreview(type, graphData);
+                        } else {
+                            this._doExport(type, graphData);
+                        }
                     }
                 });
             return;
@@ -3264,6 +3318,49 @@ const SketchMod = {
 
         // Image and JSON exports — no validation needed
         this._doExport(type);
+    },
+    _showExportPreview(type, graphData) {
+        fetch("/sketchmod/api/export/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": this._getCsrfToken(),
+            },
+            body: JSON.stringify({ graph: graphData, format: "pytorch-py" }),
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (!data.success) {
+                    this._showToast(
+                        "Export preview failed: " + (data.error || "Unknown error"),
+                    );
+                    return;
+                }
+                const lines = (data.code || "").split("\n");
+                const preview = lines.slice(0, 40).join("\n");
+                const suffix =
+                    lines.length > 40
+                        ? `\n\n… ${lines.length - 40} more lines`
+                        : "";
+                const pre = document.getElementById("exportPreviewCode");
+                const modal = document.getElementById("exportPreviewModal");
+                if (pre) pre.textContent = preview + suffix;
+                if (modal) modal.style.display = "flex";
+                this._pendingExport = { type, graphData };
+            })
+            .catch(() => this._showToast("Export preview failed."));
+    },
+    _closeExportPreviewModal() {
+        const modal = document.getElementById("exportPreviewModal");
+        if (modal) modal.style.display = "none";
+        this._pendingExport = null;
+    },
+    _confirmExportPreview() {
+        if (!this._pendingExport) return;
+        const pending = this._pendingExport;
+        this._pendingExport = null;
+        this._closeExportPreviewModal();
+        this._doExport(pending.type, pending.graphData);
     },
     _doExport(type, graphData) {
         // Image exports
@@ -3468,6 +3565,158 @@ const SketchMod = {
     warningNodeIds: new Set(),
     warningPortIds: new Set(),
 
+    _learnTabForCode(code) {
+        const nodesTab = new Set([
+            "label-loss-mismatch",
+            "label-shape-unknown",
+            "label-shape-squeezed",
+        ]);
+        const portsTab = new Set([
+            "missing-input-connection",
+            "model-input-missing",
+            "batch-size-mismatch",
+            "evaluation-entry-mismatch",
+            "data-flow-cycle",
+            "param-cycle",
+        ]);
+        if (nodesTab.has(code)) return "nodes";
+        if (portsTab.has(code)) return "portsflow";
+        return "help";
+    },
+
+    _buildValidationRow(item, kind) {
+        const icon =
+            kind === "error"
+                ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="15" y1="9" x2="9" y2="15"/>
+                        <line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>`
+                : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>`;
+        let actions = "";
+        if (item.nodeId) {
+            actions += `<button type="button" class="validation-action" data-jump-node="${item.nodeId}">Jump to node</button>`;
+        }
+        if (item.code) {
+            const tab = this._learnTabForCode(item.code);
+            actions += `<a class="validation-action" href="/learn/?tab=${tab}#err-${item.code}" target="_blank" rel="noopener">Learn more</a>`;
+        }
+        return `<div class="validation-result ${kind}">
+                    ${icon}
+                    <div class="validation-row-body">
+                        <span>${item.message}</span>
+                        ${actions ? `<div class="validation-actions">${actions}</div>` : ""}
+                    </div>
+                </div>`;
+    },
+
+    _jumpToNode(nodeId) {
+        const node = this.nodes.find((n) => n.id === nodeId);
+        if (!node) {
+            this._showToast("Node not found on canvas.");
+            return;
+        }
+        this.selectedNodes = [node];
+        this.selectedLinks = [];
+        this.selectedPorts = [];
+        this._showProperties(node);
+        const canvasW = this.canvas.width;
+        const canvasH = this.canvas.height;
+        this.offsetX = canvasW / 2 - node.x * this.scale;
+        this.offsetY = canvasH / 2 - node.y * this.scale;
+        this._updateZoomIndicator();
+        this._closeValidationModal();
+        this._render();
+    },
+
+    _afterGraphLoaded() {
+        this._applyDatasetDeepLink();
+        this._applyDefaultPhaseHighlight();
+        this._updatePhaseWizard();
+    },
+
+    _applyDatasetDeepLink() {
+        if (this._datasetDeepLinkApplied || this.readonly) return;
+        const datasetId = new URLSearchParams(window.location.search).get(
+            "dataset",
+        );
+        if (!datasetId) return;
+        this._datasetDeepLinkApplied = true;
+
+        let node = this.nodes.find((n) => n.type === "input-data");
+        if (!node) {
+            const cx =
+                (-this.offsetX + this.canvas.width / 2) / (this.scale || 1);
+            const cy =
+                (-this.offsetY + this.canvas.height / 2) / (this.scale || 1);
+            node = new InputDataNode("input-main", cx, cy);
+            this.nodes.push(node);
+            this.ports = this._collectPorts();
+            this.nodeCounter += 1;
+        }
+
+        fetch(`/data/api/${datasetId}/info/`)
+            .then((r) => r.json())
+            .then((data) => {
+                if (data.error) {
+                    this._showToast("Could not attach dataset.");
+                    return;
+                }
+                node.datasetId = datasetId;
+                node.datasetName = data.name || datasetId;
+                this._saveToSession();
+                this._propagateShapes();
+                this._updatePhaseWizard();
+                this._render();
+                this._showToast(`Dataset "${node.datasetName}" attached.`);
+            })
+            .catch(() => this._showToast("Could not attach dataset."));
+    },
+
+    _applyDefaultPhaseHighlight() {
+        if (this._phaseHighlightApplied) return;
+        const phase = window.SKETCHNET_SETTINGS?.highlightPhaseOnOpen;
+        if (!phase || phase === "none") return;
+        this._phaseHighlightApplied = true;
+        this._highlightPhase(phase);
+    },
+
+    _updatePhaseWizard() {
+        const list = document.getElementById("phaseWizardList");
+        if (!list) return;
+        const hasInput = this.nodes.some((n) => n.type === "input-data");
+        const hasDataset = this.nodes.some(
+            (n) => n.type === "input-data" && n.datasetId,
+        );
+        const hasOutput = this.nodes.some((n) => n.type === "output");
+        const hasLayer = this.nodes.some((n) =>
+            ["layer", "neuron", "conv2d"].includes(n.type),
+        );
+        const optimizerInTraining = this.nodes.some((n) => {
+            if (n.type !== "optimizer") return false;
+            return n.inputs?.some((p) =>
+                p.activationPhases?.includes("training"),
+            );
+        });
+        const items = [
+            { label: "Input Data node", ok: hasInput },
+            { label: "Dataset attached", ok: hasDataset },
+            { label: "Output node", ok: hasOutput },
+            { label: "Trainable layer", ok: hasLayer },
+            { label: "Optimizer in Training phase", ok: optimizerInTraining },
+        ];
+        list.innerHTML = items
+            .map(
+                (item) =>
+                    `<li class="phase-wizard-item${item.ok ? " ok" : ""}">${item.ok ? "✓" : "○"} ${item.label}</li>`,
+            )
+            .join("");
+    },
+
     _runCheck() {
         const graphData = JSON.stringify(this._getGraphData());
 
@@ -3488,6 +3737,7 @@ const SketchMod = {
                         warnings: data.warnings,
                         isValid: data.isValid,
                     });
+                    this._updatePhaseWizard();
                     this._render();
                 }
             })
@@ -3575,29 +3825,13 @@ const SketchMod = {
             if (errors.length > 0) {
                 html += `<div class="validation-section-label" style="color: #ef4444;">Errors</div>`;
                 for (const e of errors) {
-                    html += `
-                <div class="validation-result error">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="15" y1="9" x2="9" y2="15"/>
-                        <line x1="9" y1="9" x2="15" y2="15"/>
-                    </svg>
-                    <span>${e.message}</span>
-                </div>`;
+                    html += this._buildValidationRow(e, "error");
                 }
             }
             if (warnings.length > 0) {
                 html += `<div class="validation-section-label" style="color: #f59e0b;">Warnings</div>`;
                 for (const w of warnings) {
-                    html += `
-                <div class="validation-result warning">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/>
-                        <line x1="12" y1="17" x2="12.01" y2="17"/>
-                    </svg>
-                    <span>${w.message}</span>
-                </div>`;
+                    html += this._buildValidationRow(w, "warning");
                 }
             }
             content.innerHTML = html;
@@ -3638,30 +3872,14 @@ const SketchMod = {
             if (errors.length > 0) {
                 html += `<div class="validation-section-label" style="color: #ef4444;">Errors</div>`;
                 for (const e of errors) {
-                    html += `
-                <div class="validation-result error">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="15" y1="9" x2="9" y2="15"/>
-                        <line x1="9" y1="9" x2="15" y2="15"/>
-                    </svg>
-                    <span>${e.message}</span>
-                </div>`;
+                    html += this._buildValidationRow(e, "error");
                 }
             }
 
             if (warnings.length > 0) {
                 html += `<div class="validation-section-label" style="color: #f59e0b;">Warnings</div>`;
                 for (const w of warnings) {
-                    html += `
-                <div class="validation-result warning">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/>
-                        <line x1="12" y1="17" x2="12.01" y2="17"/>
-                    </svg>
-                    <span>${w.message}</span>
-                </div>`;
+                    html += this._buildValidationRow(w, "warning");
                 }
             }
 
@@ -5508,6 +5726,10 @@ class BaseNode {
                 moduleName = `self.conv_${sid}`;
                 varName = `outputs['${this.id}']`;
                 break;
+            case "maxpool2d":
+                moduleName = `self.pool_${sid}`;
+                varName = `outputs['${this.id}']`;
+                break;
             case "flatten":
                 moduleName = `self.flatten_${sid}`;
                 varName = `outputs['${this.id}']`;
@@ -7234,6 +7456,98 @@ class Conv2DNode extends RectNode {
         );
     }
 }
+// ========== MAXPOOL2D NODE ==========
+class MaxPool2DNode extends RectNode {
+    constructor(id, x, y) {
+        super(id, x, y, "maxpool2d", 110, 70);
+        this.kernelSize = 2;
+        this.stride = 2;
+        this.padding = 0;
+        this.maxInputs = 1;
+        this.minInputs = 1;
+        this.maxOutputs = 1;
+        this.minOutputs = 1;
+        this.addInput();
+        this.addOutput();
+        this.inputs[0].activationPhases = ["training", "evaluation"];
+        this.outputs[0].activationPhases = ["training", "evaluation"];
+    }
+
+    drawLabel(ctx) {
+        ctx.font = "bold 12px Inter, sans-serif";
+        ctx.fillText(this.kernelSize + "×" + this.kernelSize, this.x, this.y - 10);
+        ctx.font = "9px Inter, sans-serif";
+        ctx.fillText("MaxPool", this.x, this.y + 4);
+        this._drawCodeLabel(ctx);
+    }
+
+    computeOutputShapes() {
+        const s = this._getFirstInputShapeObj();
+        if (!s || s.shape.length < 3) return this._emptyShapes();
+
+        const H = s.shape[s.shape.length - 2];
+        const W = s.shape[s.shape.length - 1];
+        const stride = this.stride || this.kernelSize;
+
+        let H_out, W_out;
+        if (H.isNumber() && W.isNumber()) {
+            const h = H.toNumber();
+            const w = W.toNumber();
+            H_out = new ShapeExpr(
+                Math.floor((h + 2 * this.padding - this.kernelSize) / stride) +
+                    1,
+            );
+            W_out = new ShapeExpr(
+                Math.floor((w + 2 * this.padding - this.kernelSize) / stride) +
+                    1,
+            );
+        } else {
+            H_out = ShapeExpr.from(H)
+                .add(2 * this.padding)
+                .subtract(this.kernelSize)
+                .divide(stride)
+                .add(1);
+            W_out = ShapeExpr.from(W)
+                .add(2 * this.padding)
+                .subtract(this.kernelSize)
+                .divide(stride)
+                .add(1);
+        }
+
+        const shape = [
+            ...s.shape.slice(0, -2).map((x) => new ShapeExpr(x)),
+            H_out,
+            W_out,
+        ];
+        return this._makeShapes(shape, s.symbolic, true);
+    }
+
+    toJSON() {
+        return {
+            ...super.toJSON(),
+            kernelSize: this.kernelSize,
+            stride: this.stride,
+            padding: this.padding,
+        };
+    }
+
+    fromJSON(d) {
+        super.fromJSON(d);
+        if (d.kernelSize) this.kernelSize = d.kernelSize;
+        if (d.stride) this.stride = d.stride;
+        if (d.padding !== undefined) this.padding = d.padding;
+    }
+
+    getPropertiesHTML() {
+        return (
+            this._getCodeReferenceHTML() +
+            this._getShapeSummaryHTML() +
+            `<div class="prop-group"><label>Kernel Size</label><input type="number" id="prop-kernel" class="prop-input" value="${this.kernelSize}" min="1" max="11"></div>
+        <div class="prop-group"><label>Stride</label><input type="number" id="prop-stride" class="prop-input" value="${this.stride}" min="1" max="5"></div>
+        <div class="prop-group"><label>Padding</label><input type="number" id="prop-padding" class="prop-input" value="${this.padding}" min="0" max="5"></div>`
+        );
+    }
+}
 // ========== FLATTEN NODE ==========
 class FlattenNode extends RectNode {
     constructor(id, x, y) {
@@ -8857,6 +9171,18 @@ SketchMod.registerNode({
         <rect x="3" y="3" width="18" height="18" rx="2"/>
         <rect x="6" y="6" width="12" height="12" rx="1"/>
         <circle cx="12" cy="12" r="3"/></svg>`,
+});
+SketchMod.registerNode({
+    type: "maxpool2d",
+    label: "MaxPool2D",
+    category: "models",
+    class: MaxPool2DNode,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <rect x="7" y="7" width="4" height="4" rx="0.5"/>
+        <rect x="13" y="7" width="4" height="4" rx="0.5"/>
+        <rect x="7" y="13" width="4" height="4" rx="0.5"/>
+        <rect x="13" y="13" width="4" height="4" rx="0.5" opacity="0.4"/></svg>`,
 });
 SketchMod.registerNode({
     type: "flatten",

@@ -1144,5 +1144,24 @@ python model.py</code>
         document.querySelectorAll('[data-goto-tab]').forEach(link => {
             link.addEventListener('click', () => activateLearnTab(link.dataset.gotoTab));
         });
+
+        document.querySelectorAll('.glossary-list code').forEach(el => {
+            const code = el.textContent.trim();
+            const li = el.closest('li');
+            if (li && code) li.id = 'err-' + code;
+        });
+
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get('tab');
+        if (tabParam) {
+            activateLearnTab(tabParam);
+            const hash = window.location.hash;
+            if (hash) {
+                setTimeout(() => {
+                    const target = document.querySelector(hash);
+                    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            }
+        }
     </script>
 {% endblock extra_js %}
