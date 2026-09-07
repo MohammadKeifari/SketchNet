@@ -1,0 +1,330 @@
+{
+    "nodes": [
+        {
+            "id": "in",
+            "type": "input-data",
+            "x": 80,
+            "y": 200,
+            "inputPorts": [],
+            "outputPorts": [
+                {
+                    "id": "in_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": [
+                        "preprocessing"
+                    ]
+                }
+            ],
+            "numInputs": 0,
+            "numOutputs": 1,
+            "dataShape": "(16, 4)"
+        },
+        {
+            "id": "pool",
+            "type": "maxpool2d",
+            "x": 220,
+            "y": 200,
+            "inputPorts": [
+                {
+                    "id": "pool_in",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": [
+                        "training",
+                        "evaluation"
+                    ]
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "pool_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": [
+                        "training",
+                        "evaluation"
+                    ]
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "kernelSize": 2,
+            "padding": 0
+        },
+        {
+            "id": "flat",
+            "type": "flatten",
+            "x": 360,
+            "y": 200,
+            "inputPorts": [
+                {
+                    "id": "flat_in",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": [
+                        "training",
+                        "evaluation"
+                    ]
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "flat_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": [
+                        "training",
+                        "evaluation"
+                    ]
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1
+        },
+        {
+            "id": "layer",
+            "type": "layer",
+            "x": 500,
+            "y": 200,
+            "inputPorts": [
+                {
+                    "id": "layer_in",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": [
+                        "training",
+                        "evaluation"
+                    ]
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "layer_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": [
+                        "training",
+                        "evaluation"
+                    ]
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "numNeurons": 1,
+            "activation": "linear"
+        },
+        {
+            "id": "out",
+            "type": "output",
+            "x": 660,
+            "y": 200,
+            "inputPorts": [
+                {
+                    "id": "out_train",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": [
+                        "training"
+                    ],
+                    "subType": "train"
+                },
+                {
+                    "id": "out_test",
+                    "type": "input",
+                    "index": 1,
+                    "activationPhases": [
+                        "evaluation"
+                    ],
+                    "subType": "test"
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "loss_p",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": [
+                        "training"
+                    ],
+                    "role": "loss"
+                },
+                {
+                    "id": "pred_p",
+                    "type": "output",
+                    "index": 1,
+                    "activationPhases": [
+                        "evaluation"
+                    ],
+                    "role": "prediction"
+                },
+                {
+                    "id": "eval_p",
+                    "type": "output",
+                    "index": 2,
+                    "activationPhases": [
+                        "evaluation"
+                    ],
+                    "role": "evaluation"
+                }
+            ],
+            "numInputs": 2,
+            "numOutputs": 3,
+            "outputActivations": {
+                "loss": "none",
+                "prediction": "none",
+                "evaluation": "none"
+            }
+        },
+        {
+            "id": "opt",
+            "type": "optimizer",
+            "x": 820,
+            "y": 200,
+            "inputPorts": [
+                {
+                    "id": "opt_loss",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": [
+                        "training"
+                    ],
+                    "role": "loss"
+                },
+                {
+                    "id": "opt_labels",
+                    "type": "input",
+                    "index": 1,
+                    "activationPhases": [
+                        "training"
+                    ],
+                    "role": "labels"
+                }
+            ],
+            "outputPorts": [],
+            "numInputs": 2,
+            "numOutputs": 0,
+            "lossType": "mse",
+            "optimizerType": "adam",
+            "learningRate": 0.01,
+            "epochs": 2,
+            "batchSize": 16,
+            "shuffle": true
+        }
+    ],
+    "links": [
+        {
+            "from": "pool_out",
+            "to": "flat_in"
+        },
+        {
+            "from": "flat_out",
+            "to": "layer_in"
+        },
+        {
+            "from": "layer_out",
+            "to": "out_train"
+        },
+        {
+            "from": "layer_out",
+            "to": "out_test"
+        },
+        {
+            "from": "loss_p",
+            "to": "opt_loss"
+        }
+    ],
+    "ports": [
+        {
+            "id": "in_out",
+            "activationPhases": [
+                "preprocessing"
+            ]
+        },
+        {
+            "id": "pool_in",
+            "activationPhases": [
+                "training",
+                "evaluation"
+            ]
+        },
+        {
+            "id": "pool_out",
+            "activationPhases": [
+                "training",
+                "evaluation"
+            ]
+        },
+        {
+            "id": "flat_in",
+            "activationPhases": [
+                "training",
+                "evaluation"
+            ]
+        },
+        {
+            "id": "flat_out",
+            "activationPhases": [
+                "training",
+                "evaluation"
+            ]
+        },
+        {
+            "id": "layer_in",
+            "activationPhases": [
+                "training",
+                "evaluation"
+            ]
+        },
+        {
+            "id": "layer_out",
+            "activationPhases": [
+                "training",
+                "evaluation"
+            ]
+        },
+        {
+            "id": "out_train",
+            "activationPhases": [
+                "training"
+            ]
+        },
+        {
+            "id": "out_test",
+            "activationPhases": [
+                "evaluation"
+            ]
+        },
+        {
+            "id": "loss_p",
+            "activationPhases": [
+                "training"
+            ]
+        },
+        {
+            "id": "pred_p",
+            "activationPhases": [
+                "evaluation"
+            ]
+        },
+        {
+            "id": "eval_p",
+            "activationPhases": [
+                "evaluation"
+            ]
+        },
+        {
+            "id": "opt_loss",
+            "activationPhases": [
+                "training"
+            ]
+        },
+        {
+            "id": "opt_labels",
+            "activationPhases": [
+                "training"
+            ]
+        }
+    ],
+    "nodeCounter": 6
+}

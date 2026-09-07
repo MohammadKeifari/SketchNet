@@ -721,8 +721,273 @@ def check_model28(proc, code, graph):
     )
 
 
+def check_model29(proc, code, graph):
+    """Conv2D → MaxPool2D (default stride) → Flatten classifier."""
+    return all(
+        [
+            check("Conv2D present", "nn.Conv2d" in code),
+            check("MaxPool2D present", "nn.MaxPool2d" in code),
+            check("Default pool stride omitted", "MaxPool2d(2)" in code or "MaxPool2d(2," in code),
+            check("Flatten present", "nn.Flatten" in code),
+            check("Accuracy above 0.7", accurate_to(proc, 0.7), str(final_accuracy(proc))),
+        ]
+    )
+
+
+def check_model30(proc, code, graph):
+    """MaxPool2D with explicit stride and padding."""
+    return all(
+        [
+            check("MaxPool2D present", "nn.MaxPool2d" in code),
+            check("Padding emitted", "padding=1" in code),
+            check("Stride emitted", "stride=1" in code),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model31(proc, code, graph):
+    """Missing Input Data shape: synthetic data, no duplicate CE shape warning."""
+    warnings = warning_codes(graph)
+    return all(
+        [
+            check("Missing dataset reported", "missing-dataset" in warnings),
+            check("No duplicate label-shape-unknown", "label-shape-unknown" not in warnings),
+            check("Synthetic tensor used", "torch.randn(" in code),
+            check("CrossEntropyLoss configured", "nn.CrossEntropyLoss()" in code),
+            check("Graph still translatable", diagnostics(graph)["isValid"]),
+        ]
+    )
+
+
+def check_model32(proc, code, graph):
+    """Optimizer unreachable in training cannot be translated."""
+    return all(
+        [
+            check("Graph rejected", not diagnostics(graph)["isValid"]),
+            check("optimizer-not-training reported", "optimizer-not-training" in error_codes(graph)),
+        ]
+    )
+
+
+def check_model33(proc, code, graph):
+    """Early stopping with validationMode none is reported and has no effect."""
+    return all(
+        [
+            check(
+                "early-stopping-without-validation reported",
+                "early-stopping-without-validation" in warning_codes(graph),
+            ),
+            check("No early-stop message", "Early stopping." not in proc.stdout),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model34(proc, code, graph):
+    """A layer used only in evaluation is flagged as untrained."""
+    return all(
+        [
+            check("untrained-layer reported", "untrained-layer" in warning_codes(graph)),
+            check("Ghost layer still emitted", mentions(code, "ghost")),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model35(proc, code, graph):
+    """Neuron node is a 1-wide Linear and learns y ≈ 2x."""
+    return all(
+        [
+            check("Single 1→1 linear", linear_layers(code) == [(1, 1)], str(linear_layers(code))),
+            check("MSELoss configured", "nn.MSELoss()" in code),
+            check("Converged below 1e-3", converged(proc, 1e-3), loss_trend(proc)),
+        ]
+    )
+
+
+def check_model36(proc, code, graph):
+    """Dim-select indexes the feature axis instead of ColumnSelect."""
+    return all(
+        [
+            check("Dim-select emitted", "[:, 0:1]" in code or "[:, 0]" in code),
+            check("Training completed", "Training complete." in proc.stdout),
+            check("Converged below 0.05", converged(proc, 0.05), loss_trend(proc)),
+        ]
+    )
+
+
+def check_model37(proc, code, graph):
+    """Standard (z-score) normalize before the layer."""
+    return all(
+        [
+            check("Mean/std stats computed", ".mean(dim=0" in code and ".std(dim=0" in code),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model38(proc, code, graph):
+    """GELU hidden activation."""
+    return all(
+        [
+            check("GELU used", "gelu" in code),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model39(proc, code, graph):
+    """NLL loss consumes log-softmax logits."""
+    roles = output_roles(code)
+    return all(
+        [
+            check("NLLLoss configured", "nn.NLLLoss()" in code),
+            check(
+                "Loss port applies log_softmax",
+                "log_softmax" in roles.get("loss", "") and "dim=" in roles.get("loss", ""),
+                roles.get("loss", ""),
+            ),
+            check("Accuracy above 0.7", accurate_to(proc, 0.7), str(final_accuracy(proc))),
+        ]
+    )
+
+
+def check_model40(proc, code, graph):
+    """Flatten squeezes (N, 1) labels for CrossEntropy."""
+    return all(
+        [
+            check("Flatten present", "nn.Flatten" in code or "squeeze" in code or "flatten" in code),
+            check("CrossEntropyLoss configured", "nn.CrossEntropyLoss()" in code),
+            check("Accuracy above 0.7", accurate_to(proc, 0.7), str(final_accuracy(proc))),
+        ]
+    )
+
+
+def check_model41(proc, code, graph):
+    """Two feature columns concatenated before the classifier."""
+    return all(
+        [
+            check("Concat present", "torch.cat(" in code),
+            check("Layer sized for both features", (2, 2) in linear_layers(code), str(linear_layers(code))),
+            check("Accuracy above 0.7", accurate_to(proc, 0.7), str(final_accuracy(proc))),
+        ]
+    )
+
+
+def check_model42(proc, code, graph):
+    """Dropout in preprocessing uses functional dropout, not a training module."""
+    load_body = section(code, "def load_data()")
+    return all(
+        [
+            check(
+                "Functional dropout in load_data",
+                "torch.nn.functional.dropout" in load_body,
+            ),
+            check("training=False", "training=False" in load_body),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model43(proc, code, graph):
+    """Conv2D with stride and padding."""
+    return all(
+        [
+            check("Conv2D present", "nn.Conv2d" in code),
+            check("Stride emitted", "stride=2" in code),
+            check("Padding emitted", "padding=1" in code),
+            check("Accuracy above 0.7", accurate_to(proc, 0.7), str(final_accuracy(proc))),
+        ]
+    )
+
+
+def check_model44(proc, code, graph):
+    """Unsupported node types are errors."""
+    return all(
+        [
+            check("Graph rejected", not diagnostics(graph)["isValid"]),
+            check("unknown-node-type reported", "unknown-node-type" in error_codes(graph)),
+        ]
+    )
+
+
+def check_model45(proc, code, graph):
+    """Optimizer with no label input cannot train."""
+    return all(
+        [
+            check("Graph rejected", not diagnostics(graph)["isValid"]),
+            check(
+                "optimizer-missing-labels reported",
+                "optimizer-missing-labels" in error_codes(graph),
+            ),
+        ]
+    )
+
+
+def check_model46(proc, code, graph):
+    """Preprocessing that never reaches train/eval is a dead end."""
+    return all(
+        [
+            check(
+                "preprocessing-dead-end reported",
+                "preprocessing-dead-end" in warning_codes(graph),
+            ),
+            check("no-optimizer reported", "no-optimizer" in warning_codes(graph)),
+            check("Graph still translatable", diagnostics(graph)["isValid"]),
+            check("Script exited cleanly", proc.returncode == 0),
+        ]
+    )
+
+
+def check_model47(proc, code, graph):
+    """BCE with class-index labels is a label/loss mismatch."""
+    return all(
+        [
+            check("BCEWithLogitsLoss configured", "nn.BCEWithLogitsLoss()" in code),
+            check("label-loss-mismatch reported", "label-loss-mismatch" in warning_codes(graph)),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
+def check_model48(proc, code, graph):
+    """MaxPool2D with no incoming tensor is rejected."""
+    return all(
+        [
+            check("Graph rejected", not diagnostics(graph)["isValid"]),
+            check(
+                "missing-input-connection reported",
+                "missing-input-connection" in error_codes(graph),
+            ),
+        ]
+    )
+
+
+def check_model49(proc, code, graph):
+    """No optimizer: load and evaluate, never train."""
+    return all(
+        [
+            check("no-optimizer reported", "no-optimizer" in warning_codes(graph)),
+            check("No training loop", "Training complete." not in proc.stdout),
+            check("Script exited cleanly", proc.returncode == 0),
+            check("Graph still translatable", diagnostics(graph)["isValid"]),
+        ]
+    )
+
+
+def check_model50(proc, code, graph):
+    """Min-max normalize uses min/max statistics."""
+    return all(
+        [
+            check("Min/max stats computed", ".min(dim=0" in code and ".max(dim=0" in code),
+            check("Training completed", "Training complete." in proc.stdout),
+        ]
+    )
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
-VALIDATION_ONLY_MODELS = {13, 14, 15, 16, 17, 27}
+VALIDATION_ONLY_MODELS = {13, 14, 15, 16, 17, 27, 31, 32, 44, 45, 48}
 
 MODEL_CHECKS = {
     1: check_model1,
@@ -753,6 +1018,28 @@ MODEL_CHECKS = {
     26: check_model26,
     27: check_model27,
     28: check_model28,
+    29: check_model29,
+    30: check_model30,
+    31: check_model31,
+    32: check_model32,
+    33: check_model33,
+    34: check_model34,
+    35: check_model35,
+    36: check_model36,
+    37: check_model37,
+    38: check_model38,
+    39: check_model39,
+    40: check_model40,
+    41: check_model41,
+    42: check_model42,
+    43: check_model43,
+    44: check_model44,
+    45: check_model45,
+    46: check_model46,
+    47: check_model47,
+    48: check_model48,
+    49: check_model49,
+    50: check_model50,
 }
 
 

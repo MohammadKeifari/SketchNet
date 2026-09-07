@@ -276,7 +276,7 @@
             "y": 250,
             "lossType": "cross_entropy",
             "optimizerType": "sgd",
-            "learningRate": 0.5,
+            "learningRate": 0.05,
             "epochs": 200,
             "batchSize": 16,
             "shuffle": true,

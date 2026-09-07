@@ -108,6 +108,10 @@ class ActivationTest(unittest.TestCase):
         self.assertEqual(
             activation("softmax", "x", softmax_dim=1), "torch.softmax(x, dim=1)"
         )
+        self.assertEqual(
+            activation("log_softmax", "x", softmax_dim=1),
+            "torch.log_softmax(x, dim=1)",
+        )
 
 
 # ----------------------------------------------------------------------

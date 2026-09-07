@@ -43,8 +43,8 @@ def activation(name, expr: str, softmax_dim: int = -1) -> str:
     name = (name or "linear").lower()
     if name in _NO_ACTIVATION:
         return expr
-    if name == "softmax":
-        return f"torch.softmax({expr}, dim={softmax_dim})"
+    if name in {"softmax", "log_softmax"}:
+        return f"torch.{name}({expr}, dim={softmax_dim})"
     if name == "argmax":
         return f"torch.argmax({expr}, dim={softmax_dim})"
     if name in _FUNCTIONAL_ACTIVATIONS:

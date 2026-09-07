@@ -1,0 +1,113 @@
+{
+    "nodes": [
+        {
+            "id": "in",
+            "type": "input-data",
+            "x": 80,
+            "y": 200,
+            "inputPorts": [],
+            "outputPorts": [
+                {
+                    "id": "in_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": [
+                        "preprocessing"
+                    ]
+                }
+            ],
+            "numInputs": 0,
+            "numOutputs": 1,
+            "dataShape": "(20, 3)"
+        },
+        {
+            "id": "feat",
+            "type": "column-select",
+            "x": 220,
+            "y": 200,
+            "inputPorts": [
+                {
+                    "id": "feat_in",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": [
+                        "preprocessing"
+                    ]
+                }
+            ],
+            "outputPorts": [
+                {
+                    "id": "feat_out",
+                    "type": "output",
+                    "index": 0,
+                    "activationPhases": [
+                        "preprocessing"
+                    ]
+                }
+            ],
+            "numInputs": 1,
+            "numOutputs": 1,
+            "selectedColumns": [
+                0,
+                1
+            ]
+        },
+        {
+            "id": "prn",
+            "type": "print",
+            "x": 380,
+            "y": 200,
+            "inputPorts": [
+                {
+                    "id": "prn_in",
+                    "type": "input",
+                    "index": 0,
+                    "activationPhases": [
+                        "preprocessing"
+                    ]
+                }
+            ],
+            "outputPorts": [],
+            "numInputs": 1,
+            "numOutputs": 0,
+            "label": "pre_only"
+        }
+    ],
+    "links": [
+        {
+            "from": "in_out",
+            "to": "feat_in"
+        },
+        {
+            "from": "feat_out",
+            "to": "prn_in"
+        }
+    ],
+    "ports": [
+        {
+            "id": "in_out",
+            "activationPhases": [
+                "preprocessing"
+            ]
+        },
+        {
+            "id": "feat_in",
+            "activationPhases": [
+                "preprocessing"
+            ]
+        },
+        {
+            "id": "feat_out",
+            "activationPhases": [
+                "preprocessing"
+            ]
+        },
+        {
+            "id": "prn_in",
+            "activationPhases": [
+                "preprocessing"
+            ]
+        }
+    ],
+    "nodeCounter": 3
+}
