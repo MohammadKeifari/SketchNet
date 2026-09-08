@@ -77,6 +77,112 @@ def _replace_link(graph: dict, old_from: str, old_to: str, new_from: str, new_to
     graph["links"].append({"from": new_from, "to": new_to})
 
 
+_LAYER_GAP_X = 140
+_NODE_GAP_Y = 28
+_START_X = 80
+_CENTER_Y = 300
+_DEFAULT_NODE_HEIGHT = 64
+
+
+def _node_height(node: dict) -> int:
+    kind = node.get("type", "")
+    if kind in {"input-data", "output", "optimizer"}:
+        return 72
+    if kind in {"layer", "conv2d"}:
+        return 80
+    return _DEFAULT_NODE_HEIGHT
+
+
+def _build_flow_graph(graph: dict) -> tuple[dict[str, list[str]], dict[str, list[str]], dict[str, str]]:
+    """Map data-flow edges between node ids (ignore param-only wiring)."""
+    port_node: dict[str, str] = {}
+    for node in graph["nodes"]:
+        for port in (node.get("inputPorts") or []) + (node.get("outputPorts") or []):
+            port_node[port["id"]] = node["id"]
+
+    node_ids = [n["id"] for n in graph["nodes"]]
+    pred = {nid: [] for nid in node_ids}
+    succ = {nid: [] for nid in node_ids}
+
+    for link in graph["links"]:
+        src = port_node.get(link["from"])
+        dst = port_node.get(link["to"])
+        if not src or not dst or src == dst:
+            continue
+        if dst not in succ[src]:
+            succ[src].append(dst)
+        if src not in pred[dst]:
+            pred[dst].append(src)
+
+    return pred, succ, port_node
+
+
+def layout_graph(graph: dict) -> dict:
+    """Assign compact layered x/y coordinates (mirrors the canvas auto-layout)."""
+    graph = copy.deepcopy(graph)
+    nodes = graph["nodes"]
+    if not nodes:
+        return graph
+
+    pred, succ, _ = _build_flow_graph(graph)
+    node_map = {n["id"]: n for n in nodes}
+
+    depth: dict[str, int] = {}
+    queue: list[str] = []
+    for node in nodes:
+        nid = node["id"]
+        if not pred[nid] or node.get("type") == "input-data":
+            depth[nid] = 0
+            queue.append(nid)
+
+    while queue:
+        current = queue.pop(0)
+        for nxt in succ.get(current, []):
+            next_depth = depth[current] + 1
+            if nxt not in depth or depth[nxt] < next_depth:
+                depth[nxt] = next_depth
+                queue.append(nxt)
+
+    for node in nodes:
+        if node["id"] not in depth:
+            depth[node["id"]] = 0
+
+    layers: dict[int, list[str]] = {}
+    for nid, layer_idx in depth.items():
+        layers.setdefault(layer_idx, []).append(nid)
+
+    max_layer = max(layers.keys(), default=0)
+    ordered_layers = [layers.get(i, []) for i in range(max_layer + 1)]
+
+    positions: dict[str, tuple[int, int]] = {}
+    for layer_idx, layer in enumerate(ordered_layers):
+        heights = [_node_height(node_map[nid]) for nid in layer]
+        total_h = sum(heights) + _NODE_GAP_Y * max(len(layer) - 1, 0)
+        y = _CENTER_Y - total_h / 2
+        x = _START_X + layer_idx * _LAYER_GAP_X
+        for nid, height in zip(layer, heights):
+            y += height / 2
+            positions[nid] = (x, int(y))
+            y += height / 2 + _NODE_GAP_Y
+
+    output = next((n for n in nodes if n.get("type") == "output"), None)
+    if output:
+        max_x = max((positions[nid][0] for nid in positions), default=_START_X)
+        positions[output["id"]] = (max_x + _LAYER_GAP_X, positions[output["id"]][1])
+        opt = next((n for n in nodes if n.get("type") == "optimizer"), None)
+        if opt:
+            positions[opt["id"]] = (
+                positions[output["id"]][0] + _LAYER_GAP_X,
+                positions[output["id"]][1],
+            )
+
+    for node in nodes:
+        x, y = positions.get(node["id"], (node.get("x", _START_X), node.get("y", _CENTER_Y)))
+        node["x"] = x
+        node["y"] = y
+
+    return graph
+
 def linear_regressor(n_features: int) -> dict:
     """Single linear unit, MSE — for tabular regression."""
     graph = load_template("linear-regression")

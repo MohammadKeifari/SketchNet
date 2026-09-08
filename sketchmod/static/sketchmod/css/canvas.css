@@ -34,6 +34,10 @@
     bottom: 0;
 }
 
+.sketchmod-container.readonly-mode #sketchCanvas {
+    touch-action: none;
+}
+
 .sketchmod-container.readonly-mode {
     top: calc(var(--nav-height) + 40px);
     height: calc(100vh - var(--nav-height) - 40px);

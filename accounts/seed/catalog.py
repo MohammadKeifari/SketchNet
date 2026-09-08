@@ -246,6 +246,7 @@ def build_model_graph(name: str, n_features: int, n_classes: int) -> dict:
     """Return the catalog graph for a named starter model."""
     from accounts.seed.graphs import (
         digits_cnn,
+        layout_graph,
         linear_classifier,
         linear_regressor,
         mlp_classifier,
@@ -263,9 +264,10 @@ def build_model_graph(name: str, n_features: int, n_classes: int) -> dict:
         "Friedman MLP": lambda: mlp_regressor(n_features, hidden=32),
     }
     try:
-        return builders[name]()
+        graph = builders[name]()
     except KeyError as exc:
         raise ValueError(f"Unknown starter model '{name}'") from exc
+    return layout_graph(graph)
 
 
 MODELS = [

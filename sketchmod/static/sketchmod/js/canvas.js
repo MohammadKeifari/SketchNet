@@ -24,6 +24,7 @@ const SketchMod = {
     panStartX: 0,
     panStartY: 0,
     spacePressed: false,
+    _touchPan: null,
 
     // Selection state
     selectedNodes: [], // Array of selected nodes
@@ -130,10 +131,17 @@ const SketchMod = {
 
         const loadGraph = () => {
             if (loadModelId) {
+                if (this.readonly) {
+                    this._loadModelFromServer(loadModelId);
+                    return;
+                }
                 if (hasSession) {
                     try {
                         const sessionData = JSON.parse(hasSession);
-                        if (sessionData.modelId === loadModelId) {
+                        if (
+                            sessionData.editorSession === true &&
+                            sessionData.modelId === loadModelId
+                        ) {
                             this._loadFromSession();
                         } else {
                             this._loadModelFromServer(loadModelId);
@@ -206,7 +214,17 @@ const SketchMod = {
         this.canvas.addEventListener("mousedown", (e) => this._onMouseDown(e));
         this.canvas.addEventListener("mousemove", (e) => this._onMouseMove(e));
         this.canvas.addEventListener("mouseup", (e) => this._onMouseUp(e));
-        this.canvas.addEventListener("wheel", (e) => this._onScroll(e));
+        this.canvas.addEventListener("wheel", (e) => this._onScroll(e), {
+            passive: false,
+        });
+        this.canvas.addEventListener("touchstart", (e) => this._onTouchStart(e), {
+            passive: false,
+        });
+        this.canvas.addEventListener("touchmove", (e) => this._onTouchMove(e), {
+            passive: false,
+        });
+        this.canvas.addEventListener("touchend", (e) => this._onTouchEnd(e));
+        this.canvas.addEventListener("touchcancel", (e) => this._onTouchEnd(e));
         this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
         document.addEventListener("keydown", (e) => this._onKeyDown(e));
         document.addEventListener("keyup", (e) => {
@@ -680,10 +698,11 @@ const SketchMod = {
                 }
             });
         }
-        this._loadFromSession();
+        if (!loadModelId && !this.readonly) {
+            this._loadFromSession();
+        }
 
-        // Ensure input/output exist
-        if (this.nodes.length === 0) {
+        if (!this.readonly && this.nodes.length === 0) {
             this._createDefaultNodes();
         }
         this.resize();
@@ -831,9 +850,15 @@ const SketchMod = {
             this._showLinkProperties();
         }
     },
-    // ========== scroll ==========
+    // ========== scroll / touch pan ==========
     _onScroll(e) {
         e.preventDefault();
+        if (this.readonly) {
+            this.offsetX -= e.deltaX;
+            this.offsetY -= e.deltaY;
+            this._render();
+            return;
+        }
         const zoom = e.deltaY < 0 ? 1.08 : 0.93;
         const newScale = this.scale * zoom;
         if (newScale < 0.05 || newScale > 15) return;
@@ -843,6 +868,40 @@ const SketchMod = {
         this._updateZoomIndicator();
         this._render();
     },
+
+    _onTouchStart(e) {
+        if (!this.readonly || e.touches.length !== 2) return;
+        e.preventDefault();
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        this._touchPan = {
+            startMidX: (t0.clientX + t1.clientX) / 2,
+            startMidY: (t0.clientY + t1.clientY) / 2,
+            startOffsetX: this.offsetX,
+            startOffsetY: this.offsetY,
+        };
+    },
+
+    _onTouchMove(e) {
+        if (!this.readonly || !this._touchPan || e.touches.length !== 2) return;
+        e.preventDefault();
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const midX = (t0.clientX + t1.clientX) / 2;
+        const midY = (t0.clientY + t1.clientY) / 2;
+        this.offsetX =
+            this._touchPan.startOffsetX + (midX - this._touchPan.startMidX);
+        this.offsetY =
+            this._touchPan.startOffsetY + (midY - this._touchPan.startMidY);
+        this._render();
+    },
+
+    _onTouchEnd(e) {
+        if (e.touches.length < 2) {
+            this._touchPan = null;
+        }
+    },
+
     // ========== MOUSE ==========
     _onMouseDown(e) {
         // Block canvas interactions when a modal is open
@@ -976,7 +1035,15 @@ const SketchMod = {
             return;
         }
 
-        // Click on empty
+        // Click on empty — drag to pan in readonly public view
+        if (this.readonly) {
+            this.isPanning = true;
+            this.panStartX = mx - this.offsetX;
+            this.panStartY = my - this.offsetY;
+            this.canvas.style.cursor = "grabbing";
+            return;
+        }
+
         if (this.currentTool === "select") {
             this.isSelecting = true;
             this.selectionBox = { startX: mx, startY: my, endX: mx, endY: my };
@@ -2232,6 +2299,7 @@ const SketchMod = {
     },
     // ========== SESSION ==========
     _saveToSession() {
+        if (this.readonly) return;
         const data = {
             nodes: this.nodes.map((n) => n.toJSON()),
             links: this.links.map((l) => l.toJSON()),
@@ -2239,6 +2307,7 @@ const SketchMod = {
             nodeCounter: this.nodeCounter,
             modelId: this._currentModelId,
             modelName: this._currentModelName,
+            editorSession: true,
         };
         sessionStorage.setItem("sketchmod-graph", JSON.stringify(data));
         sessionStorage.setItem(
@@ -2252,6 +2321,11 @@ const SketchMod = {
         if (!raw) return;
         try {
             const data = JSON.parse(raw);
+            if (data.editorSession !== true) {
+                sessionStorage.removeItem("sketchmod-graph");
+                sessionStorage.removeItem("sketchmod-active-model-id");
+                return;
+            }
             this.nodeCounter = data.nodeCounter || 0;
             this._currentModelId = data.modelId || null;
             this._currentModelName = data.modelName || null;
@@ -3147,16 +3221,30 @@ const SketchMod = {
                 this._currentModelId = modelId;
                 this._currentModelName = data.name || "";
 
-                this._saveToSession();
+                if (!this.readonly) {
+                    this._saveToSession();
+                }
                 this._buildToolbar();
                 this._updateModelInfo();
                 this._propagateShapes();
-                this._render();
                 this._afterGraphLoaded();
+                const finishLoad = () => {
+                    this._zoomFit();
+                    this._render();
+                };
+                if (this.readonly) {
+                    this.autoLayout({ silent: true, skipSave: true })
+                        .then(finishLoad)
+                        .catch(finishLoad);
+                } else {
+                    finishLoad();
+                }
             })
             .catch((err) => {
                 console.error("Failed to load model:", err);
-                this._loadFromSession();
+                if (!this.readonly) {
+                    this._loadFromSession();
+                }
             });
     },
     _newModel() {
@@ -4368,7 +4456,8 @@ const SketchMod = {
     },
 
     // ========== AUTO LAYOUT (with timeout via Web Worker) ==========
-    async autoLayout() {
+    async autoLayout(options = {}) {
+        const { silent = false, skipSave = false } = options;
         if (this.nodes.length === 0) return;
 
         // Normalise link endpoints (same as layout.js does)
@@ -4400,7 +4489,9 @@ const SketchMod = {
                 paramOutputs: n.paramOutputs.map(decorate),
             };
         });
-        this._showToast("Auto‑layout running…");
+        if (!silent) {
+            this._showToast("Auto‑layout running…");
+        }
 
         const layoutCode = await this._getLayoutWorkerCode();
         const blob = new Blob([layoutCode], { type: "application/javascript" });
@@ -4445,7 +4536,9 @@ const SketchMod = {
             ]);
 
             // ---- Layout succeeded ----
-            this._saveUndoState();
+            if (!this.readonly && !skipSave) {
+                this._saveUndoState();
+            }
             const positions = result; // Map<nodeId, {x, y}>
             for (const n of this.nodes) {
                 const pos = positions.get(n.id);
@@ -4456,20 +4549,31 @@ const SketchMod = {
                 }
             }
             this.ports = this._collectPorts();
-            this._saveToSession();
-            this._zoomFit();
+            if (!skipSave && !this.readonly) {
+                this._saveToSession();
+            }
+            if (!silent) {
+                this._zoomFit();
+            }
             this._render();
             this._propagateShapes();
-            this._showToast("Layout done");
+            if (!silent) {
+                this._showToast("Layout done");
+            }
         } catch (err) {
             if (err.message === "TIMEOUT") {
-                this._showToast(
-                    "Auto‑layout timed out – possible graph cycle.",
-                );
+                if (!silent) {
+                    this._showToast(
+                        "Auto‑layout timed out – possible graph cycle.",
+                    );
+                }
             } else {
                 console.error("Layout failed:", err);
-                this._showToast("Auto‑layout failed.");
+                if (!silent) {
+                    this._showToast("Auto‑layout failed.");
+                }
             }
+            throw err;
         }
     },
 
