@@ -532,7 +532,12 @@
             const els = getElements(type);
             if (!els.allowedIds.includes(userId)) return;
 
-            fetch(`/models/{{ model.model_id }}/access/${userId}/remove/`)
+            fetch(`/models/{{ model.model_id }}/access/${userId}/remove/`, {
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": getCookie("csrftoken"),
+                },
+            })
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {

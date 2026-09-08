@@ -324,6 +324,7 @@ def manage_access(request, model_id):
 
 
 @login_required
+@require_POST
 def remove_access(request, model_id, user_id):
     """Revoke a user's explicit access to a private model."""
     model = get_object_or_404(SketchModel, model_id=model_id)

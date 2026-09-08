@@ -440,3 +440,42 @@ class ModelViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "View graph")
         self.assertContains(response, f"load={self.model.model_id}&readonly=1")
+
+    def test_remove_access_rejects_get(self):
+        """GET must not revoke access (CSRF-safe mutating routes are POST-only)."""
+        self._login()
+        ModelAccess.objects.create(user=self.other, model=self.model, can_view=True)
+        url = reverse(
+            "models:remove_access",
+            kwargs={"model_id": self.model.model_id, "user_id": self.other.id},
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 405)
+        self.assertTrue(
+            ModelAccess.objects.filter(model=self.model, user=self.other).exists()
+        )
+
+    def test_remove_access_post(self):
+        """Owner can revoke access with POST."""
+        self._login()
+        ModelAccess.objects.create(user=self.other, model=self.model, can_view=True)
+        url = reverse(
+            "models:remove_access",
+            kwargs={"model_id": self.model.model_id, "user_id": self.other.id},
+        )
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(response.content, {"success": True})
+        self.assertFalse(
+            ModelAccess.objects.filter(model=self.model, user=self.other).exists()
+        )
+
+    def test_remove_access_requires_owner(self):
+        """Non-owners cannot revoke access."""
+        self._login(self.other)
+        url = reverse(
+            "models:remove_access",
+            kwargs={"model_id": self.model.model_id, "user_id": self.user.id},
+        )
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 403)
