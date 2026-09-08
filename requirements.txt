@@ -1,17 +1,26 @@
+# Runtime dependencies for the deployed server.
+# Test-only and codegen-execution extras live in requirements-dev.txt.
+
 Django==6.0.2
 django-allauth==65.16.1
+gunicorn==26.2.0
+
+# Required by django-allauth for the Google OAuth flow
 requests==2.33.1
 PyJWT==2.12.1
 cryptography==48.0.0
+
 python-dotenv==1.2.2
+dj-database-url==3.1.2
 Pillow==12.2.0
-torch==2.12.0
+
+# Dataset inspection and the synthetic dataset generator
 numpy==2.4.6
 pandas==3.0.3
 scikit-learn==1.9.0
-matplotlib==3.10.9
-sympy==1.14.0
-networkx==3.6.1
+scipy==1.17.1
 openpyxl==3.1.5
 pyarrow==24.0.0
-scipy==1.17.1
+
+# Shape algebra in sketchmod.codegen
+sympy==1.14.0

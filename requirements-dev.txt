@@ -1,0 +1,8 @@
+# Development and CI dependencies.
+# The server never imports these: they are only needed to execute the PyTorch
+# scripts that sketchmod.codegen emits, in sketchmod/tests/codegen/test_models.py.
+
+-r requirements.txt
+
+torch==2.12.0
+matplotlib==3.10.9

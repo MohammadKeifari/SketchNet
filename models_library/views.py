@@ -129,8 +129,9 @@ def view_model(request, model_id):
         messages.error(request, "You don't have access to this model.")
         return redirect("models:dashboard")
 
-    model.views += 1
+    model.views = F("views") + 1
     model.save(update_fields=["views"])
+    model.refresh_from_db()
 
     return render(
         request,
@@ -199,7 +200,7 @@ def download_model(request, model_id):
         messages.error(request, "You don't have access to this model.")
         return redirect("models:dashboard")
 
-    model.downloads += 1
+    model.downloads = F("downloads") + 1
     model.save(update_fields=["downloads"])
 
     # Return graph as downloadable JSON
@@ -538,7 +539,7 @@ def download_model(request, model_id):
         messages.error(request, "You don't have access to this model.")
         return redirect("models:dashboard")
 
-    model.downloads += 1
+    model.downloads = F("downloads") + 1
     model.save(update_fields=["downloads"])
 
     response_data = model.graph_data

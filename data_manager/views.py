@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import FileResponse, JsonResponse
-from django.db.models import Q, Count
+from django.db.models import Q, Count, F
 from django.contrib.auth import get_user_model
 from django.views.decorators.http import require_POST
 from .models import Dataset
@@ -178,7 +178,7 @@ def download_dataset(request, dataset_id):
         messages.error(request, "You don't have access to this dataset.")
         return redirect("data:dashboard")
 
-    dataset.downloads += 1
+    dataset.downloads = F("downloads") + 1
     dataset.save(update_fields=["downloads"])
 
     return FileResponse(
@@ -217,8 +217,9 @@ def dataset_detail(request, dataset_id):
         messages.error(request, "You don't have access to this dataset.")
         return redirect("data:dashboard")
 
-    dataset.views += 1
+    dataset.views = F("views") + 1
     dataset.save(update_fields=["views"])
+    dataset.refresh_from_db()
 
     return render(request, "data_manager/detail.html", {"dataset": dataset})
 
