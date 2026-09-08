@@ -323,6 +323,37 @@ def manage_access(request, model_id):
     return JsonResponse({"users": data})
 
 
+def _clamp_access(value, default="public"):
+    """Return public or private; anything else falls back to default."""
+    if value in ("public", "private"):
+        return value
+    return default
+
+
+@login_required
+@require_POST
+def share_model(request, model_id):
+    """Update view and fork visibility without the full edit form."""
+    model = get_object_or_404(SketchModel, model_id=model_id)
+    if not model.can_edit(request.user):
+        return JsonResponse({"error": "Not allowed"}, status=403)
+
+    model.view_access = _clamp_access(
+        request.POST.get("view_access"), model.view_access or "public"
+    )
+    model.fork_access = _clamp_access(
+        request.POST.get("fork_access"), model.fork_access or "private"
+    )
+    model.save(update_fields=["view_access", "fork_access", "updated_at"])
+    return JsonResponse(
+        {
+            "success": True,
+            "view_access": model.view_access,
+            "fork_access": model.fork_access,
+        }
+    )
+
+
 @login_required
 @require_POST
 def remove_access(request, model_id, user_id):

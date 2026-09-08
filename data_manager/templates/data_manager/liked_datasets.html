@@ -85,6 +85,7 @@
                                 <span class="format-badge">{{ dataset.get_format_display }}</span>
                             </td>
                             <td class="td-actions">
+                                {% include "data_manager/includes/share_icon.html" %}
                                 <a href="{% url 'data:download' dataset.dataset_id %}"
                                    class="icon-btn"
                                    title="Download">

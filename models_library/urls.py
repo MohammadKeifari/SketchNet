@@ -20,6 +20,7 @@ urlpatterns = [
     path("<str:model_id>/delete/", views.delete_model, name="delete"),
     path("<str:model_id>/download/", views.download_model, name="download"),
     path("<str:model_id>/like/", views.toggle_like, name="like"),
+    path("<str:model_id>/share/", views.share_model, name="share"),
     # Access management
     path("<str:model_id>/access/", views.manage_access, name="manage_access"),
     path(

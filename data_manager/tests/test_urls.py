@@ -37,6 +37,16 @@ class DataURLTests(TestCase):
         url = reverse("data:like", kwargs={"dataset_id": "abcd1234"})
         self.assertEqual(url, "/data/abcd1234/like/")
 
+    def test_share_url(self):
+        """Verify share url."""
+        url = reverse("data:share", kwargs={"dataset_id": "abcd1234"})
+        self.assertEqual(url, "/data/abcd1234/share/")
+
+    def test_access_url(self):
+        """Verify allowed-users list url."""
+        url = reverse("data:access", kwargs={"dataset_id": "abcd1234"})
+        self.assertEqual(url, "/data/abcd1234/access/")
+
     def test_my_datasets_url(self):
         """Verify my datasets url."""
         self.assertEqual(reverse("data:my"), "/data/my/")

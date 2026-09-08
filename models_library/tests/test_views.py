@@ -479,3 +479,90 @@ class ModelViewTests(TestCase):
         )
         response = self.client.post(url)
         self.assertEqual(response.status_code, 403)
+
+    def test_share_rejects_get(self):
+        """Share settings are POST-only."""
+        self._login()
+        url = reverse("models:share", kwargs={"model_id": self.model.model_id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 405)
+
+    def test_share_requires_owner(self):
+        """Non-owners cannot change share settings."""
+        self._login(self.other)
+        url = reverse("models:share", kwargs={"model_id": self.model.model_id})
+        response = self.client.post(
+            url, {"view_access": "private", "fork_access": "private"}
+        )
+        self.assertEqual(response.status_code, 403)
+        self.model.refresh_from_db()
+        self.assertEqual(self.model.view_access, "public")
+
+    def test_share_owner_toggles_private_and_invited_user_can_view(self):
+        """Owner can make a model private; invited users can still open it."""
+        self._login()
+        url = reverse("models:share", kwargs={"model_id": self.model.model_id})
+        response = self.client.post(
+            url, {"view_access": "private", "fork_access": "private"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content,
+            {
+                "success": True,
+                "view_access": "private",
+                "fork_access": "private",
+            },
+        )
+        self.model.refresh_from_db()
+        self.assertEqual(self.model.view_access, "private")
+
+        self.client.post(
+            reverse("models:manage_access", kwargs={"model_id": self.model.model_id}),
+            {
+                "user_id": str(self.other.id),
+                "can_view": "true",
+                "can_fork": "false",
+            },
+        )
+        self.client.logout()
+        self._login(self.other)
+        response = self.client.get(
+            reverse("models:view", kwargs={"model_id": self.model.model_id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Test Model")
+
+    def test_share_clamps_invalid_access(self):
+        """Invalid access values are ignored instead of stored."""
+        self._login()
+        url = reverse("models:share", kwargs={"model_id": self.model.model_id})
+        response = self.client.post(
+            url, {"view_access": "unlisted", "fork_access": "secret"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.model.refresh_from_db()
+        self.assertEqual(self.model.view_access, "public")
+        self.assertEqual(self.model.fork_access, "private")
+
+    def test_view_page_has_share_panel_markup(self):
+        """Detail page exposes Share, the page URL, and client-side share links."""
+        url = reverse("models:view", kwargs={"model_id": self.model.model_id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Share")
+        self.assertContains(response, response.wsgi_request.build_absolute_uri(url))
+        self.assertContains(response, "mailto:")
+        self.assertContains(response, "x.com")
+        self.assertContains(response, "linkedin.com")
+        self.assertContains(response, 'data-share-kind="model"')
+
+    def test_dashboard_cards_have_share_control(self):
+        """Dashboard cards include a share control pointing at the detail URL."""
+        response = self.client.get(reverse("models:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "share-trigger")
+        self.assertContains(
+            response,
+            f'data-share-url="{reverse("models:view", kwargs={"model_id": self.model.model_id})}"',
+        )

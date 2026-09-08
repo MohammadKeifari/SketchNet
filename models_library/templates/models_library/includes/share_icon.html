@@ -1,0 +1,2 @@
+{% url 'models:view' model.model_id as model_share_url %}
+{% include "includes/share_trigger.html" with share_url=model_share_url share_title=model.name share_kind="model" share_id=model.model_id owner=model.owner view_access=model.view_access fork_access=model.fork_access extra_class="icon-btn" %}

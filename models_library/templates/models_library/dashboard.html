@@ -113,6 +113,7 @@
                                     </a>
                                 {% endif %}
                                 {% include "models_library/includes/fork_icon.html" %}
+                                {% include "models_library/includes/share_icon.html" %}
                                 {% if user.is_authenticated %}
                                     <button class="icon-btn like-btn" data-id="{{ model.model_id }}" title="Like">
                                         {% if user in model.liked_by.all %}
@@ -252,6 +253,7 @@
                                     </a>
                                 {% endif %}
                                 {% include "models_library/includes/fork_icon.html" %}
+                                {% include "models_library/includes/share_icon.html" %}
                                 {% if user.is_authenticated %}
                                     <button class="icon-btn like-btn" data-id="{{ model.model_id }}" title="Like">
                                         {% if user in model.liked_by.all %}
@@ -423,6 +425,7 @@
                                         </a>
                                     {% endif %}
                                     {% include "models_library/includes/fork_icon.html" %}
+                                    {% include "models_library/includes/share_icon.html" %}
                                     {% if user.is_authenticated %}
                                         <button class="icon-btn like-btn" data-id="{{ model.model_id }}" title="Like">
                                             {% if user in model.liked_by.all %}

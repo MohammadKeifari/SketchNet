@@ -1,0 +1,68 @@
+<div class="share-overlay" id="shareOverlay">
+    <div class="share-modal"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="shareModalTitle">
+        <div class="share-modal-header">
+            <h2 id="shareModalTitle">Share</h2>
+            <button type="button" class="modal-close" id="shareClose" aria-label="Close">&times;</button>
+        </div>
+        <div class="share-modal-body">
+            <p class="share-caption" id="shareCaption"></p>
+            <div class="share-url-row">
+                <input type="text" id="shareUrlInput" readonly>
+                <button type="button" class="btn btn-primary" id="shareCopy">Copy</button>
+            </div>
+            <div class="share-actions-row">
+                <a id="shareMailto" href="mailto:">Email</a>
+                <a id="shareTwitter"
+                   href="https://x.com/intent/tweet"
+                   target="_blank"
+                   rel="noopener noreferrer">X</a>
+                <a id="shareLinkedin"
+                   href="https://www.linkedin.com/sharing/share-offsite/"
+                   target="_blank"
+                   rel="noopener noreferrer">LinkedIn</a>
+                <button type="button" class="share-link-btn share-native" id="shareNative">
+                    Share…
+                </button>
+            </div>
+            <div class="share-owner" id="shareOwner">
+                <div class="share-toggle-row" id="shareViewRow">
+                    <span id="shareViewLabel">Who can view</span>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="sharePrivateToggle">
+                        <span class="toggle-switch"></span>
+                    </label>
+                    <span class="toggle-text" id="sharePrivateText">Public</span>
+                </div>
+                <div class="share-invite" id="shareViewInvite">
+                    <label for="shareViewSearch">Give view access to</label>
+                    <input type="text"
+                           id="shareViewSearch"
+                           placeholder="Search users by name or email…"
+                           autocomplete="off">
+                    <div class="share-search-results" id="shareViewResults"></div>
+                    <div class="share-chips" id="shareViewChips"></div>
+                </div>
+                <div class="share-toggle-row" id="shareForkRow" hidden>
+                    <span>Who can fork</span>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="shareForkToggle">
+                        <span class="toggle-switch"></span>
+                    </label>
+                    <span class="toggle-text" id="shareForkText">Public</span>
+                </div>
+                <div class="share-invite" id="shareForkInvite">
+                    <label for="shareForkSearch">Give fork access to</label>
+                    <input type="text"
+                           id="shareForkSearch"
+                           placeholder="Search users by name or email…"
+                           autocomplete="off">
+                    <div class="share-search-results" id="shareForkResults"></div>
+                    <div class="share-chips" id="shareForkChips"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

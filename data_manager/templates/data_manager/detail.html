@@ -115,6 +115,7 @@
                         </svg>
                         Download
                     </a>
+                    {% include "includes/share_trigger.html" with extra_class="btn btn-ghost" labeled=True icon_size=16 share_url=request.build_absolute_uri share_title=dataset.name share_kind="dataset" share_id=dataset.dataset_id owner=dataset.owner is_private=dataset.is_private %}
                     {% if user.is_authenticated %}
                         <a href="{% url 'sketchmod:canvas' %}?dataset={{ dataset.dataset_id }}"
                            class="btn btn-ghost">

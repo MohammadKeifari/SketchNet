@@ -58,6 +58,7 @@
                     </svg>
                 </a>
             {% endif %}
+            {% include "data_manager/includes/share_icon.html" %}
             <a href="{% url 'data:download' dataset.dataset_id %}"
                class="icon-btn"
                title="Download">

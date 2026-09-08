@@ -329,6 +329,7 @@
                         </svg>
                         Download
                     </a>
+                    {% include "includes/share_trigger.html" with extra_class="btn btn-ghost" labeled=True icon_size=16 share_url=request.build_absolute_uri share_title=model.name share_kind="model" share_id=model.model_id owner=model.owner view_access=model.view_access fork_access=model.fork_access %}
                     {% if model.fork_access == "public" or user == model.owner %}
                         {% if user.is_authenticated %}
                         <form method="post" action="{% url 'models:fork' model.model_id %}" style="display:contents">

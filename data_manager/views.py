@@ -318,6 +318,42 @@ def search_users(request, dataset_id):
     )
 
 
+def _parse_is_private(value):
+    """Interpret form/JSON flags for the private checkbox."""
+    if value is None:
+        return None
+    return str(value).strip().lower() in ("1", "true", "on", "yes", "private")
+
+
+@login_required
+@require_POST
+def share_dataset(request, dataset_id):
+    """Update dataset visibility without the full edit form."""
+    dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
+    if not dataset.can_edit(request.user):
+        return JsonResponse({"error": "Not allowed"}, status=403)
+
+    parsed = _parse_is_private(request.POST.get("is_private"))
+    if parsed is None:
+        return JsonResponse({"error": "is_private is required"}, status=400)
+    dataset.is_private = parsed
+    dataset.save(update_fields=["is_private", "updated_at"])
+    return JsonResponse({"success": True, "is_private": dataset.is_private})
+
+
+@login_required
+def list_allowed_users(request, dataset_id):
+    """Return users explicitly allowed on a private dataset."""
+    dataset = get_object_or_404(Dataset, dataset_id=dataset_id)
+    if not dataset.can_edit(request.user):
+        return JsonResponse({"error": "Not allowed"}, status=403)
+    users = [
+        {"id": u.id, "username": u.username, "email": u.email}
+        for u in dataset.allowed_users.all()
+    ]
+    return JsonResponse({"users": users, "is_private": dataset.is_private})
+
+
 @login_required
 @require_POST
 def add_allowed_user(request, dataset_id, user_id):

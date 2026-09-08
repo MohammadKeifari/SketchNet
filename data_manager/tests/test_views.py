@@ -435,6 +435,74 @@ class DataViewTests(TestCase):
         self.assertJSONEqual(response.content, {"success": True})
         self.assertFalse(self.dataset.allowed_users.filter(id=self.other.id).exists())
 
+    def test_share_rejects_get(self):
+        """Share settings are POST-only."""
+        self._login()
+        url = reverse("data:share", kwargs={"dataset_id": self.dataset.dataset_id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 405)
+
+    def test_share_requires_owner(self):
+        """Non-owners cannot change share settings."""
+        self.client.login(username="otheruser", password="testpass123")
+        url = reverse("data:share", kwargs={"dataset_id": self.dataset.dataset_id})
+        response = self.client.post(url, {"is_private": "true"})
+        self.assertEqual(response.status_code, 403)
+        self.dataset.refresh_from_db()
+        self.assertFalse(self.dataset.is_private)
+
+    def test_share_owner_toggles_private_and_invited_user_can_view(self):
+        """Owner can make a dataset private; invited users can still open it."""
+        self._login()
+        url = reverse("data:share", kwargs={"dataset_id": self.dataset.dataset_id})
+        response = self.client.post(url, {"is_private": "true"})
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content, {"success": True, "is_private": True}
+        )
+        self.dataset.refresh_from_db()
+        self.assertTrue(self.dataset.is_private)
+
+        self.client.post(
+            reverse(
+                "data:add_user",
+                kwargs={
+                    "dataset_id": self.dataset.dataset_id,
+                    "user_id": self.other.id,
+                },
+            )
+        )
+        self.client.logout()
+        self.client.login(username="otheruser", password="testpass123")
+        response = self.client.get(
+            reverse("data:detail", kwargs={"dataset_id": self.dataset.dataset_id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Public Dataset")
+
+    def test_detail_page_has_share_panel_markup(self):
+        """Detail page exposes Share, the page URL, and client-side share links."""
+        url = reverse("data:detail", kwargs={"dataset_id": self.dataset.dataset_id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Share")
+        self.assertContains(response, response.wsgi_request.build_absolute_uri(url))
+        self.assertContains(response, "mailto:")
+        self.assertContains(response, "x.com")
+        self.assertContains(response, "linkedin.com")
+        self.assertContains(response, 'data-share-kind="dataset"')
+
+    def test_dashboard_cards_have_share_control(self):
+        """Dashboard cards include a share control pointing at the detail URL."""
+        self._login()
+        response = self.client.get(reverse("data:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "share-trigger")
+        self.assertContains(
+            response,
+            f'data-share-url="{reverse("data:detail", kwargs={"dataset_id": self.dataset.dataset_id})}"',
+        )
+
     # ===== NEW: Shape API =====
     def test_dataset_shape_api_returns_shape(self):
         """Shape endpoint returns the resolved shape"""

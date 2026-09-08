@@ -47,6 +47,11 @@ class ModelURLTests(TestCase):
         url = reverse("models:like", kwargs={"model_id": "abc1234567"})
         self.assertEqual(url, "/models/abc1234567/like/")
 
+    def test_share_url(self):
+        """Verify share url."""
+        url = reverse("models:share", kwargs={"model_id": "abc1234567"})
+        self.assertEqual(url, "/models/abc1234567/share/")
+
     def test_api_data_url(self):
         """Verify api data url."""
         url = reverse("models:api_data", kwargs={"model_id": "abc1234567"})

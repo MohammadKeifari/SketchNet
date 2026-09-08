@@ -20,7 +20,9 @@ urlpatterns = [
     path("<str:dataset_id>/delete/", views.delete_dataset, name="delete"),
     path("<str:dataset_id>/download/", views.download_dataset, name="download"),
     path("<str:dataset_id>/like/", views.toggle_like, name="like"),
+    path("<str:dataset_id>/share/", views.share_dataset, name="share"),
     # Private access
+    path("<str:dataset_id>/access/", views.list_allowed_users, name="access"),
     path("<str:dataset_id>/search-users/", views.search_users, name="search_users"),
     path(
         "<str:dataset_id>/add-user/<int:user_id>/",

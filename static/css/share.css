@@ -1,0 +1,312 @@
+.share-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 2100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.share-overlay.is-open {
+    display: flex;
+}
+
+.share-modal {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+}
+
+.share-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+}
+
+.share-modal-header h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.share-modal-body {
+    padding: 20px 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.share-caption {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.share-url-row {
+    display: flex;
+    gap: 8px;
+}
+
+.share-url-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary, var(--bg-hover));
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-family: inherit;
+}
+
+.share-actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.share-actions-row a,
+.share-actions-row button.share-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.share-actions-row a:hover,
+.share-actions-row button.share-link-btn:hover {
+    background: var(--bg-hover);
+}
+
+.share-native {
+    display: none;
+}
+
+.share-owner {
+    display: none;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.share-owner.is-visible {
+    display: flex;
+}
+
+.share-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.share-toggle-row span {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.share-invite {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.share-invite.is-visible {
+    display: flex;
+}
+
+.share-invite label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.share-invite input {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary, var(--bg-hover));
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-family: inherit;
+}
+
+.share-search-results {
+    display: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.share-search-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+}
+
+.share-search-item:hover {
+    background: var(--bg-hover);
+}
+
+.share-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.share-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--bg-hover);
+    font-size: 0.8rem;
+    color: var(--text-primary);
+}
+
+.share-chip button {
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.share-chip button:hover {
+    color: #e74c3c;
+}
+
+.share-modal .modal-close {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.share-modal .modal-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.share-owner .toggle-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    line-height: 1;
+}
+
+.share-owner .toggle-label input {
+    display: none;
+}
+
+.share-owner .toggle-switch {
+    display: block;
+    width: 44px;
+    height: 24px;
+    background: var(--border);
+    border-radius: 12px;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.share-owner .toggle-switch::after {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.share-owner .toggle-label input:checked + .toggle-switch {
+    background: var(--accent);
+}
+
+.share-owner .toggle-label input:checked + .toggle-switch::after {
+    left: 23px;
+}
+
+.share-owner .toggle-text {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    min-width: 3.5rem;
+}
+
+.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.share-url-row .btn-primary:hover {
+    background: var(--accent-light, var(--accent));
+}
+
+button.share-trigger {
+    font-family: inherit;
+    cursor: pointer;
+}
+
+button.share-trigger.icon-btn {
+    background: none;
+    border: none;
+    padding: 4px 6px;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+button.share-trigger.icon-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
