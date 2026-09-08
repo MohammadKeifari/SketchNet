@@ -15,8 +15,12 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUG = os.getenv("DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+if DEBUG:
+    # Random tunnel hostnames (Pinggy, trycloudflare, ngrok) change per session.
+    ALLOWED_HOSTS.append("*")
 
 # Full origins including scheme, e.g. https://sketchnet.duckdns.org
+# Tunnel hosts (trycloudflare, pinggy) are supplied via CSRF_TRUSTED_ORIGINS / ALLOWED_HOSTS.
 CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
 ]
@@ -69,6 +73,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "config.context_processors.google_oauth",
             ],
         },
     },
@@ -159,7 +164,24 @@ SITE_ID = 1
 # Allauth configuration
 ACCOUNT_LOGIN_METHODS = {"username", "email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
-ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+ACCOUNT_EMAIL_VERIFICATION = os.getenv("ACCOUNT_EMAIL_VERIFICATION", "mandatory")
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = "http" if DEBUG else "https"
+SOCIALACCOUNT_LOGIN_ON_GET = True
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    SOCIALACCOUNT_PROVIDERS = {
+        "google": {
+            "APP": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "secret": GOOGLE_CLIENT_SECRET,
+                "key": "",
+            },
+            "SCOPE": ["profile", "email"],
+            "AUTH_PARAMS": {"access_type": "online"},
+        }
+    }
 
 # login redirect URL
 LOGIN_REDIRECT_URL = "home"

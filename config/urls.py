@@ -1,3 +1,5 @@
+import os
+
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic import TemplateView
@@ -19,5 +21,5 @@ urlpatterns = [
     path("bug-reports/", include("bug_reports.urls")),
 ]
 
-if settings.DEBUG:
+if settings.DEBUG or os.getenv("SERVE_MEDIA", "False") == "True":
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

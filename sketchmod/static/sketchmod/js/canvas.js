@@ -211,6 +211,9 @@ const SketchMod = {
 
         this.resize();
         window.addEventListener("resize", () => this.resize());
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener("resize", () => this.resize());
+        }
         this.canvas.addEventListener("mousedown", (e) => this._onMouseDown(e));
         this.canvas.addEventListener("mousemove", (e) => this._onMouseMove(e));
         this.canvas.addEventListener("mouseup", (e) => this._onMouseUp(e));
@@ -3229,8 +3232,13 @@ const SketchMod = {
                 this._propagateShapes();
                 this._afterGraphLoaded();
                 const finishLoad = () => {
+                    this.resize();
                     this._zoomFit();
                     this._render();
+                    requestAnimationFrame(() => {
+                        this.resize();
+                        this._zoomFit();
+                    });
                 };
                 if (this.readonly) {
                     this.autoLayout({ silent: true, skipSave: true })
