@@ -17,6 +17,8 @@
     --canvas-bg: #e4e7eb;
     --canvas-grid-small: rgba(0, 0, 0, 0.05);
     --canvas-grid-large: rgba(0, 0, 0, 0.03);
+    --canvas-link: #1a1d2e;
+    --canvas-link-selected: #6c5ce7;
 }
 
 /* ===== DARK ===== */
@@ -33,6 +35,8 @@
     --canvas-bg: #0f1117;
     --canvas-grid-small: rgba(255, 255, 255, 0.03);
     --canvas-grid-large: rgba(255, 255, 255, 0.02);
+    --canvas-link: #ffffff;
+    --canvas-link-selected: #a29bfe;
 }
 
 /* ===== ROSE ===== */
@@ -49,6 +53,8 @@
     --canvas-bg: #efe5e7;
     --canvas-grid-small: rgba(0, 0, 0, 0.04);
     --canvas-grid-large: rgba(0, 0, 0, 0.02);
+    --canvas-link: #3d1f24;
+    --canvas-link-selected: #e8536c;
 }
 
 /* ===== DARK ROSE ===== */
@@ -65,6 +71,8 @@
     --canvas-bg: #1a1114;
     --canvas-grid-small: rgba(255, 255, 255, 0.03);
     --canvas-grid-large: rgba(255, 255, 255, 0.02);
+    --canvas-link: #ffffff;
+    --canvas-link-selected: #ff8a9e;
 }
 
 /* ===== FOREST (green light) ===== */
@@ -81,6 +89,8 @@
     --canvas-bg: #e3ebe3;
     --canvas-grid-small: rgba(0, 0, 0, 0.04);
     --canvas-grid-large: rgba(0, 0, 0, 0.02);
+    --canvas-link: #1a2e1a;
+    --canvas-link-selected: #3a8a3a;
 }
 
 /* ===== FOREST DARK (green dark) ===== */
@@ -97,6 +107,8 @@
     --canvas-bg: #0f1611;
     --canvas-grid-small: rgba(255, 255, 255, 0.03);
     --canvas-grid-large: rgba(255, 255, 255, 0.02);
+    --canvas-link: #ffffff;
+    --canvas-link-selected: #66d968;
 }
 
 /* ===== HONEY (yellow light) ===== */
@@ -113,6 +125,8 @@
     --canvas-bg: #f0ecd8;
     --canvas-grid-small: rgba(0, 0, 0, 0.04);
     --canvas-grid-large: rgba(0, 0, 0, 0.02);
+    --canvas-link: #2e2600;
+    --canvas-link-selected: #c8960c;
 }
 
 /* ===== HONEY DARK (yellow dark) ===== */
@@ -129,4 +143,6 @@
     --canvas-bg: #1a1608;
     --canvas-grid-small: rgba(255, 255, 255, 0.03);
     --canvas-grid-large: rgba(255, 255, 255, 0.02);
+    --canvas-link: #ffffff;
+    --canvas-link-selected: #ffd866;
 }

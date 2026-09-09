@@ -91,6 +91,21 @@ const SketchMod = {
         }
         return colors[theme] || colors.light;
     },
+    _cssVar(name, fallback) {
+        const value = getComputedStyle(document.documentElement)
+            .getPropertyValue(name)
+            .trim();
+        return value || fallback;
+    },
+    _getLinkColors() {
+        return {
+            idle: this._cssVar("--canvas-link", "#ffffff"),
+            selected: this._cssVar(
+                "--canvas-link-selected",
+                this._cssVar("--accent", "#7c6ff0"),
+            ),
+        };
+    },
     _escapeHtml(value) {
         return String(value ?? "")
             .replace(/&/g, "&amp;")
@@ -2552,7 +2567,7 @@ const SketchMod = {
                 toX = from.x + 100;
                 toY = from.y;
             }
-            ctx.strokeStyle = "var(--accent)";
+            ctx.strokeStyle = this._cssVar("--accent", "#7c6ff0");
             ctx.lineWidth = 2;
             ctx.setLineDash([6, 4]);
             ctx.beginPath();
@@ -2563,7 +2578,7 @@ const SketchMod = {
 
             ctx.beginPath();
             ctx.arc(toX, toY, 4, 0, Math.PI * 2);
-            ctx.fillStyle = "var(--accent)";
+            ctx.fillStyle = this._cssVar("--accent", "#7c6ff0");
             ctx.fill();
         }
 
@@ -2590,10 +2605,14 @@ const SketchMod = {
             const y = Math.min(box.startY, box.endY);
             const bw = Math.abs(box.endX - box.startX);
             const bh = Math.abs(box.endY - box.startY);
-            ctx.fillStyle = "rgba(108, 92, 231, 0.1)";
+            const accent = this._cssVar("--accent", "#7c6ff0");
+            ctx.fillStyle = this._cssVar(
+                "--accent-glow",
+                "rgba(108, 92, 231, 0.12)",
+            );
             ctx.fillRect(x, y, bw, bh);
-            ctx.strokeStyle = "var(--accent)";
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = accent;
+            ctx.lineWidth = 1.5;
             ctx.setLineDash([4, 4]);
             ctx.strokeRect(x, y, bw, bh);
             ctx.setLineDash([]);
@@ -3013,6 +3032,13 @@ const SketchMod = {
     // ========== SAVE ==========
     _handleSave(event) {
         event.preventDefault();
+        const container = document.querySelector(".sketchmod-container");
+        if (container?.dataset.guest === "true") {
+            this._showToast(
+                "Test users cannot save. Create an account to keep your work.",
+            );
+            return;
+        }
 
         const name = document.getElementById("saveName")?.value.trim();
         if (!name) return;
@@ -3070,6 +3096,13 @@ const SketchMod = {
     },
 
     openSaveModal() {
+        const container = document.querySelector(".sketchmod-container");
+        if (container?.dataset.guest === "true") {
+            this._showToast(
+                "Test users cannot save. Create an account to keep your work.",
+            );
+            return;
+        }
         if (this._currentModelId) {
             this._handleQuickSave();
             return;
@@ -9112,6 +9145,7 @@ class Link {
         }
 
         if (!isShowAll) {
+            const linkColors = SketchMod._getLinkColors();
             if (isHL) {
                 strokeColor = "#4ade80";
                 fillColor = "#4ade80";
@@ -9127,16 +9161,18 @@ class Link {
                 fillColor = "#f59e0b";
                 lineWidth = 2.5;
             } else if (selected) {
-                strokeColor = "#b9b9b9";
-                fillColor = "#b9b9b9";
+                strokeColor = linkColors.selected;
+                fillColor = linkColors.selected;
                 lineWidth = 3;
+                ctx.shadowColor = linkColors.selected;
+                ctx.shadowBlur = 8;
             } else if (this.hasWeight) {
-                strokeColor = "#000000";
-                fillColor = "#000000";
+                strokeColor = linkColors.idle;
+                fillColor = linkColors.idle;
                 lineWidth = 2.5;
             } else {
-                strokeColor = "#000000";
-                fillColor = "#000000";
+                strokeColor = linkColors.idle;
+                fillColor = linkColors.idle;
                 lineWidth = 1.5;
             }
         }

@@ -15,6 +15,11 @@
             <h1>Settings</h1>
             <p>Customize your SketchMod experience</p>
         </div>
+        {% if user.is_guest %}
+            <div class="settings-saved-banner">
+                <span>Test users cannot save settings. <a class="settings-guest-link" href="{% url 'guest_to_signup' %}">Create an account</a> to keep preferences.</span>
+            </div>
+        {% endif %}
         {% if saved %}
             <div class="settings-saved-banner">
                 <svg width="16"
@@ -302,7 +307,9 @@
                     </label>
                 </div>
             </div>
+            {% if not user.is_guest %}
             <button type="submit" class="btn-submit">Save Settings</button>
+            {% endif %}
         </form>
     </div>
 {% endblock content %}

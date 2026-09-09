@@ -81,7 +81,7 @@
     box-shadow: 0 4px 15px var(--accent-glow);
 }
 
-.btn-google {
+.btn-guest {
     width: 100%;
     padding: 10px;
     background: var(--bg-primary);
@@ -100,9 +100,17 @@
     margin-top: 12px;
 }
 
-.btn-google:hover {
+.btn-guest:hover {
     background: var(--bg-hover);
     border-color: #aaa;
+}
+
+.guest-hint {
+    margin-top: 10px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.4;
 }
 
 .divider {

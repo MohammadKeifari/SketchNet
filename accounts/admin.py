@@ -35,11 +35,13 @@ class CustomUserAdmin(UserAdmin):
         "username",
         "email",
         "theme_badge",
+        "is_guest",
         "is_active",
         "is_staff",
         "date_joined",
     ]
     list_filter = [
+        "is_guest",
         "is_active",
         "is_staff",
         "is_superuser",
@@ -66,6 +68,7 @@ class CustomUserAdmin(UserAdmin):
             "Permissions",
             {
                 "fields": (
+                    "is_guest",
                     "is_active",
                     "is_staff",
                     "is_superuser",

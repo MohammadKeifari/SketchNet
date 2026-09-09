@@ -20,6 +20,12 @@
                 {% for message in messages %}<li>{{ message }}</li>{% endfor %}
             </ul>
         {% endif %}
+        {% if user.is_guest %}
+        <div class="profile-card">
+            <h2>Test account</h2>
+            <p>This account is temporary. Profile, bio, and photo cannot be saved. <a href="{% url 'guest_to_signup' %}">Create an account</a> to keep your work.</p>
+        </div>
+        {% endif %}
         <!-- Account Info -->
         <div class="profile-card">
             <h2>Account Information</h2>
@@ -37,6 +43,7 @@
             </div>
         </div>
         <!-- Public profile -->
+        {% if not user.is_guest %}
         <div class="profile-card">
             <h2>Public profile</h2>
             <form method="post"
@@ -93,12 +100,17 @@
                 <button type="submit" class="btn btn-primary">Save profile</button>
             </form>
         </div>
+        {% endif %}
         <!-- Actions -->
         <div class="profile-card">
             <h2>Account Actions</h2>
             <div class="profile-actions">
+                {% if not user.is_guest %}
                 <a href="{% url 'account_change_password' %}" class="btn btn-outline">Change Password</a>
                 <a href="{% url 'account_email' %}" class="btn btn-outline">Manage Email</a>
+                {% else %}
+                <a href="{% url 'guest_to_signup' %}" class="btn btn-outline">Create Account</a>
+                {% endif %}
                 <a href="{% url 'account_logout' %}" class="btn btn-danger">Sign Out</a>
             </div>
         </div>

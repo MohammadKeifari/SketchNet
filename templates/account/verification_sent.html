@@ -99,9 +99,12 @@
             </div>
             <h1 class="verify-title">Verify Your Email</h1>
             <p class="verify-text">
-                We've sent a verification email to
-                <span class="verify-email">{{ request.user.email }}</span>.
-                Please check your inbox and click the confirmation link to continue.
+                We've sent a verification email
+                {% if request.user.is_authenticated and request.user.email %}
+                    to <span class="verify-email">{{ request.user.email }}</span>
+                {% endif %}.
+                Check that inbox (and spam) and open the confirmation link.
+                Until a mail service is connected, this laptop only prints the message in the SketchNet server window — it does not reach Gmail or other providers.
             </p>
             <a href="/" class="btn-back">Go to Home</a>
             <br>

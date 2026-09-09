@@ -19,6 +19,7 @@ class CustomUser(AbstractUser):
         blank=True,
         null=True,
     )
+    is_guest = models.BooleanField(default=False, db_index=True)
 
     def __str__(self):
         """Return the username as the string representation."""

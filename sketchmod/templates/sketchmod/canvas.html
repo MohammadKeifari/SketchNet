@@ -22,11 +22,17 @@
                 <a href="{% url 'account_login' %}?next={% url 'sketchmod:canvas' %}?load={{ loaded_model.model_id }}&amp;readonly=1">Sign in to fork or edit</a>
             {% endif %}
         </div>
+    {% elif user.is_guest %}
+        <div class="readonly-banner guest-banner" id="guestBanner">
+            <span>Test user — you can sketch and export, but graphs are not saved.</span>
+            <a href="{% url 'guest_to_signup' %}">Create an account</a>
+        </div>
     {% endif %}
-    <div class="sketchmod-container{% if readonly %} readonly-mode{% endif %}"
+    <div class="sketchmod-container{% if readonly %} readonly-mode{% endif %}{% if user.is_guest %} guest-mode{% endif %}"
          data-collapse-left="{{ collapse_left_sidebar|lower }}"
          data-collapse-right="{{ collapse_right_sidebar|lower }}"
-         data-readonly="{{ readonly|yesno:'true,false' }}">
+         data-readonly="{{ readonly|yesno:'true,false' }}"
+         data-guest="{{ user.is_guest|yesno:'true,false' }}">
         <!-- Left Toolbar -->
         <div class="toolbar toolbar-left" id="leftToolbar">
             <!--filled using the js-->
@@ -302,6 +308,7 @@
                         <div class="modal-body" id="validationContent"></div>
                     </div>
                 </div>
+                {% if not user.is_guest %}
                 <button class="sidebar-btn" id="btnSave" title="Save to database">
                     <svg width="16"
                          height="16"
@@ -315,6 +322,7 @@
                     </svg>
                     <span>Save</span>
                 </button>
+                {% endif %}
                 <button class="sidebar-btn" id="btnUndo" title="Undo (Ctrl+Z)">
                     <svg width="16"
                          height="16"
@@ -903,9 +911,11 @@
             </div>
             <div class="modal-body">
                 <p class="prop-hint">First 40 lines of generated PyTorch code:</p>
-                <pre class="export-preview-code" id="exportPreviewCode"></pre>
+                <div class="export-preview-code-wrap">
+                    <pre class="export-preview-code" id="exportPreviewCode"></pre>
+                </div>
             </div>
-            <div class="modal-actions">
+            <div class="export-preview-footer">
                 <button type="button" class="btn btn-ghost" onclick="SketchMod._closeExportPreviewModal()">Cancel</button>
                 <button type="button" class="btn btn-primary" id="btnConfirmExport">Download</button>
             </div>

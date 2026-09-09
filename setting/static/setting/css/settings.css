@@ -206,8 +206,9 @@
 /* ===== TOGGLE SWITCH ===== */
 .setting-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
+    gap: 12px;
     padding: 16px 0;
     border-bottom: 1px solid var(--border);
 }
@@ -220,6 +221,8 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;
+    flex: 1;
 }
 
 .setting-label {
@@ -231,11 +234,16 @@
 .setting-desc {
     font-size: 0.78rem;
     color: var(--text-secondary);
+    overflow-wrap: anywhere;
 }
 
 .setting-desc .profile-link-path {
     margin-left: 2px;
     vertical-align: baseline;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+    word-break: break-all;
 }
 
 .toggle-switch {
@@ -295,6 +303,21 @@
     margin-bottom: 20px;
     color: #27ae60;
     font-size: 0.85rem;
+}
+
+a.settings-guest-link,
+a.settings-guest-link:link,
+a.settings-guest-link:visited {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+}
+
+a.settings-guest-link:hover,
+a.settings-guest-link:focus-visible {
+    color: var(--accent-light);
 }
 
 .setting-select {

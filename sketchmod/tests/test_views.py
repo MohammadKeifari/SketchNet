@@ -173,6 +173,28 @@ class ViewsTest(TestCase):
         response = self.client.get(self.canvas_url)
         self.assertEqual(response.status_code, 200)
 
+    def test_canvas_guest_can_draw_but_not_save(self):
+        """Guest users get the canvas without a save control."""
+        self.client.post(reverse("guest_login"))
+        response = self.client.get(self.canvas_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Test user")
+        self.assertContains(response, 'data-guest="true"')
+        self.assertNotContains(response, 'id="btnSave"')
+
+    def test_export_as_guest(self):
+        """Guest users can export a valid graph."""
+        self.client.post(reverse("guest_login"))
+        graph_str = json.dumps(VALID_GRAPH)
+        response = self.client.post(
+            self.export_url,
+            data=json.dumps({"graph": graph_str, "format": "pytorch-py"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+        self.assertIn("code", response.json())
+
     def test_canvas_owner_load_without_readonly(self):
         """Logged-in owner can open edit mode without readonly flag."""
         self.client.login(username="owner", password="testpass123")
