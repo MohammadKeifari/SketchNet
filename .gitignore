@@ -8,6 +8,7 @@ db.sqlite3
 .vscode/
 *.code-workspace
 media/
+staticfiles/
 todo.txt
 # Codegen fixtures (model*.JSON + data/*.csv) must stay in git for CI.
 # Ignore generated dumps only, not fixture scripts.
