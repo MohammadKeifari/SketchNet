@@ -25,7 +25,7 @@
     {% elif user.is_guest %}
         <div class="readonly-banner guest-banner" id="guestBanner">
             <span>Test user — you can sketch and export, but graphs are not saved.</span>
-            <a href="{% url 'guest_to_signup' %}">Create an account</a>
+            <a class="guest-cta-link" href="{% url 'guest_to_signup' %}">Create an account</a>
         </div>
     {% endif %}
     <div class="sketchmod-container{% if readonly %} readonly-mode{% endif %}{% if user.is_guest %} guest-mode{% endif %}"

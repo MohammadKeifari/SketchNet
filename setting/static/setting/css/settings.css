@@ -208,7 +208,8 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    flex-wrap: wrap;
+    gap: 12px 16px;
     padding: 16px 0;
     border-bottom: 1px solid var(--border);
 }
@@ -222,7 +223,7 @@
     flex-direction: column;
     gap: 4px;
     min-width: 0;
-    flex: 1;
+    flex: 1 1 auto;
 }
 
 .setting-label {
@@ -234,12 +235,13 @@
 .setting-desc {
     font-size: 0.78rem;
     color: var(--text-secondary);
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 .setting-desc .profile-link-path {
-    margin-left: 2px;
-    vertical-align: baseline;
+    display: block;
+    margin: 6px 0 0;
+    width: fit-content;
     max-width: 100%;
     box-sizing: border-box;
     overflow-wrap: anywhere;
@@ -294,7 +296,8 @@
 
 .settings-saved-banner {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
     gap: 8px;
     padding: 10px 14px;
     background: rgba(46, 204, 113, 0.1);
@@ -303,24 +306,23 @@
     margin-bottom: 20px;
     color: #27ae60;
     font-size: 0.85rem;
+    overflow-wrap: break-word;
 }
 
-a.settings-guest-link,
-a.settings-guest-link:link,
-a.settings-guest-link:visited {
-    color: var(--accent);
+.settings-saved-banner span {
+    min-width: 0;
+}
+
+.settings-saved-banner .guest-cta-link:link,
+.settings-saved-banner .guest-cta-link:visited {
+    color: #27ae60;
     font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    white-space: nowrap;
-}
-
-a.settings-guest-link:hover,
-a.settings-guest-link:focus-visible {
-    color: var(--accent-light);
 }
 
 .setting-select {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
     padding: 8px 12px;
     border-radius: 8px;
     border: 1px solid var(--border);
@@ -328,4 +330,37 @@ a.settings-guest-link:focus-visible {
     color: var(--text-primary);
     font-family: inherit;
     font-size: 0.9rem;
+}
+
+.setting-row-stack {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.setting-row-stack .setting-select {
+    width: 100%;
+}
+
+@media (max-width: 600px) {
+    .settings-container {
+        margin: 16px auto;
+        padding: 0;
+    }
+
+    .settings-card {
+        padding: 20px;
+    }
+
+    .setting-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .setting-select {
+        width: 100%;
+    }
+
+    .toggle-switch {
+        align-self: flex-end;
+    }
 }

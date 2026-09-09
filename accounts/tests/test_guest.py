@@ -51,19 +51,36 @@ class GuestLoginTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("sketchmod:canvas"))
 
-    def test_guest_cannot_save_settings(self):
+    def test_guest_can_save_settings_for_session(self):
         self.client.post(reverse("guest_login"))
         guest = User.objects.get(is_guest=True)
-        settings = UserSettings.objects.get(user=guest)
-        original_theme = settings.theme
         response = self.client.post(
             reverse("setting:settings"),
-            {"theme": "dark"},
+            {
+                "theme": "dark",
+                "collapse_left_sidebar": "on",
+                "default_export_format": "pytorch-zip",
+                "highlight_phase_on_open": "training",
+                "public_profile": "on",
+            },
             HTTP_ACCEPT="text/html",
         )
-        settings.refresh_from_db()
-        self.assertEqual(settings.theme, original_theme)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Settings saved.")
+        settings = UserSettings.objects.get(user=guest)
+        self.assertEqual(settings.theme, "dark")
+        self.assertTrue(settings.collapse_left_sidebar)
+        self.assertEqual(settings.default_export_format, "pytorch-zip")
+        self.assertEqual(settings.highlight_phase_on_open, "training")
+        self.assertFalse(settings.public_profile)
+
+    def test_guest_settings_page_allows_save(self):
+        self.client.post(reverse("guest_login"))
+        response = self.client.get(reverse("setting:settings"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Save Settings")
+        self.assertContains(response, "apply for this session")
+        self.assertNotContains(response, "Public profile")
 
     def test_guest_cannot_save_model(self):
         self.client.post(reverse("guest_login"))

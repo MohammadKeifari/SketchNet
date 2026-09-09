@@ -66,7 +66,7 @@
 .profile-link-path {
     display: inline-block;
     color: var(--text-primary);
-    background: var(--accent-glow);
+    background: var(--bg-primary);
     background-image: none;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -75,10 +75,31 @@
     line-height: 1.5;
 }
 
+.profile-link-path:link,
+.profile-link-path:visited {
+    color: var(--text-primary);
+    background-image: none;
+}
+
 .profile-link-path:hover,
 .profile-link-path:focus-visible {
     color: var(--accent);
     border-color: var(--accent);
-    background: var(--accent-glow);
+    background: var(--bg-primary);
     background-image: none;
+}
+
+/* Inherit parent color so :visited cannot fall back to the browser's dark blue. */
+.guest-cta-link,
+.guest-cta-link:link,
+.guest-cta-link:visited {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.guest-cta-link:hover,
+.guest-cta-link:focus-visible {
+    opacity: 0.85;
 }

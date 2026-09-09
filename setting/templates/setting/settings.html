@@ -16,8 +16,8 @@
             <p>Customize your SketchMod experience</p>
         </div>
         {% if user.is_guest %}
-            <div class="settings-saved-banner">
-                <span>Test users cannot save settings. <a class="settings-guest-link" href="{% url 'guest_to_signup' %}">Create an account</a> to keep preferences.</span>
+            <div class="settings-saved-banner settings-guest-banner">
+                <span>Theme and canvas preferences apply for this session. <a class="guest-cta-link" href="{% url 'guest_to_signup' %}">Create an account</a> to keep them after you sign out.</span>
             </div>
         {% endif %}
         {% if saved %}
@@ -249,7 +249,7 @@
             </div>
             <div class="settings-card">
                 <h2>SketchMod</h2>
-                <div class="setting-row">
+                <div class="setting-row setting-row-stack">
                     <div class="setting-info">
                         <span class="setting-label">Default export format</span>
                         <span class="setting-desc">Preferred format when exporting PyTorch code</span>
@@ -265,7 +265,7 @@
                         </option>
                     </select>
                 </div>
-                <div class="setting-row">
+                <div class="setting-row setting-row-stack">
                     <div class="setting-info">
                         <span class="setting-label">Highlight phase on open</span>
                         <span class="setting-desc">Automatically highlight a phase path when SketchMod loads</span>
@@ -288,6 +288,7 @@
                     </select>
                 </div>
             </div>
+            {% if not user.is_guest %}
             <div class="settings-card">
                 <h2>Account</h2>
                 <div class="setting-row">
@@ -307,9 +308,8 @@
                     </label>
                 </div>
             </div>
-            {% if not user.is_guest %}
-            <button type="submit" class="btn-submit">Save Settings</button>
             {% endif %}
+            <button type="submit" class="btn-submit">Save Settings</button>
         </form>
     </div>
 {% endblock content %}

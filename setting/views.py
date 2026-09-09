@@ -1,12 +1,5 @@
-from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.http import JsonResponse
-
-
-from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
+from django.shortcuts import render
 
 
 @login_required
@@ -45,7 +38,10 @@ def settings_view(request):
         if highlight_phase in ("none", "preprocessing", "training", "evaluation"):
             user_settings.highlight_phase_on_open = highlight_phase
 
-        user_settings.public_profile = request.POST.get("public_profile") == "on"
+        if request.user.is_guest:
+            user_settings.public_profile = False
+        else:
+            user_settings.public_profile = request.POST.get("public_profile") == "on"
 
         user_settings.save()
         saved = True

@@ -23,7 +23,7 @@
         {% if user.is_guest %}
         <div class="profile-card">
             <h2>Test account</h2>
-            <p>This account is temporary. Profile, bio, and photo cannot be saved. <a href="{% url 'guest_to_signup' %}">Create an account</a> to keep your work.</p>
+            <p>This account is temporary. Profile, bio, and photo cannot be saved. <a class="guest-cta-link" href="{% url 'guest_to_signup' %}">Create an account</a> to keep your work.</p>
         </div>
         {% endif %}
         <!-- Account Info -->

@@ -9,6 +9,7 @@ GUEST_MESSAGE = (
 GUEST_ALLOWED_WRITE_PREFIXES = (
     "/accounts/logout/",
     "/accounts/guest/",
+    "/settings/",
     "/sketchmod/api/export/",
     "/sketchmod/api/validate/",
     "/sketchmod/api/highlight-path/",
@@ -41,7 +42,11 @@ def guest_blocked_response(request):
 
 
 class GuestRestrictionMiddleware:
-    """Block guest accounts from persisting profile, settings, data, or models."""
+    """Block guest accounts from persisting profile, data, or models.
+
+    Appearance and canvas preferences may be saved on the guest user for the
+    current session; the account is deleted on logout.
+    """
 
     def __init__(self, get_response):
         self.get_response = get_response
