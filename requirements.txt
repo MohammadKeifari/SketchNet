@@ -4,6 +4,7 @@
 Django==6.0.2
 django-allauth==65.16.1
 gunicorn==26.2.0
+whitenoise==6.12.0
 
 # Required by django-allauth for the Google OAuth flow
 requests==2.33.1
