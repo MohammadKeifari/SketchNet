@@ -1283,6 +1283,36 @@ def check_model60(proc, code, graph):
     )
 
 
+def check_model61(proc, code, graph):
+    """Skip/concat classifier with two discrete-colour scatters."""
+    titles = figure_titles(code)
+    load_body = section(code, "def load_data()")
+    eval_body = section(code, "def evaluate(")
+    return all(
+        [
+            check("Graph is valid", diagnostics(graph)["isValid"]),
+            check("Loads model61 CSV", "data/model61.csv" in code),
+            check("Dropout present", "nn.Dropout" in code),
+            check("Add merge present", re.search(r"= \w+ \+ \w+$", code, re.M)),
+            check("Concat merge present", "torch.cat(" in code),
+            check("CrossEntropyLoss configured", "nn.CrossEntropyLoss()" in code),
+            check("3-class head", any(out == 3 for _, out in linear_layers(code))),
+            check("True-class plot during load", "True classes" in figure_titles(load_body)),
+            check(
+                "Predicted-class plot during eval",
+                "Predicted classes" in figure_titles(eval_body),
+            ),
+            check("Two figures shown", code.count("plt.show()") == 2, str(titles)),
+            check("Discrete colour maps", code.count("ListedColormap") >= 2),
+            check(
+                "Shared rose/cyan/violet palette",
+                code.count("'#f43f5e', '#22d3ee', '#a78bfa'") == 2,
+            ),
+            check("Accuracy above 0.85", accurate_to(proc, 0.85), str(final_accuracy(proc))),
+        ]
+    )
+
+
 # Models that only test validator errors – their generated code must NOT be executed.
 VALIDATION_ONLY_MODELS = {13, 14, 15, 16, 17, 27, 31, 32, 44, 45, 48, 51}
 
@@ -1347,6 +1377,7 @@ MODEL_CHECKS = {
     58: check_model58,
     59: check_model59,
     60: check_model60,
+    61: check_model61,
 }
 
 
