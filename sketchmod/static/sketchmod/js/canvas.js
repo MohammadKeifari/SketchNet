@@ -9538,3 +9538,5 @@ function handleSave(event) {
     SketchMod._handleSave(event);
     return false;
 }
+
+window.SketchMod = SketchMod;

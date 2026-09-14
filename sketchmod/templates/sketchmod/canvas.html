@@ -10,7 +10,7 @@
     sketchmod
 {% endblock current_page %}
 {% block extra_css %}
-    <link rel="stylesheet" href="{% static 'sketchmod/css/canvas.css' %}">
+    <link rel="stylesheet" href="{% static 'sketchmod/css/canvas.css' %}?v={{ sketchmod_asset_v }}">
 {% endblock extra_css %}
 {% block content %}
     {% if readonly %}
@@ -942,8 +942,21 @@
     {% if readonly %}
         <script>window.SKETCHNET_READONLY = true;</script>
     {% endif %}
-    <script src="{% static 'sketchmod/js/canvas.js' %}"></script>
-    <script src="{% static 'sketchmod/js/layout.js' %}"></script>
+    <script src="{% static 'sketchmod/js/canvas.js' %}?v={{ sketchmod_asset_v }}" data-cfasync="false"></script>
+    <script src="{% static 'sketchmod/js/layout.js' %}?v={{ sketchmod_asset_v }}" data-cfasync="false"></script>
+    <script data-cfasync="false">
+        window.SketchMod = window.SketchMod || (typeof SketchMod !== "undefined" ? SketchMod : undefined);
+        if (!window.SketchMod) {
+            var wrap = document.getElementById("canvasWrapper");
+            if (wrap) {
+                var msg = document.createElement("p");
+                msg.className = "canvas-load-error";
+                msg.setAttribute("role", "alert");
+                msg.textContent = "SketchMod failed to load. Hard-refresh the page (Ctrl+F5).";
+                wrap.prepend(msg);
+            }
+        }
+    </script>
     {% if template_graph %}
         {{ template_graph|json_script:"sketchnet-template-data" }}
         <script>

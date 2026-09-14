@@ -143,6 +143,22 @@
 }
 
 /* ===== CANVAS ===== */
+.canvas-load-error {
+    position: absolute;
+    z-index: 5;
+    left: 16px;
+    top: 16px;
+    margin: 0;
+    max-width: 28rem;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #1a1a1a);
+    border: 1px solid var(--accent, #c45c6a);
+    font-size: 0.9rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
 .canvas-wrapper {
     flex: 1;
     position: relative;

@@ -1,9 +1,11 @@
+import hashlib
 import json
 import io
 import zipfile
 import os
 import re
 import logging
+from pathlib import Path
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
@@ -52,6 +54,15 @@ def _zip_requirements(code: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _canvas_asset_version():
+    """Fingerprint SketchMod assets so CDNs cannot keep a truncated canvas.js."""
+    static_dir = Path(__file__).resolve().parent / "static" / "sketchmod"
+    digest = hashlib.md5()
+    for relative in ("js/canvas.js", "js/layout.js", "css/canvas.css"):
+        digest.update((static_dir / relative).read_bytes())
+    return digest.hexdigest()[:12]
+
+
 def _canvas_context(request, readonly=False, loaded_model=None):
     collapse_left = False
     collapse_right = False
@@ -69,6 +80,7 @@ def _canvas_context(request, readonly=False, loaded_model=None):
         "collapse_right_sidebar": collapse_right,
         "default_export_format": default_export_format,
         "highlight_phase_on_open": highlight_phase_on_open,
+        "sketchmod_asset_v": _canvas_asset_version(),
     }
     if loaded_model is not None:
         context["loaded_model"] = loaded_model

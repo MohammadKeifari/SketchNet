@@ -36,6 +36,29 @@ Use a staging environment that mirrors production before every release:
 7. Put the app behind HTTPS; production settings enable secure cookies and HSTS when `DEBUG=False`.
 8. Add rate limiting on heavy endpoints (export zip, anonymous export) at the reverse proxy or application layer.
 
+## SketchMod canvas.js
+
+The left tool palette and default Input/Output nodes are created only after
+`/static/sketchmod/js/canvas.js` parses. The right sidebar is HTML, so it still
+renders when that script is truncated or cached stale.
+
+After every deploy:
+
+1. `git pull`
+2. `python manage.py collectstatic --noinput`
+3. Delete stale compressed copies if they exist:
+   `rm -f staticfiles/sketchmod/js/canvas.js.gz staticfiles/sketchmod/js/canvas.js.br`
+   then run `collectstatic` again.
+4. Restart gunicorn.
+5. Purge the Cloudflare cache for `/static/sketchmod/js/canvas.js` and `/sketchmod/`.
+6. In Cloudflare: disable **Auto Minify (JavaScript)** and **Rocket Loader**.
+
+Confirm origin is complete (must include `handleSave` at the end):
+
+```bash
+curl -sS https://sketchnet.site/static/sketchmod/js/canvas.js | tail -c 120
+```
+
 ## Process layout
 
 ```

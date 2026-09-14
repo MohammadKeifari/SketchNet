@@ -3,6 +3,8 @@ import os
 import dj_database_url
 from dotenv import load_dotenv
 
+from config.whitenoise_headers import add_static_headers
+
 load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -147,6 +149,7 @@ STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 WHITENOISE_USE_FINDERS = DEBUG
+WHITENOISE_ADD_HEADERS_FUNCTION = add_static_headers
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
