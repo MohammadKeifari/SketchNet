@@ -26,11 +26,14 @@
 
 .sketchmod-container {
     display: flex;
-    height: calc(100vh - var(--nav-height));
+    min-height: 0;
+    height: calc(100vh - 60px);
+    height: calc(100vh - var(--nav-height, 60px));
     overflow: hidden;
     background: var(--bg-primary);
     position: fixed;
-    top: var(--nav-height);
+    top: 60px;
+    top: var(--nav-height, 60px);
     left: 0;
     right: 0;
     bottom: 0;
@@ -41,8 +44,8 @@
 }
 
 .sketchmod-container.readonly-mode {
-    top: calc(var(--nav-height) + 40px);
-    height: calc(100vh - var(--nav-height) - 40px);
+    top: calc(var(--nav-height, 60px) + 40px);
+    height: calc(100vh - var(--nav-height, 60px) - 40px);
 }
 
 .sketchmod-container.readonly-mode .toolbar-left {
@@ -69,8 +72,8 @@
 }
 
 .sketchmod-container.guest-mode {
-    top: calc(var(--nav-height) + 40px);
-    height: calc(100vh - var(--nav-height) - 40px);
+    top: calc(var(--nav-height, 60px) + 40px);
+    height: calc(100vh - var(--nav-height, 60px) - 40px);
 }
 
 .sketchmod-container.guest-mode #btnSave {

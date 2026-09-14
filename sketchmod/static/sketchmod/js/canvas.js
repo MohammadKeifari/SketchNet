@@ -130,6 +130,8 @@ const SketchMod = {
     },
     // ========== INIT ==========
     init() {
+        if (this._initialized) return;
+        this._initialized = true;
         this.canvas = document.getElementById("sketchCanvas");
         this.ctx = this.canvas.getContext("2d");
 
@@ -189,7 +191,7 @@ const SketchMod = {
             fetch("/sketchmod/api/consume-template/")
                 .then((r) => r.json())
                 .then((data) => {
-                    if (data.graph) {
+                    if (data.graph?.nodes?.length) {
                         this._importGraphFromJSON(data.graph);
                         this._showToast(
                             "Template loaded! Attach your dataset in the Input Data node.",
@@ -723,23 +725,41 @@ const SketchMod = {
         if (!this.readonly && this.nodes.length === 0) {
             this._createDefaultNodes();
         }
-        this.resize();
-        this._zoomFit();
-        this._render();
+        this._scheduleFit();
         this._saveUndoState();
+    },
+
+    _scheduleFit(attempt = 0) {
+        this.resize();
+        const tooSmall =
+            !this.canvas || this.canvas.width < 20 || this.canvas.height < 20;
+        if (tooSmall && attempt < 20) {
+            requestAnimationFrame(() => this._scheduleFit(attempt + 1));
+            return;
+        }
+        this._zoomFit();
+        this._updateSidebarInfoVisibility();
+        this._render();
     },
 
     resize() {
         const wrapper = document.getElementById("canvasWrapper");
-        this.canvas.width = wrapper.clientWidth;
-        this.canvas.height = wrapper.clientHeight;
+        if (!this.canvas || !wrapper) return;
+        const nextW = wrapper.clientWidth;
+        const nextH = wrapper.clientHeight;
+        const wasEmpty = this.canvas.width < 20 || this.canvas.height < 20;
+        this.canvas.width = nextW;
+        this.canvas.height = nextH;
+        if (wasEmpty && nextW >= 20 && nextH >= 20) {
+            this._zoomFit();
+        }
         this._render();
         this._updateSidebarInfoVisibility();
     },
 
     _createDefaultNodes() {
-        const cx = this.canvas.width / 2;
-        const cy = this.canvas.height / 2;
+        const cx = (this.canvas.width || 1200) / 2;
+        const cy = (this.canvas.height || 700) / 2;
         const input = new InputDataNode("input-main", cx - 300, cy);
         const output = new OutputNode("output-main", cx + 300, cy);
         this.nodes.push(input, output);
@@ -1524,9 +1544,15 @@ const SketchMod = {
         const canvasW = this.canvas.width;
         const canvasH = this.canvas.height;
 
+        if (canvasW < 20 || canvasH < 20) {
+            return;
+        }
+
         const scaleX = canvasW / graphW;
         const scaleY = canvasH / graphH;
-        this.scale = Math.min(scaleX, scaleY, 2);
+        const nextScale = Math.min(scaleX, scaleY, 2);
+        this.scale =
+            Number.isFinite(nextScale) && nextScale >= 0.05 ? nextScale : 1;
 
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
@@ -3097,7 +3123,13 @@ const SketchMod = {
         const cookie = document.cookie
             .split("; ")
             .find((row) => row.startsWith("csrftoken="));
-        return cookie ? decodeURIComponent(cookie.split("=")[1]) : "";
+        if (!cookie) return "";
+        const raw = cookie.split("=").slice(1).join("=");
+        try {
+            return decodeURIComponent(raw);
+        } catch (e) {
+            return raw;
+        }
     },
 
     openSaveModal() {
@@ -9483,7 +9515,11 @@ SketchMod.registerNode({
     </svg>`,
 });
 // ========== STARTUP ==========
-document.addEventListener("DOMContentLoaded", () => SketchMod.init());
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => SketchMod.init());
+} else {
+    SketchMod.init();
+}
 
 // ========== GLOBAL MODAL HELPERS ==========
 function closeSaveModal() {
