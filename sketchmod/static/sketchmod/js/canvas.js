@@ -3090,9 +3090,14 @@ const SketchMod = {
             });
     },
     _getCsrfToken() {
-        return (
-            document.querySelector("[name=csrfmiddlewaretoken]")?.value || ""
-        );
+        const fromForm = document.querySelector(
+            "[name=csrfmiddlewaretoken]",
+        )?.value;
+        if (fromForm) return fromForm;
+        const cookie = document.cookie
+            .split("; ")
+            .find((row) => row.startsWith("csrftoken="));
+        return cookie ? decodeURIComponent(cookie.split("=")[1]) : "";
     },
 
     openSaveModal() {

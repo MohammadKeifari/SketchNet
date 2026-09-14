@@ -30,7 +30,7 @@ Use a staging environment that mirrors production before every release:
 1. Set `DEBUG=False` and a strong `SECRET_KEY`.
 2. Use PostgreSQL instead of SQLite for production workloads.
 3. Run `python manage.py collectstatic` and serve static files via nginx or a CDN.
-4. Serve `media/` from object storage or a protected volume — do not expose private datasets publicly.
+4. User uploads (`media/`) are served by Django with the same visibility rules as the app (covers/avatars that a viewer is allowed to see; private dataset files stay 404). nginx can still front `/media/` if you prefer.
 5. Configure SMTP for django-allauth email verification.
 6. Enable Google OAuth in Django admin (Social applications) if using social login.
 7. Put the app behind HTTPS; production settings enable secure cookies and HSTS when `DEBUG=False`.
@@ -39,10 +39,10 @@ Use a staging environment that mirrors production before every release:
 ## Process layout
 
 ```
-nginx / reverse proxy
-  ├── staticfiles/  (collectstatic)
-  ├── media/        (user uploads)
+Cloudflare Tunnel (or nginx)
   └── gunicorn → config.wsgi
+        ├── WhiteNoise staticfiles/
+        └── Django /media/  (ACL-checked uploads)
 ```
 
 ## Example gunicorn command

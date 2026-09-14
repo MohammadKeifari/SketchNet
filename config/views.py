@@ -1,5 +1,14 @@
-from django.http import HttpResponse
+import mimetypes
+import posixpath
+
+from django.conf import settings
+from django.http import Http404, HttpResponse
 from django.urls import reverse
+from django.views.static import serve
+
+# Windows uploads sometimes store JPEG covers as .jfif; browsers need image/jpeg.
+mimetypes.add_type("image/jpeg", ".jfif")
+mimetypes.add_type("image/jpeg", ".jpe")
 
 
 def robots_txt(request):
@@ -40,3 +49,49 @@ def sitemap_xml(request):
         + "</urlset>"
     )
     return HttpResponse(body, content_type="application/xml")
+
+
+def _media_file_stem(path):
+    """Return the filename without directory or extension."""
+    name = path.rsplit("/", 1)[-1]
+    if "." in name:
+        return name.rsplit(".", 1)[0]
+    return name
+
+
+def _user_may_read_media(request, path):
+    """Whether this user may fetch a file under MEDIA_ROOT."""
+    if path.startswith("avatars/"):
+        return True
+    if path.startswith("models/covers/"):
+        from models_library.models import SketchModel
+
+        model = SketchModel.objects.filter(model_id=_media_file_stem(path)).first()
+        return bool(model and model.can_view(request.user))
+    if path.startswith("datasets/covers/"):
+        from data_manager.models import Dataset
+
+        dataset = Dataset.objects.filter(dataset_id=_media_file_stem(path)).first()
+        return bool(dataset and dataset.is_visible_to(request.user))
+    parts = path.split("/")
+    if len(parts) >= 2 and parts[0] == "datasets":
+        from data_manager.models import Dataset
+
+        dataset = Dataset.objects.filter(dataset_id=parts[1]).first()
+        return bool(dataset and dataset.is_visible_to(request.user))
+    return False
+
+
+def serve_media(request, path):
+    """Serve user uploads in production (gunicorn / Cloudflare Tunnel).
+
+    Django's ``static()`` helper installs no routes when ``DEBUG=False``, so
+    ``runserver`` shows covers and avatars while the public site 404s them.
+    Dataset payloads still follow ``Dataset.is_visible_to``.
+    """
+    normalized = posixpath.normpath(path or "").lstrip("/")
+    if not normalized or normalized.startswith(".."):
+        raise Http404()
+    if not _user_may_read_media(request, normalized):
+        raise Http404()
+    return serve(request, normalized, document_root=str(settings.MEDIA_ROOT))

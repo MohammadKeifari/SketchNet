@@ -1,11 +1,7 @@
-import os
-
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.views.generic import TemplateView
-from django.conf import settings
-from django.conf.urls.static import static
-from .views import robots_txt, sitemap_xml
+from .views import robots_txt, sitemap_xml, serve_media
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -19,7 +15,7 @@ urlpatterns = [
     path("sketchmod/", include("sketchmod.urls")),
     path("models/", include("models_library.urls")),
     path("bug-reports/", include("bug_reports.urls")),
+    # Django's static() helper is a no-op when DEBUG=False, so gunicorn +
+    # Cloudflare Tunnel never served /media/ (covers, avatars, datasets).
+    re_path(r"^media/(?P<path>.*)$", serve_media, name="serve_media"),
 ]
-
-if settings.DEBUG or os.getenv("SERVE_MEDIA", "False") == "True":
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
